@@ -14,10 +14,9 @@ import { useAvatarSession, type AvatarSession } from "@/hooks/use-avatar-session
 /** A guide line. Spoken + shown in English; may embed specific Japanese words. */
 export type GuideLine = { en: string };
 
-/** Eager attention-getting motions (cc051_meeks): wave + laugh. */
+/** Eager attention-getting motion (cc051_meeks): a friendly wave — not high energy. */
 const EAGER_MOTIONS = [
   "01KD2H5BX9MXDJA5T9QY83QYS3", // Female Greeting Wave Hand
-  "01KD2H66WV988XSVVVP82Z4D97", // Female Laugh
 ];
 const EAGER_CADENCE_MS = 3400;
 
