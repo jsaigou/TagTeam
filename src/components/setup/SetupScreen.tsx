@@ -96,7 +96,7 @@ export function SetupScreen() {
     void unlockAudio().catch(() => {});
   }, [setSetupOpen, unlockAudio]);
 
-  /* One-click demo: canned dentist-appointment scenario, hospital background. */
+  /* One-click demo: canned dentist-appointment scenario, anime scene. */
   const handleDemo = useCallback(() => {
     chooseScenario(DENTIST_DEMO.scenario);
     setSim(DENTIST_DEMO.script, DENTIST_DEMO.glossary);
@@ -135,8 +135,7 @@ export function SetupScreen() {
 
   const handleScenario = useCallback(
     async (scenario: { avatarId: string; sceneId: string; voiceId: string }) => {
-      /* Demo focus: the practice call uses the hospital background. */
-      chooseScenario({ ...scenario, background: "hospital" });
+      chooseScenario(scenario);
       setBusy(true);
       try {
         const result = await pipeline.runSim(

@@ -4,7 +4,7 @@ import { PRACTICE_AVATAR_ID, DEFAULT_SCENE_ID } from "../lib/presets";
 /**
  * Canned "book a dentist appointment" demo — a one-click path that bypasses the
  * LLM so the demo is reliable. Seeds the full flow (scenario, script, glossary,
- * cheat sheet) and uses the hospital background for the practice call.
+ * cheat sheet). Uses the default anime scene as the backdrop.
  *
  * The receptionist checks: first visit? (初診) and My Number card (マイナンバーカード)
  * — the modern identity document at Japanese clinics.
@@ -14,7 +14,6 @@ export const DENTIST_DEMO = {
     avatarId: PRACTICE_AVATAR_ID, // cc066_male_waiter plays the clinic receptionist
     sceneId: DEFAULT_SCENE_ID,
     voiceId: "01KZFHK5FX4D4CFVKN9TXAJSBX", // Male - warm and expressive (JP)
-    background: "hospital" as const,
   },
 
   script: {
