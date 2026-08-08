@@ -39,10 +39,16 @@ export function resolveLlmConfig(
   env?: Record<string, string | undefined>,
 ): LlmConfig {
   const source = env ?? (import.meta.env as Record<string, string | undefined>);
+  const rawBaseUrl = overrides?.baseUrl ?? source.VITE_LLM_BASE_URL;
+  const baseUrl = (rawBaseUrl !== undefined && rawBaseUrl.trim().length > 0
+    ? rawBaseUrl.trim()
+    : DEFAULT_BASE_URL
+  ).replace(/\/+$/, "");
+  const model = overrides?.model ?? source.VITE_LLM_MODEL;
   return {
-    baseUrl: (overrides?.baseUrl ?? source.VITE_LLM_BASE_URL ?? DEFAULT_BASE_URL).replace(/\/+$/, ""),
+    baseUrl,
     apiKey: overrides?.apiKey ?? source.VITE_LLM_API_KEY ?? "",
-    model: overrides?.model ?? source.VITE_LLM_MODEL ?? DEFAULT_MODEL,
+    model: model !== undefined && model.trim().length > 0 ? model.trim() : DEFAULT_MODEL,
   };
 }
 

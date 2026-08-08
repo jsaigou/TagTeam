@@ -6,6 +6,7 @@ import {
   chatJson,
   isGroundingQuestion,
   isLlmError,
+  isTurn,
   parseChatPayload,
   resolveLlmConfig,
 } from "./llm";
@@ -59,6 +60,17 @@ describe("resolveLlmConfig", () => {
       { VITE_LLM_MODEL: "env-model" },
     );
     expect(cfg.model).toBe("override-model");
+  });
+
+  it("falls back to the default baseUrl when empty or whitespace", () => {
+    expect(resolveLlmConfig({ baseUrl: "" }, {}).baseUrl).toBe("https://api.openai.com/v1");
+    expect(resolveLlmConfig({ baseUrl: "   " }, {}).baseUrl).toBe("https://api.openai.com/v1");
+    expect(resolveLlmConfig({}, { VITE_LLM_BASE_URL: "" }).baseUrl).toBe("https://api.openai.com/v1");
+  });
+
+  it("falls back to the default model when empty or whitespace", () => {
+    expect(resolveLlmConfig({ model: "" }, {}).model).toBe("gpt-4o-mini");
+    expect(resolveLlmConfig({}, { VITE_LLM_MODEL: "  " }).model).toBe("gpt-4o-mini");
   });
 });
 
@@ -177,8 +189,35 @@ describe("parseChatPayload", () => {
     });
   });
 
+  it("joins text parts from a mixed text+image_url content array", () => {
+    const result = parseChatPayload({
+      choices: [
+        {
+          message: {
+            content: [
+              { type: "text", text: "ご回答" },
+              { type: "image_url", image_url: { url: "data:image/png;base64,AAAA" } },
+              { type: "text", text: "ありがとうございます" },
+            ],
+          },
+        },
+      ],
+    });
+    expect(result.content).toBe("ご回答ありがとうございます");
+  });
+
   it("rejects payloads without choices", () => {
     expect(() => parseChatPayload({})).toThrow(LlmError);
+  });
+});
+
+describe("isTurn", () => {
+  it("accepts a valid turn and rejects a wrong-typed motion field", () => {
+    expect(
+      isTurn({ id: "t1", speaker: "bureaucrat", jp: "A", vocab: [], motion: "[MOTION id:1]" }),
+    ).toBe(true);
+    expect(isTurn({ id: "t1", speaker: "bureaucrat", jp: "A", vocab: [], motion: 42 })).toBe(false);
+    expect(isTurn({ id: "t1", speaker: "bureaucrat", jp: "A", vocab: [], motion: ["bad"] })).toBe(false);
   });
 });
 

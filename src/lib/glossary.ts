@@ -54,9 +54,7 @@ export function reconcileScript(script: SimScript, glossary: GlossaryEntry[]): S
   if (firstBureaucrat === -1) {
     throw new LlmError("invalid_response", "Simulation script contains no bureaucrat turns");
   }
-  if (firstBureaucrat > 0 && turns.length - firstBureaucrat >= 6) {
-    turns = turns.slice(firstBureaucrat);
-  }
+  turns = turns.slice(firstBureaucrat);
 
   const alternated: Turn[] = [];
   for (const turn of turns) {

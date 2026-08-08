@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { generateCheatSheet } from "./cheat-sheet";
+import { buildCheatSheetContext, generateCheatSheet } from "./cheat-sheet";
 import {
   CHEAT_SHEET_FIXTURE,
   CHEAT_SHEET_JSON,
@@ -32,6 +32,32 @@ function stubFetchJson(payload: unknown, status = 200) {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+});
+
+describe("buildCheatSheetContext", () => {
+  it("renders turns, glossary and answers, preserving Japanese text", () => {
+    const text = buildCheatSheetContext({
+      script: SIM_FIXTURE.script,
+      glossary: SIM_FIXTURE.glossary,
+      answers: ANSWERS,
+    });
+    expect(text).toContain("お電話ありがとうございます");
+    expect(text).toContain("医療費のお知らせ");
+    expect(text).toContain("bureaucrat:");
+    expect(text).toContain("g1 医療費のお知らせ（いりょうひのおしらせ）");
+    expect(text).toContain("q1: I want to claim a medical expense tax deduction");
+  });
+
+  it("handles empty inputs", () => {
+    const text = buildCheatSheetContext({
+      script: { scenarioTitle: "", turns: [] },
+      glossary: [],
+      answers: [],
+    });
+    expect(text).toContain("【電話の台本】");
+    expect(text).toContain("【利用者の目的（回答）】");
+    expect(text).toBeTruthy();
+  });
 });
 
 describe("generateCheatSheet", () => {

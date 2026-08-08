@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { DEFAULT_VOICE_PRESET, VOICE_PRESETS, generateSimulation } from "./sim-engine";
+import {
+  DEFAULT_VOICE_PRESET,
+  VOICE_PRESETS,
+  buildSimulationContext,
+  generateSimulation,
+} from "./sim-engine";
 import {
   DOC_SUMMARY_FIXTURE,
   SIM_FIXTURE,
@@ -48,6 +53,24 @@ describe("VOICE_PRESETS", () => {
   });
 });
 
+describe("buildSimulationContext", () => {
+  it("renders the doc summary and the grounding answers", () => {
+    const text = buildSimulationContext(DOC_SUMMARY_FIXTURE, ANSWERS);
+    expect(text).toContain(DOC_SUMMARY_FIXTURE.documentType);
+    expect(text).toContain(DOC_SUMMARY_FIXTURE.issuingAgency);
+    expect(text).toContain(DOC_SUMMARY_FIXTURE.keyFields[0]);
+    expect(text).toContain("I want to claim a medical expense tax deduction");
+  });
+
+  it("handles empty answers and special characters in Japanese text", () => {
+    const doc = { ...DOC_SUMMARY_FIXTURE, documentType: "「特別支援費〜受給者証」" };
+    const text = buildSimulationContext(doc, []);
+    expect(text).toContain("「特別支援費〜受給者証」");
+    expect(text).toContain("【電話の目的（利用者の回答）】");
+    expect(text).not.toContain("q1:");
+  });
+});
+
 describe("generateSimulation", () => {
   it("generates a valid, contract-compliant simulation from doc + answers", async () => {
     const fetchMock = stubFetchJson({ choices: [{ message: { content: SIM_JSON } }] });
@@ -83,5 +106,29 @@ describe("generateSimulation", () => {
     await expect(
       generateSimulation(DOC_SUMMARY_FIXTURE, ANSWERS, { config: TEST_CONFIG }),
     ).rejects.toMatchObject({ kind: "invalid_response" });
+  });
+
+  it("uses the formal preset guidance in the request's system prompt", async () => {
+    const fetchMock = stubFetchJson({ choices: [{ message: { content: SIM_JSON } }] });
+    await generateSimulation(DOC_SUMMARY_FIXTURE, ANSWERS, {
+      config: TEST_CONFIG,
+      preset: "formal",
+    });
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(String(init.body));
+    expect(body.messages[0].content).toContain(VOICE_PRESETS.formal.guidance);
+    expect(body.messages[0].content).not.toContain(VOICE_PRESETS.friendly.guidance);
+  });
+
+  it("uses the friendly preset guidance in the request's system prompt", async () => {
+    const fetchMock = stubFetchJson({ choices: [{ message: { content: SIM_JSON } }] });
+    await generateSimulation(DOC_SUMMARY_FIXTURE, ANSWERS, {
+      config: TEST_CONFIG,
+      preset: "friendly",
+    });
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(String(init.body));
+    expect(body.messages[0].content).toContain(VOICE_PRESETS.friendly.guidance);
+    expect(body.messages[0].content).not.toContain(VOICE_PRESETS.formal.guidance);
   });
 });

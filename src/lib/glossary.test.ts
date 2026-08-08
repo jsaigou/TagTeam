@@ -69,6 +69,29 @@ describe("reconcileScript", () => {
     expect(out.turns).toHaveLength(SIM_FIXTURE.script.turns.length);
   });
 
+  it("trims leading user turns even when there are many of them", () => {
+    const leading = Array.from({ length: 5 }, (_, i) => ({
+      id: `u${i}`,
+      speaker: "user" as const,
+      jp: "Hello?",
+      vocab: [] as string[],
+    }));
+    const out = reconcileScript(
+      { scenarioTitle: "x", turns: [...leading, ...SIM_FIXTURE.script.turns] },
+      SIM_FIXTURE.glossary,
+    );
+    expect(out.turns[0].speaker).toBe("bureaucrat");
+    expect(out.turns).toHaveLength(SIM_FIXTURE.script.turns.length);
+  });
+
+  it("throws rather than emitting a script that starts with user turns", () => {
+    const turns = Array.from({ length: 10 }, (_, i) => {
+      const speaker = i < 5 ? ("user" as const) : ("bureaucrat" as const);
+      return { id: `t${i + 1}`, speaker, jp: String.fromCharCode(65 + i), vocab: [] as string[] };
+    });
+    expect(() => reconcileScript({ scenarioTitle: "x", turns }, [])).toThrow(LlmError);
+  });
+
   it("enforces alternation and clamps to 10 turns", () => {
     const base = [
       { id: "b1", speaker: "bureaucrat" as const, jp: "A", vocab: [] as string[] },
