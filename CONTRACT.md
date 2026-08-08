@@ -57,3 +57,18 @@ ai-pipeline additionally: `pnpm test`.
 - The LLM key lives in `VITE_LLM_API_KEY` in `.env` — it is a Vite env var exposed to the browser
   (accepted tradeoff for this demo). Connect credentials are entered at runtime by the user.
 - Before committing run: `git grep -nE '(sk-[A-Za-z0-9]{20}|api[_-]?key|password|secret)[:=][[:space:]]*[^$]'`.
+
+## Visual direction (light theme, nature feel)
+
+Palette (tokens already set in `src/index.css`; extend with tints/shades, not limited to these):
+
+- `#386641` **forest** — primary actions, headings, brand
+- `#6A994E` **leaf** — secondary/accents, focus rings
+- `#A7C957` **lime** — highlights, active states (e.g. live vocab chip)
+- `#F2E8CF` **cream** — background / warm paper surfaces
+- `#BC4749` **terracotta** — emphasis only: errors, destructive, critical in-call states (Hold Help)
+
+Direction: calm, trustworthy, slightly bureaucratic-but-modern. Warm cream surfaces, forest-green
+primary buttons, leaf/lime accents. Keep the avatar as the hero on the call stage; co-pilot UI is
+floating cards. Default theme is LIGHT; the `.dark` variant is an optional deep-green night mode —
+build for light first. Terracotta is a sparing high-emphasis accent, never the background.
