@@ -19,6 +19,10 @@ dist-ssr
 .env.local
 .env.production
 
+# Source background art (optimized webp lives in public/backgrounds/)
+cutebackground.png
+officebackground.png
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

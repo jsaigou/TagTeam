@@ -1,15 +1,26 @@
 import { VolumeX } from "lucide-react";
 import { useAvatar } from "@/state/avatar-context";
+import { useAppStore } from "@/state/app-store";
+import { getBackgroundUrl } from "@/lib/backgrounds";
 import { AvatarGuide } from "./AvatarGuide";
 import { Button } from "@/components/ui/button";
 
 /** The star: a full-screen, always-present presenter behind every screen. */
 export function AvatarStage() {
   const { stageRef, session, audioUnlocked, unlockAudio } = useAvatar();
+  const { state } = useAppStore();
 
   return (
     <div className="fixed inset-0 z-0">
-      <div ref={stageRef} className="h-full w-full" />
+      {/* Static scenario background behind the avatar. */}
+      <img
+        src={getBackgroundUrl(state.background)}
+        alt=""
+        aria-hidden
+        className="absolute inset-0 h-full w-full object-cover"
+      />
+
+      <div ref={stageRef} className="absolute inset-0 h-full w-full" />
 
       {!session.ready && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">

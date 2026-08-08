@@ -14,6 +14,7 @@ import type {
   SimScript,
 } from "@/shared/contract";
 import type { DocSummary } from "@/lib/doc-parser";
+import { DEFAULT_BACKGROUND } from "@/lib/backgrounds";
 
 export type Screen = "setup" | "call" | "cheat-sheet";
 export type SetupStep = "doc" | "grounding" | "scenario";
@@ -21,6 +22,8 @@ export type ScenarioSelection = {
   avatarId: string;
   sceneId: string;
   voiceId: string;
+  /** Static background key (see src/lib/backgrounds.ts). Optional. */
+  background?: string;
 };
 
 type AppState = {
@@ -35,6 +38,7 @@ type AppState = {
   glossary: GlossaryEntry[];
   cheatSheet: CheatSheet | null;
   scenario: ScenarioSelection | null;
+  background: string;
   busy: boolean;
   error: string | null;
 };
@@ -64,6 +68,7 @@ const initialState: AppState = {
   glossary: [],
   cheatSheet: null,
   scenario: null,
+  background: DEFAULT_BACKGROUND,
   busy: false,
   error: null,
 };
@@ -87,7 +92,11 @@ function reducer(state: AppState, action: Action): AppState {
     case "ANSWERS_SAVED":
       return { ...state, answers: action.answers, busy: false };
     case "SCENARIO_CHOSEN":
-      return { ...state, scenario: action.scenario };
+      return {
+        ...state,
+        scenario: action.scenario,
+        background: action.scenario.background ?? state.background,
+      };
     case "SIM_READY":
       return { ...state, script: action.script, glossary: action.glossary, busy: false };
     case "CHEAT_SHEET_READY":
