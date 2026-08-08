@@ -4,8 +4,9 @@ import type { CatalogItem } from "./api";
 export const DEFAULT_AVATAR_ID = "01KD2H4NWSZP4Y3CK8P3PSHTYP"; // cc051_meeks
 /** The avatar used for the PRACTICE call (the default in the scenario picker). */
 export const PRACTICE_AVATAR_ID = "01KH0D8ZAZHZ762FV5SK3503ZR"; // cc066_male_waiter
-/** Default scene while guiding through setup. */
-export const DEFAULT_SCENE_ID = "01KQEJC9GEYHMHX707G0749NHJ"; // sova_Interior_41
+/** Default scene while guiding through setup — a clean abstract backdrop that
+ *  fits the small avatar window (the static image is the real background). */
+export const DEFAULT_SCENE_ID = "01K4NYAEZPZQS6D90F319GMRD2"; // sova_Abstract_5
 /** Default voice for the cute guide avatar — English-capable (guide speaks English). */
 export const DEFAULT_VOICE_ID = "01KTBJGRFKWS029KQKQBC3318V"; // Female - cute and fast (For English)
 

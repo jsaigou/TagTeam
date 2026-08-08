@@ -5,14 +5,15 @@ import { getBackgroundUrl } from "@/lib/backgrounds";
 import { AvatarGuide } from "./AvatarGuide";
 import { Button } from "@/components/ui/button";
 
-/** The star: a full-screen, always-present presenter behind every screen. */
+/** The star: the avatar lives in a small framed window over a full-screen
+ *  static background, so the background art is actually visible. */
 export function AvatarStage() {
   const { stageRef, session, audioUnlocked, unlockAudio } = useAvatar();
   const { state } = useAppStore();
 
   return (
     <div className="fixed inset-0 z-0">
-      {/* Static scenario background behind the avatar. */}
+      {/* Static scenario background, full screen. */}
       <img
         src={getBackgroundUrl(state.background)}
         alt=""
@@ -20,24 +21,30 @@ export function AvatarStage() {
         className="absolute inset-0 h-full w-full object-cover"
       />
 
-      <div ref={stageRef} className="absolute inset-0 h-full w-full" />
+      {/* Small avatar window — just big enough for the avatar. */}
+      <div className="absolute left-[8%] top-1/2 h-[min(70vh,620px)] w-[min(330px,34vw)] -translate-y-1/2">
+        <div
+          ref={stageRef}
+          className="h-full w-full overflow-hidden rounded-2xl border border-border/60 shadow-2xl"
+        />
 
-      {!session.ready && (
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-          {session.loadError ? (
-            <div className="pointer-events-auto flex flex-col items-center gap-2 rounded-xl border bg-card/90 p-6 text-center shadow-lg">
-              <p className="text-sm text-destructive">Could not load the presenter.</p>
-              <Button size="sm" variant="outline" onClick={session.retryLoad}>
-                Retry
-              </Button>
-            </div>
-          ) : (
-            <p className="rounded-full border bg-card/90 px-4 py-2 text-sm text-muted-foreground shadow-lg">
-              Waking Meeks up…
-            </p>
-          )}
-        </div>
-      )}
+        {!session.ready && (
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            {session.loadError ? (
+              <div className="pointer-events-auto flex flex-col items-center gap-2 rounded-xl border bg-card/90 p-4 text-center shadow-lg">
+                <p className="text-sm text-destructive">Could not load the presenter.</p>
+                <Button size="sm" variant="outline" onClick={session.retryLoad}>
+                  Retry
+                </Button>
+              </div>
+            ) : (
+              <p className="rounded-full border bg-card/90 px-4 py-2 text-sm text-muted-foreground shadow-lg">
+                Waking Meeks up…
+              </p>
+            )}
+          </div>
+        )}
+      </div>
 
       {!audioUnlocked && session.ready && (
         <button
