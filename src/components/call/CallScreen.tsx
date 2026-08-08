@@ -1,15 +1,15 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { PhoneCall, Sparkles } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChevronRight, PhoneCall, Sparkles } from "lucide-react";
 import type { HoldHelp, PlayerState, TapHelp, Turn } from "@/shared/contract";
 import { useAppStore } from "@/state/app-store";
-import { useAvatarSession, useScriptPlayer } from "@/state/connect";
+import { useAvatarSession } from "@/hooks/use-avatar-session";
+import { useScriptPlayer } from "@/hooks/use-script-player";
 import { pipeline } from "@/state/pipeline";
 import { Transcript } from "./Transcript";
 import { VocabOverlay } from "./VocabOverlay";
 import { HelpLayer } from "./HelpLayer";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { cn } from "@/lib/utils";
 
 export function CallScreen() {
   const {
@@ -24,8 +24,21 @@ export function CallScreen() {
   const glossary = state.glossary;
   const scenario = state.scenario;
 
-  const session = useAvatarSession();
-  const player = useScriptPlayer({ speak: (text) => session.speak(text) });
+  /* The real <sv-presenter> element mounts inside this div (useAvatarSession ->
+     usePresenter appends it). Keep the stage visible; co-pilot overlays are
+     siblings so they are never clipped. */
+  const stageRef = useRef<HTMLDivElement>(null);
+
+  const session = useAvatarSession(stageRef);
+  const playerDeps = useMemo(
+    () => ({
+      present: session.present,
+      interrupt: session.interrupt,
+      subscribe: session.subscribe,
+    }),
+    [session.present, session.interrupt, session.subscribe],
+  );
+  const { player } = useScriptPlayer(playerDeps);
 
   const [turns, setTurns] = useState<Turn[]>([]);
   const [activeTurnId, setActiveTurnId] = useState<string | null>(null);
@@ -34,15 +47,29 @@ export function CallScreen() {
   const [holdHelp, setHoldHelp] = useState<HoldHelp | null>(null);
   const [tapHelp, setTapHelp] = useState<TapHelp | null>(null);
   const [started, setStarted] = useState(false);
-  /* Integration point (connect-core owns it): the real <sv-presenter> element mounts
-     inside this div. Keep it visible — do NOT add overflow-hidden to the stage itself,
-     or the presenter (and its floating co-pilot overlays) can be clipped. */
-  const stageRef = useRef<HTMLDivElement>(null);
+  const launchedRef = useRef(false);
+
+  /* Launch the presenter once for the chosen scenario (swap avatar/scene/voice
+     atomically by re-initializing). launchedRef guards against re-runs caused
+     by the session/setError identities changing between renders. */
+  useEffect(() => {
+    if (!scenario || launchedRef.current) return;
+    launchedRef.current = true;
+    void session
+      .launch({
+        avatarId: scenario.avatarId,
+        sceneId: scenario.sceneId,
+        voiceId: scenario.voiceId,
+      })
+      .catch((err) => {
+        launchedRef.current = false;
+        setError(err instanceof Error ? err.message : "Failed to launch the presenter.");
+      });
+  }, [scenario, session, setError]);
 
   useEffect(() => {
-    if (scenario) session.launch(scenario.avatarId, scenario.sceneId, scenario.voiceId);
     if (script) player.load(script, glossary);
-  }, [script, glossary, scenario, session, player]);
+  }, [script, glossary, player]);
 
   useEffect(() => {
     player.setEvents({
@@ -60,19 +87,18 @@ export function CallScreen() {
     };
   }, [player]);
 
-  /* TODO(stub): connect-core owns the presenter events. At integration, replace
-     this listener with the real CONNECT_TOKEN_EXPIRED wiring from src/lib/presenter.ts;
-     it currently just surfaces a session-expired error into the store. */
-  useEffect(() => {
-    const onTokenExpired = () => setError("Session expired — please sign in again.");
-    window.addEventListener("CONNECT_TOKEN_EXPIRED", onTokenExpired);
-    return () => window.removeEventListener("CONNECT_TOKEN_EXPIRED", onTokenExpired);
-  }, [setError]);
-
   const activeTurn = turns.find((t) => t.id === activeTurnId) ?? null;
+  const isSpeaking = playerState === "talking";
+  /* The player pauses at user turns (the SDK cannot speak the user's line);
+     surface a "your turn" prompt so the practice flow keeps moving. */
+  const atUserTurn = activeTurn?.speaker === "user" && playerState === "talking";
 
   const handleStart = useCallback(async () => {
     if (!script) return;
+    if (!session.ready) {
+      setError("Presenter is still loading — please wait a moment and try again.");
+      return;
+    }
     try {
       await session.resumeAudio();
     } catch (err) {
@@ -92,6 +118,10 @@ export function CallScreen() {
   const handleResume = useCallback(() => {
     player.resume();
     setHoldHelp(null);
+  }, [player]);
+
+  const handleContinue = useCallback(() => {
+    player.resume();
   }, [player]);
 
   const handleTapHelp = useCallback(
@@ -142,35 +172,43 @@ export function CallScreen() {
 
       <main className="grid flex-1 grid-cols-1 gap-0 overflow-hidden md:grid-cols-[1fr_320px]">
         <section className="relative flex min-h-0 flex-col bg-gradient-to-br from-background to-accent/20">
-          <div
-            ref={stageRef}
-            className="relative flex flex-1 items-center justify-center overflow-hidden p-4"
-          >
-            {scenario ? (
-              <div className="flex flex-col items-center gap-4 text-center">
-                <div
-                  className={cn(
-                    "flex size-56 items-center justify-center rounded-full border-4 border-accent bg-card shadow-xl transition-transform",
-                    session.isSpeaking && "scale-[1.02] animate-pulse",
-                  )}
-                >
-                  <span className="text-7xl">🎧</span>
+          <div ref={stageRef} className="relative flex flex-1 items-center justify-center overflow-hidden">
+            {!session.ready &&
+              (session.loadError ? (
+                <div className="flex flex-col items-center gap-2 p-6 text-center">
+                  <p className="text-sm text-destructive">Could not load the presenter.</p>
+                  <Button size="sm" variant="outline" onClick={session.retryLoad}>
+                    Retry
+                  </Button>
                 </div>
-                <div>
-                  <p className="text-lg font-semibold text-primary">{scenario.avatarId}</p>
-                  <p className="text-sm text-muted-foreground">{scenario.sceneId}</p>
-                </div>
-                {session.isSpeaking && (
-                  <p className="inline-flex items-center gap-2 rounded-full bg-accent/25 px-3 py-1 text-xs font-medium">
-                    <span className="size-2 animate-pulse rounded-full bg-accent" />
-                    Speaking…
-                  </p>
-                )}
+              ) : (
+                <p className="text-sm text-muted-foreground">Connecting to the ward office…</p>
+              ))}
+
+            {session.ready && isSpeaking && (
+              <div className="pointer-events-none absolute right-4 top-4 z-20">
+                <span className="inline-flex items-center gap-2 rounded-full bg-accent/25 px-3 py-1 text-xs font-medium">
+                  <span className="size-2 animate-pulse rounded-full bg-accent" />
+                  Speaking…
+                </span>
               </div>
-            ) : (
-              <p className="text-muted-foreground">Scenario not ready.</p>
             )}
           </div>
+
+          {atUserTurn && (
+            <div className="absolute inset-x-0 bottom-24 z-30 flex justify-center px-4">
+              <div className="flex max-w-md flex-col gap-2 rounded-xl border bg-card/95 p-4 shadow-lg backdrop-blur">
+                <p className="text-xs font-medium uppercase tracking-wide text-primary">
+                  Your turn
+                </p>
+                <p className="text-sm text-foreground">{activeTurn?.jp}</p>
+                {activeTurn?.en && <p className="text-xs text-muted-foreground">{activeTurn.en}</p>}
+                <Button size="sm" onClick={handleContinue} className="gap-1 self-end">
+                  Continue <ChevronRight className="size-4" />
+                </Button>
+              </div>
+            </div>
+          )}
 
           <VocabOverlay
             turn={activeTurn}

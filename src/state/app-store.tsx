@@ -13,6 +13,7 @@ import type {
   GroundingQuestion,
   SimScript,
 } from "@/shared/contract";
+import type { DocSummary } from "@/lib/doc-parser";
 
 export type Screen = "login" | "setup" | "call" | "cheat-sheet";
 export type SetupStep = "doc" | "grounding" | "scenario";
@@ -27,6 +28,7 @@ type AppState = {
   setupStep: SetupStep;
   doc: DocInput | null;
   summary: string | null;
+  docSummary: DocSummary | null;
   questions: GroundingQuestion[];
   answers: GroundingAnswer[];
   script: SimScript | null;
@@ -41,7 +43,7 @@ type Action =
   | { type: "SET_SCREEN"; screen: Screen }
   | { type: "SET_SETUP_STEP"; step: SetupStep }
   | { type: "DOC_UPLOADED"; doc: DocInput }
-  | { type: "PARSED"; summary: string; questions: GroundingQuestion[] }
+  | { type: "PARSED"; summary: string; doc: DocSummary; questions: GroundingQuestion[] }
   | { type: "ANSWERS_SAVED"; answers: GroundingAnswer[] }
   | { type: "SCENARIO_CHOSEN"; scenario: ScenarioSelection }
   | { type: "SIM_READY"; script: SimScript; glossary: GlossaryEntry[] }
@@ -55,6 +57,7 @@ const initialState: AppState = {
   setupStep: "doc",
   doc: null,
   summary: null,
+  docSummary: null,
   questions: [],
   answers: [],
   script: null,
@@ -74,7 +77,13 @@ function reducer(state: AppState, action: Action): AppState {
     case "DOC_UPLOADED":
       return { ...state, doc: action.doc, error: null };
     case "PARSED":
-      return { ...state, summary: action.summary, questions: action.questions, busy: false };
+      return {
+        ...state,
+        summary: action.summary,
+        docSummary: action.doc,
+        questions: action.questions,
+        busy: false,
+      };
     case "ANSWERS_SAVED":
       return { ...state, answers: action.answers, busy: false };
     case "SCENARIO_CHOSEN":
@@ -102,7 +111,7 @@ type Store = {
   toCheatSheet: () => void;
   reset: () => void;
   setDoc: (doc: DocInput) => void;
-  parsed: (summary: string, questions: GroundingQuestion[]) => void;
+  parsed: (summary: string, doc: DocSummary, questions: GroundingQuestion[]) => void;
   saveAnswers: (answers: GroundingAnswer[]) => void;
   chooseScenario: (scenario: ScenarioSelection) => void;
   setSim: (script: SimScript, glossary: GlossaryEntry[]) => void;
@@ -125,7 +134,8 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       toCheatSheet: () => dispatch({ type: "SET_SCREEN", screen: "cheat-sheet" }),
       reset: () => dispatch({ type: "RESET" }),
       setDoc: (doc) => dispatch({ type: "DOC_UPLOADED", doc }),
-      parsed: (summary, questions) => dispatch({ type: "PARSED", summary, questions }),
+      parsed: (summary, doc, questions) =>
+        dispatch({ type: "PARSED", summary, doc, questions }),
       saveAnswers: (answers) => dispatch({ type: "ANSWERS_SAVED", answers }),
       chooseScenario: (scenario) => dispatch({ type: "SCENARIO_CHOSEN", scenario }),
       setSim: (script, glossary) => dispatch({ type: "SIM_READY", script, glossary }),

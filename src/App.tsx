@@ -1,8 +1,6 @@
-import { useEffect } from "react";
 import { Leaf, LogOut } from "lucide-react";
 import { AppStoreProvider, useAppStore } from "@/state/app-store";
-import { useAuth } from "@/state/connect";
-import { initPipeline } from "@/state/pipeline";
+import { useAuth } from "@/hooks/use-auth";
 import { Login } from "@/components/setup/Login";
 import { SetupScreen } from "@/components/setup/SetupScreen";
 import { CallScreen } from "@/components/call/CallScreen";
@@ -12,10 +10,6 @@ import { Button } from "@/components/ui/button";
 function Shell() {
   const { state, toSetup, reset } = useAppStore();
   const auth = useAuth();
-
-  useEffect(() => {
-    void initPipeline();
-  }, []);
 
   if (!auth.isAuthenticated) {
     return <Login auth={auth} onSuccess={toSetup} />;
@@ -34,7 +28,7 @@ function Shell() {
             <span className="text-base font-semibold">TagTeam</span>
           </button>
           <div className="flex items-center gap-3">
-            <span className="text-xs text-muted-foreground">{auth.user?.email}</span>
+            <span className="text-xs text-muted-foreground">{auth.email}</span>
             <Button
               variant="ghost"
               size="sm"

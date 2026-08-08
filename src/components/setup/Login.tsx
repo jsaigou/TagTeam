@@ -1,11 +1,11 @@
 import { useState, type FormEvent } from "react";
 import { Leaf } from "lucide-react";
-import type { AuthResult } from "@/state/connect";
+import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 type LoginProps = {
-  auth: AuthResult;
+  auth: ReturnType<typeof useAuth>;
   onSuccess: () => void;
 };
 
@@ -15,8 +15,12 @@ export function Login({ auth, onSuccess }: LoginProps) {
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    await auth.login(email, password);
-    onSuccess();
+    try {
+      await auth.login(email, password);
+      onSuccess();
+    } catch {
+      /* error is surfaced via auth.loginError below */
+    }
   };
 
   return (
@@ -61,8 +65,11 @@ export function Login({ auth, onSuccess }: LoginProps) {
             required
           />
         </div>
-        <Button type="submit" disabled={auth.busy} size="lg">
-          {auth.busy ? "Signing in…" : "Sign in"}
+        {auth.loginError && (
+          <p className="text-sm text-destructive">{auth.loginError.message}</p>
+        )}
+        <Button type="submit" disabled={auth.isLoggingIn} size="lg">
+          {auth.isLoggingIn ? "Signing in…" : "Sign in"}
         </Button>
       </form>
     </div>

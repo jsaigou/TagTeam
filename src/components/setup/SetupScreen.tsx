@@ -29,7 +29,7 @@ export function SetupScreen() {
       setBusy(true);
       try {
         const result = await pipeline.parseDoc(doc);
-        parsed(result.summary, result.questions);
+        parsed(result.summary, result.doc, result.questions);
         setSetupStep("grounding");
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to read document");
@@ -54,7 +54,7 @@ export function SetupScreen() {
       chooseScenario(scenario);
       setBusy(true);
       try {
-        const result = await pipeline.runSim(state.summary, state.answers);
+        const result = await pipeline.runSim(state.summary, state.answers, state.docSummary);
         setSim(result.script, result.glossary);
         toCall();
       } catch (err) {
@@ -63,7 +63,7 @@ export function SetupScreen() {
         setBusy(false);
       }
     },
-    [chooseScenario, setBusy, setSim, toCall, state.summary, state.answers, setError],
+    [chooseScenario, setBusy, setSim, toCall, state.summary, state.answers, state.docSummary, setError],
   );
 
   const stepIndex = useMemo(

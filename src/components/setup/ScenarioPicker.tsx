@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ChevronRight, Sparkles } from "lucide-react";
-import { useCatalog } from "@/state/connect";
+import { useCatalog } from "@/hooks/use-catalog";
 import type { ScenarioSelection } from "@/state/app-store";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -36,7 +36,7 @@ function Option({ label, description, active, onSelect }: OptionProps) {
 }
 
 export function ScenarioPicker({ onChoose, busy }: ScenarioPickerProps) {
-  const { avatars, scenes, voices, loading, error } = useCatalog();
+  const { avatars, scenes, voices, isLoading, error } = useCatalog();
   const [avatarId, setAvatarId] = useState<string | null>(null);
   const [sceneId, setSceneId] = useState<string | null>(null);
   const [voiceId, setVoiceId] = useState<string | null>(null);
@@ -47,7 +47,7 @@ export function ScenarioPicker({ onChoose, busy }: ScenarioPickerProps) {
 
   const ready = Boolean(currentAvatar && currentScene && currentVoice && !busy);
 
-  if (loading) {
+  if (isLoading) {
     return <p className="py-8 text-center text-muted-foreground">Loading scenario catalog…</p>;
   }
 
@@ -55,7 +55,7 @@ export function ScenarioPicker({ onChoose, busy }: ScenarioPickerProps) {
     <div className="flex flex-col gap-6">
       {error && (
         <p className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
-          {error}
+          {error.message}
         </p>
       )}
 
@@ -67,7 +67,6 @@ export function ScenarioPicker({ onChoose, busy }: ScenarioPickerProps) {
               <Option
                 key={a.id}
                 label={a.name}
-                description={a.description}
                 active={a.id === currentAvatar}
                 onSelect={() => setAvatarId(a.id)}
               />
@@ -82,7 +81,6 @@ export function ScenarioPicker({ onChoose, busy }: ScenarioPickerProps) {
               <Option
                 key={s.id}
                 label={s.name}
-                description={s.description}
                 active={s.id === currentScene}
                 onSelect={() => setSceneId(s.id)}
               />
@@ -97,7 +95,6 @@ export function ScenarioPicker({ onChoose, busy }: ScenarioPickerProps) {
               <Option
                 key={v.id}
                 label={v.name}
-                description={v.description}
                 active={v.id === currentVoice}
                 onSelect={() => setVoiceId(v.id)}
               />
