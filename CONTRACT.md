@@ -12,7 +12,7 @@ confidently navigate complex Japanese bureaucracy phone calls.
 
 | Owner | Area | Owns |
 |---|---|---|
-| **connect-core** | Scaffold/Connect integration + script player | `src/lib/auth.ts`, `src/lib/api.ts`, `src/lib/presenter.ts`, `src/hooks/use-auth.ts`, `src/hooks/use-catalog.ts`, `src/hooks/use-presenter.ts`, `src/hooks/use-avatar-session.ts`, `src/hooks/use-script-player.ts`, `src/components/stage/*` |
+| **connect-core** | Connect integration + script player | `server.mjs` (backend proxy: token mint + catalog), `src/lib/api.ts`, `src/lib/presenter.ts`, `src/hooks/use-catalog.ts`, `src/hooks/use-presenter.ts`, `src/hooks/use-avatar-session.ts`, `src/hooks/use-script-player.ts`, `src/components/stage/*` |
 | **ai-pipeline** | Pure logic (no UI), unit-tested | `src/lib/llm.ts`, `src/lib/doc-parser.ts`, `src/lib/sim-engine.ts`, `src/lib/glossary.ts`, `src/lib/cheat-sheet.ts`, `src/prompts/*`, `src/fixtures/*` |
 | **ui-copilot** | UX + in-call layer | `src/App.tsx`, `src/main.tsx`, `src/components/setup/*`, `src/components/call/*`, `src/components/cheat-sheet/*`, `src/state/*`, `src/index.css`, `index.html` |
 
@@ -54,8 +54,11 @@ ai-pipeline additionally: `pnpm test`.
 ## Secret hygiene
 
 - `.env` is git-ignored. NEVER commit `.env` or real keys; only `.env.example` (placeholders).
-- The LLM key lives in `VITE_LLM_API_KEY` in `.env` — it is a Vite env var exposed to the browser
-  (accepted tradeoff for this demo). Connect credentials are entered at runtime by the user.
+- Connect credentials (`PERXONA_CONNECT_EMAIL`/`PERXONA_CONNECT_PASSWORD`) live SERVER-side in
+  `server.mjs` and never reach the browser; the browser gets a minted connect_token from
+  `GET /api/connect-token`.
+- The LLM key lives in `VITE_LLM_API_KEY` in `.env` — a Vite env var exposed to the browser
+  (accepted tradeoff for this demo).
 - Before committing run: `git grep -nE '(sk-[A-Za-z0-9]{20}|api[_-]?key|password|secret)[:=][[:space:]]*[^$]'`.
 
 ## Visual direction (light theme, nature feel)

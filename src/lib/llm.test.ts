@@ -115,6 +115,7 @@ describe("chat", () => {
     const fetchMock = stubFetchJson({ choices: [{ message: { content: "ok" } }] });
     await chat([{ role: "user", content: "hi" }], {
       config: { baseUrl: TEST_CONFIG.baseUrl, model: TEST_CONFIG.model },
+      env: {},
     });
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(init.headers).not.toHaveProperty("Authorization");

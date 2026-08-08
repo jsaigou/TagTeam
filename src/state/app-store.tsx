@@ -15,7 +15,7 @@ import type {
 } from "@/shared/contract";
 import type { DocSummary } from "@/lib/doc-parser";
 
-export type Screen = "login" | "setup" | "call" | "cheat-sheet";
+export type Screen = "setup" | "call" | "cheat-sheet";
 export type SetupStep = "doc" | "grounding" | "scenario";
 export type ScenarioSelection = {
   avatarId: string;
@@ -53,7 +53,7 @@ type Action =
   | { type: "RESET" };
 
 const initialState: AppState = {
-  screen: "login",
+  screen: "setup",
   setupStep: "doc",
   doc: null,
   summary: null,

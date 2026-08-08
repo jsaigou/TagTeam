@@ -1,13 +1,20 @@
 import { useState } from "react";
 import { ChevronRight, Sparkles } from "lucide-react";
-import { useCatalog } from "@/hooks/use-catalog";
 import type { ScenarioSelection } from "@/state/app-store";
+import type { PresetAvatar } from "@/hooks/use-catalog";
+import type { ApiError, CatalogItem } from "@/lib/api";
+import { DEFAULT_AVATAR_ID } from "@/lib/presets";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 type ScenarioPickerProps = {
   onChoose: (scenario: ScenarioSelection) => void;
   busy: boolean;
+  avatars: PresetAvatar[];
+  scenes: CatalogItem[];
+  voices: CatalogItem[];
+  isLoading: boolean;
+  error: ApiError | null;
 };
 
 type OptionProps = {
@@ -35,13 +42,23 @@ function Option({ label, description, active, onSelect }: OptionProps) {
   );
 }
 
-export function ScenarioPicker({ onChoose, busy }: ScenarioPickerProps) {
-  const { avatars, scenes, voices, isLoading, error } = useCatalog();
+export function ScenarioPicker({
+  onChoose,
+  busy,
+  avatars,
+  scenes,
+  voices,
+  isLoading,
+  error,
+}: ScenarioPickerProps) {
   const [avatarId, setAvatarId] = useState<string | null>(null);
   const [sceneId, setSceneId] = useState<string | null>(null);
   const [voiceId, setVoiceId] = useState<string | null>(null);
 
-  const currentAvatar = avatarId ?? avatars[0]?.id;
+  const defaultAvatar = avatars.some((a) => a.id === DEFAULT_AVATAR_ID)
+    ? DEFAULT_AVATAR_ID
+    : avatars[0]?.id;
+  const currentAvatar = avatarId ?? defaultAvatar;
   const currentScene = sceneId ?? scenes[0]?.id;
   const currentVoice = voiceId ?? voices[0]?.id;
 
@@ -108,7 +125,17 @@ export function ScenarioPicker({ onChoose, busy }: ScenarioPickerProps) {
           <Sparkles className="size-4 text-accent" />
           You can change the avatar mid-call later.
         </p>
-        <Button onClick={() => onChoose({ avatarId: currentAvatar!, sceneId: currentScene!, voiceId: currentVoice! })} disabled={!ready} size="lg">
+        <Button
+          onClick={() =>
+            onChoose({
+              avatarId: currentAvatar!,
+              sceneId: currentScene!,
+              voiceId: currentVoice!,
+            })
+          }
+          disabled={!ready}
+          size="lg"
+        >
           Start simulation
           <ChevronRight />
         </Button>

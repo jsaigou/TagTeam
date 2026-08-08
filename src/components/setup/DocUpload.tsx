@@ -62,9 +62,13 @@ export function DocUpload({ onAnalyzed, busy }: DocUploadProps) {
           </div>
         </div>
       ) : (
-        <button
-          type="button"
+        <div
+          role="button"
+          tabIndex={0}
           onClick={() => inputRef.current?.click()}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") inputRef.current?.click();
+          }}
           onDragOver={(e) => {
             e.preventDefault();
             setDragging(true);
@@ -72,7 +76,7 @@ export function DocUpload({ onAnalyzed, busy }: DocUploadProps) {
           onDragLeave={() => setDragging(false)}
           onDrop={onDrop}
           className={cn(
-            "flex min-h-56 w-full flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed bg-card p-8 text-center transition-colors",
+            "flex min-h-56 w-full cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed bg-card p-8 text-center transition-colors",
             dragging ? "border-ring bg-accent/20" : "border-border",
           )}
         >
@@ -88,7 +92,7 @@ export function DocUpload({ onAnalyzed, busy }: DocUploadProps) {
           <Button type="button" variant="outline">
             Browse files
           </Button>
-        </button>
+        </div>
       )}
       <input
         ref={inputRef}

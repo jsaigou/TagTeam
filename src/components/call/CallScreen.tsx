@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronRight, PhoneCall, Sparkles } from "lucide-react";
 import type { HoldHelp, PlayerState, TapHelp, Turn } from "@/shared/contract";
 import { useAppStore } from "@/state/app-store";
-import { useAvatarSession } from "@/hooks/use-avatar-session";
+import { useAvatar } from "@/state/avatar-context";
 import { useScriptPlayer } from "@/hooks/use-script-player";
 import { pipeline } from "@/state/pipeline";
 import { Transcript } from "./Transcript";
@@ -20,16 +20,10 @@ export function CallScreen() {
     setError,
     reset,
   } = useAppStore();
+  const { session, unlockAudio, speakGuide } = useAvatar();
   const script = state.script;
   const glossary = state.glossary;
-  const scenario = state.scenario;
 
-  /* The real <sv-presenter> element mounts inside this div (useAvatarSession ->
-     usePresenter appends it). Keep the stage visible; co-pilot overlays are
-     siblings so they are never clipped. */
-  const stageRef = useRef<HTMLDivElement>(null);
-
-  const session = useAvatarSession(stageRef);
   const playerDeps = useMemo(
     () => ({
       present: session.present,
@@ -47,25 +41,6 @@ export function CallScreen() {
   const [holdHelp, setHoldHelp] = useState<HoldHelp | null>(null);
   const [tapHelp, setTapHelp] = useState<TapHelp | null>(null);
   const [started, setStarted] = useState(false);
-  const launchedRef = useRef(false);
-
-  /* Launch the presenter once for the chosen scenario (swap avatar/scene/voice
-     atomically by re-initializing). launchedRef guards against re-runs caused
-     by the session/setError identities changing between renders. */
-  useEffect(() => {
-    if (!scenario || launchedRef.current) return;
-    launchedRef.current = true;
-    void session
-      .launch({
-        avatarId: scenario.avatarId,
-        sceneId: scenario.sceneId,
-        voiceId: scenario.voiceId,
-      })
-      .catch((err) => {
-        launchedRef.current = false;
-        setError(err instanceof Error ? err.message : "Failed to launch the presenter.");
-      });
-  }, [scenario, session, setError]);
 
   useEffect(() => {
     if (script) player.load(script, glossary);
@@ -100,14 +75,15 @@ export function CallScreen() {
       return;
     }
     try {
-      await session.resumeAudio();
+      speakGuide(null);
+      await unlockAudio();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not start audio. Tap Start again.");
       return;
     }
     player.play();
     setStarted(true);
-  }, [script, session, player, setError]);
+  }, [script, session, player, setError, unlockAudio, speakGuide]);
 
   const handleHold = useCallback(async () => {
     const help = await player.hold();
@@ -150,7 +126,7 @@ export function CallScreen() {
   const canStart = !started && !ended && Boolean(script);
 
   return (
-    <div className="flex h-svh flex-col overflow-hidden">
+    <div className="relative z-10 flex h-svh flex-col">
       <header className="flex items-center justify-between border-b bg-card px-4 py-2.5">
         <div className="flex items-center gap-2">
           <Sparkles className="size-4 text-accent" />
@@ -170,85 +146,69 @@ export function CallScreen() {
         </div>
       )}
 
-      <main className="grid flex-1 grid-cols-1 gap-0 overflow-hidden md:grid-cols-[1fr_320px]">
-        <section className="relative flex min-h-0 flex-col bg-gradient-to-br from-background to-accent/20">
-          <div ref={stageRef} className="relative flex flex-1 items-center justify-center overflow-hidden">
-            {!session.ready &&
-              (session.loadError ? (
-                <div className="flex flex-col items-center gap-2 p-6 text-center">
-                  <p className="text-sm text-destructive">Could not load the presenter.</p>
-                  <Button size="sm" variant="outline" onClick={session.retryLoad}>
-                    Retry
-                  </Button>
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">Connecting to the ward office…</p>
-              ))}
-
-            {session.ready && isSpeaking && (
-              <div className="pointer-events-none absolute right-4 top-4 z-20">
-                <span className="inline-flex items-center gap-2 rounded-full bg-accent/25 px-3 py-1 text-xs font-medium">
-                  <span className="size-2 animate-pulse rounded-full bg-accent" />
-                  Speaking…
-                </span>
-              </div>
-            )}
+      <main className="relative flex-1">
+        {canStart && (
+          <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/30 p-4 backdrop-blur-sm">
+            <Button size="lg" onClick={handleStart} className="gap-2 text-base">
+              <PhoneCall />
+              Start call
+            </Button>
           </div>
+        )}
 
-          {atUserTurn && (
-            <div className="absolute inset-x-0 bottom-24 z-30 flex justify-center px-4">
-              <div className="flex max-w-md flex-col gap-2 rounded-xl border bg-card/95 p-4 shadow-lg backdrop-blur">
-                <p className="text-xs font-medium uppercase tracking-wide text-primary">
-                  Your turn
-                </p>
-                <p className="text-sm text-foreground">{activeTurn?.jp}</p>
-                {activeTurn?.en && <p className="text-xs text-muted-foreground">{activeTurn.en}</p>}
-                <Button size="sm" onClick={handleContinue} className="gap-1 self-end">
-                  Continue <ChevronRight className="size-4" />
-                </Button>
-              </div>
-            </div>
-          )}
+        {ended && (
+          <div className="absolute inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-background/30 p-4 backdrop-blur-sm">
+            <p className="text-lg font-semibold text-primary">Call complete</p>
+            <Button size="lg" onClick={handleFinish}>
+              View cheat sheet
+            </Button>
+          </div>
+        )}
 
-          <VocabOverlay
-            turn={activeTurn}
-            glossary={glossary}
-            speakingText={speakingText}
-            onTapHelp={handleTapHelp}
-          />
-
-          {canStart && (
-            <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/40 p-4 backdrop-blur-sm">
-              <Button size="lg" onClick={handleStart} className="gap-2 text-base">
-                <PhoneCall />
-                Start call
+        {atUserTurn && (
+          <div className="absolute inset-x-0 bottom-24 z-30 flex justify-center px-4">
+            <div className="flex max-w-md flex-col gap-2 rounded-xl border bg-card/95 p-4 shadow-lg backdrop-blur">
+              <p className="text-xs font-medium uppercase tracking-wide text-primary">
+                Your turn
+              </p>
+              <p className="text-sm text-foreground">{activeTurn?.jp}</p>
+              {activeTurn?.en && <p className="text-xs text-muted-foreground">{activeTurn.en}</p>}
+              <Button size="sm" onClick={handleContinue} className="gap-1 self-end">
+                Continue <ChevronRight className="size-4" />
               </Button>
             </div>
-          )}
+          </div>
+        )}
 
-          {ended && (
-            <div className="absolute inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-background/40 p-4 backdrop-blur-sm">
-              <p className="text-lg font-semibold text-primary">Call complete</p>
-              <Button size="lg" onClick={handleFinish}>
-                View cheat sheet
-              </Button>
-            </div>
-          )}
+        {isSpeaking && (
+          <div className="pointer-events-none absolute left-4 top-4 z-20">
+            <span className="inline-flex items-center gap-2 rounded-full bg-accent/25 px-3 py-1 text-xs font-medium">
+              <span className="size-2 animate-pulse rounded-full bg-accent" />
+              Speaking…
+            </span>
+          </div>
+        )}
 
-          <HelpLayer
-            holdHelp={holdHelp}
-            tapHelp={tapHelp}
-            playerState={playerState}
-            onHold={handleHold}
-            onResume={handleResume}
-            onDismissTap={() => setTapHelp(null)}
-          />
-        </section>
+        <VocabOverlay
+          turn={activeTurn}
+          glossary={glossary}
+          speakingText={speakingText}
+          onTapHelp={handleTapHelp}
+        />
 
-        <aside className="hidden min-h-0 border-l bg-card/40 md:block">
+        <HelpLayer
+          holdHelp={holdHelp}
+          tapHelp={tapHelp}
+          playerState={playerState}
+          onHold={handleHold}
+          onResume={handleResume}
+          onDismissTap={() => setTapHelp(null)}
+        />
+
+        <aside className="absolute right-0 top-0 z-20 hidden h-full w-80 flex-col border-l bg-card/70 backdrop-blur md:flex">
           <div className="flex items-center justify-between border-b px-4 py-2">
             <p className="text-sm font-medium text-primary">Transcript</p>
-            {playerState === "talking" && (
+            {isSpeaking && (
               <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
                 <span className="size-1.5 animate-pulse rounded-full bg-accent" />
                 live

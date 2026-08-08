@@ -1,4 +1,4 @@
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useState } from "react";
 
 import {
   getAvatars,
@@ -7,7 +7,6 @@ import {
   type ApiError,
   type CatalogItem,
 } from "@/lib/api";
-import { getEmail, subscribe } from "@/lib/auth";
 
 /** Thumbnail key used for the avatar picker. */
 const AVATAR_THUMBNAIL_KEY = "head";
@@ -35,12 +34,9 @@ interface CatalogData {
 }
 
 /**
- * Loads the Connect catalog (avatars, scenes, voices). Refetches whenever the
- * signed-in account changes so a re-login never serves a previous session's
- * data.
+ * Loads the Connect catalog (avatars, scenes, voices) via the backend proxy.
  */
 export function useCatalog(): CatalogData {
-  const accountKey = useSyncExternalStore(subscribe, () => getEmail() ?? "");
   const [data, setData] = useState<CatalogData>({
     avatars: [],
     scenes: [],
@@ -79,7 +75,7 @@ export function useCatalog(): CatalogData {
     return () => {
       cancelled = true;
     };
-  }, [accountKey]);
+  }, []);
 
   return data;
 }

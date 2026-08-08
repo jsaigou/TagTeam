@@ -2,7 +2,6 @@ import type React from "react";
 import { useCallback, useState } from "react";
 
 import { getConnectToken } from "@/lib/api";
-import { logout } from "@/lib/auth";
 import type { PresentationResult } from "@/lib/presenter";
 import {
   usePresenter,
@@ -39,19 +38,29 @@ export interface AvatarSession {
 /**
  * Bridges the Connect API with the imperative presenter.
  *
- * - `launch` fetches the Connect token then initializes the presenter with the
- *   chosen avatar/scene/voice.
+ * - `launch` mints a Connect token from the backend proxy (which holds the
+ *   shared identity in env), then initializes the presenter with the chosen
+ *   avatar/scene/voice.
  * - `speak` resumes the AudioContext (from this user-gesture click) and calls
  *   `presenter.present(text)`.
- * - No real token refresh: on `CONNECT_TOKEN_EXPIRED` the session is cleared
- *   via `logout()`, which routes the user back to the login screen.
+ * - On `CONNECT_TOKEN_EXPIRED` the token is re-minted and rotated via
+ *   `refreshConnectToken` — no user login involved.
  */
 export function useAvatarSession(
   stageRef: React.RefObject<HTMLDivElement | null>,
 ): AvatarSession {
   const presenter = usePresenter({
     stageRef,
-    onConnectTokenExpired: () => logout(),
+    onConnectTokenExpired: () => {
+      void (async () => {
+        try {
+          const { connect_token } = await getConnectToken();
+          presenter.refreshConnectToken(connect_token);
+        } catch {
+          /* re-mint failed (e.g. backend down) — next present() will surface it */
+        }
+      })();
+    },
   });
 
   const [isLaunching, setIsLaunching] = useState(false);

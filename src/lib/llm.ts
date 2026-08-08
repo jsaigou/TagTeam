@@ -106,6 +106,8 @@ export type ChatOptions = {
   config?: Partial<LlmConfig>;
   fetchImpl?: typeof fetch;
   signal?: AbortSignal;
+  /** Test hook: override the VITE_ env source (defaults to import.meta.env). */
+  env?: Record<string, string | undefined>;
 };
 
 export type ChatResult = {
@@ -119,7 +121,7 @@ export type ChatResult = {
  * network failures or a malformed/unparseable response body.
  */
 export async function chat(messages: ChatMessage[], options: ChatOptions = {}): Promise<ChatResult> {
-  const cfg = resolveLlmConfig(options.config);
+  const cfg = resolveLlmConfig(options.config, options.env);
   if (!cfg.baseUrl) {
     throw new LlmError("config", "LLM base URL is not configured (VITE_LLM_BASE_URL)");
   }

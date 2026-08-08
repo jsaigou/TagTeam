@@ -16,22 +16,26 @@ navigate complex Japanese bureaucracy and administrative phone calls.
    conditional phrases for the real call, plus targeted practice recommendations.
 
 Built on the Perxona Connect Kit (`<sv-presenter>` avatar Web Component) and an OpenAI-compatible
-LLM. Pure frontend — auth and the LLM key run in the browser (demo tradeoff).
+LLM (the foundry a0 router, `gemma4-mtp`). The Connect identity lives server-side in `server.mjs`
+(env-held credentials) — there is no user login; the browser gets a minted connect_token. The LLM
+key ships to the browser (demo tradeoff).
 
 ## Getting Started
 
 ```bash
 pnpm install
-cp .env.example .env   # fill VITE_PERXONA_API_BASE_URL, VITE_LLM_API_KEY, VITE_LLM_MODEL
-pnpm dev
+cp .env.example .env   # fill PERXONA_CONNECT_EMAIL/PASSWORD + VITE_LLM_API_KEY
+pnpm dev               # api :8083 + web :5173
 ```
 
-Verify: `pnpm build && pnpm lint && pnpm test`.
+Verify: `pnpm build && pnpm lint && pnpm test`. Production: `pnpm build && pnpm start`.
 
 ## Repo map
 
+- `server.mjs` — Express proxy: mints connect tokens, proxies the avatar/scene/voice catalog,
+  serves the built app.
 - `src/shared/contract.ts` — cross-module data contract (SimScript, Glossary, CheatSheet, player API).
-- `src/lib/` — auth/api/presenter (Connect), llm/doc-parser/sim-engine/glossary/cheat-sheet (AI pipeline).
+- `src/lib/` — api/presenter (Connect), llm/doc-parser/sim-engine/glossary/cheat-sheet (AI pipeline).
 - `src/hooks/` — React bindings; `use-script-player` is the sentence-queue driving the call.
 - `src/components/` — `setup/`, `call/`, `cheat-sheet/`, `stage/` UI.
 

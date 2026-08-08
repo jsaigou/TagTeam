@@ -15,17 +15,23 @@ and an OpenAI-compatible LLM.
 ## Environment
 
 - `.env.example` is the only committed env file; copy to `.env` and fill in.
-- `VITE_` prefix required (Vite exposes them to the browser). LLM key is `VITE_LLM_API_KEY`.
+- **Server-side (server.mjs):** `PERXONA_API_BASE_URL`, `PERXONA_CONNECT_EMAIL`,
+  `PERXONA_CONNECT_PASSWORD`, `PORT`. These hold the one shared Connect identity and never reach
+  the browser.
+- **Client-side (`VITE_` prefix, exposed to the browser):** `VITE_PRESENTER_URL`,
+  `VITE_LLM_BASE_URL`, `VITE_LLM_API_KEY`, `VITE_LLM_MODEL`. LLM = the foundry a0 router
+  (`https://a0.mango-rockhopper.ts.net/v1`, model `gemma4-mtp`).
 
 ## Architecture
 
-- Auth is fully client-side against the Perxona Connect API (`POST /api/v1/connect/auth/login`);
-  token in `sessionStorage`. Reference implementation:
-  `tools/motion-browser/` in the perxona-connect-kit repo (`lib/auth.ts`, `hooks/use-auth.ts`,
-  `lib/api.ts`, `hooks/use-catalog.ts`, `hooks/use-presenter.ts`, `hooks/use-avatar-session.ts`).
+- **No user login.** `server.mjs` (Express) holds the shared Connect identity from env, mints a
+  connect_token for the browser (`GET /api/connect-token`), and proxies the catalog
+  (`GET /api/avatars|scenes|voices`). Vite proxies `/api` → `:8083` in dev; in prod the server
+  serves the built app. Modeled on the perxona-connect-kit `samples/express` server.
 - `<sv-presenter>` runtime loads from the CDN `VITE_PRESENTER_URL`; `@perxona/presenter-types`
   is type-only. Presenter gotchas are in `CONTRACT.md` — read them before writing presenter code.
 - Shared data shapes live in `src/shared/contract.ts` (coordinator-owned, import-only).
+- `pnpm dev` runs api + web via concurrently; `pnpm start` serves the built app from `server.mjs`.
 
 ## Conventions
 
@@ -38,6 +44,6 @@ and an OpenAI-compatible LLM.
 
 ```bash
 pnpm install
-cp .env.example .env   # fill VITE_PERXONA_API_BASE_URL, VITE_LLM_API_KEY, ...
-pnpm dev
+cp .env.example .env   # fill PERXONA_CONNECT_EMAIL/PASSWORD + VITE_LLM_API_KEY
+pnpm dev               # api on :8083, web on :5173
 ```

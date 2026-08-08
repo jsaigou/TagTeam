@@ -10,4 +10,10 @@ export default defineConfig({
       '@': import.meta.dirname + '/src',
     },
   },
+  server: {
+    // API lives in server.mjs (holds the shared Connect identity from env).
+    proxy: {
+      '/api': 'http://localhost:8083',
+    },
+  },
 })
