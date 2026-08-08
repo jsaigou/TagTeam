@@ -12,8 +12,13 @@ const CONNECT_PASSWORD = process.env.PERXONA_CONNECT_PASSWORD;
 const PRESENTER_URL =
   process.env.PRESENTER_URL ||
   "https://cdn.perxona.ai/asia/prod/latest/widget/entry/presenter.js";
-const SEARXNG_URL = process.env.SEARXNG_URL || "https://searxng.mango-rockhopper.ts.net";
-const FIRECRAWL_URL = process.env.FIRECRAWL_URL || "https://firecrawl.mango-rockhopper.ts.net";
+// Search + scrape for the reference step. Each integrator provides their own
+// instances — SearXNG (metasearch) and Firecrawl (page scraping). See SETUP.md.
+const SEARXNG_URL = (process.env.SEARXNG_URL || "").replace(/\/+$/, "");
+const FIRECRAWL_URL = (process.env.FIRECRAWL_URL || "").replace(/\/+$/, "");
+// Optional: Firecrawl API key (cloud api.firecrawl.dev). Self-hosted Firecrawl
+// instances usually run without a key.
+const FIRECRAWL_API_KEY = process.env.FIRECRAWL_API_KEY || "";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIST_DIR = path.join(__dirname, "dist");
@@ -188,15 +193,24 @@ app.get(
 );
 
 // Reference search — used to research the office/agency the user will call.
-// Search via the self-hosted SearXNG instance, then scrape the top results'
-// pages with the self-hosted Firecrawl instance. Returns a text digest the
-// LLM can ground the simulation in.
+// Searches via SearXNG (JSON API), then scrapes the top results with Firecrawl.
+// Returns a text digest the LLM can ground the simulation in.
+//
+// Integrators must point SEARXNG_URL (and optionally FIRECRAWL_URL) at their own
+// instances — see SETUP.md. If search is not configured, the feature is
+// unavailable and returns a clear error rather than silently failing.
 app.get(
   "/api/search",
   route(async (req, res) => {
     const q = String(req.query.q ?? "").trim();
     if (!q) {
       res.status(400).json({ error: "Missing q parameter" });
+      return;
+    }
+    if (!SEARXNG_URL) {
+      res.status(501).json({
+        error: "Search is not configured. Set SEARXNG_URL (and FIRECRAWL_URL) in .env — see SETUP.md.",
+      });
       return;
     }
 
@@ -219,21 +233,25 @@ app.get(
       }));
 
     const scraped = [];
-    for (const r of results.slice(0, 2)) {
-      try {
-        const fRes = await fetch(`${FIRECRAWL_URL}/v1/scrape`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ url: r.url, formats: ["markdown"] }),
-          signal: AbortSignal.timeout(25_000),
-        });
-        if (fRes.ok) {
-          const fJson = await fRes.json();
-          const md = fJson?.data?.markdown ?? "";
-          if (md) scraped.push({ url: r.url, markdown: md.slice(0, 6000) });
+    if (FIRECRAWL_URL) {
+      const fHeaders = { "Content-Type": "application/json" };
+      if (FIRECRAWL_API_KEY) fHeaders.Authorization = `Bearer ${FIRECRAWL_API_KEY}`;
+      for (const r of results.slice(0, 2)) {
+        try {
+          const fRes = await fetch(`${FIRECRAWL_URL}/v1/scrape`, {
+            method: "POST",
+            headers: fHeaders,
+            body: JSON.stringify({ url: r.url, formats: ["markdown"] }),
+            signal: AbortSignal.timeout(25_000),
+          });
+          if (fRes.ok) {
+            const fJson = await fRes.json();
+            const md = fJson?.data?.markdown ?? "";
+            if (md) scraped.push({ url: r.url, markdown: md.slice(0, 6000) });
+          }
+        } catch {
+          /* skip un-scrapable pages */
         }
-      } catch {
-        /* skip un-scrapable pages */
       }
     }
 
@@ -242,6 +260,7 @@ app.get(
       ...results.map((r, i) => `${i + 1}. ${r.title} — ${r.url}\n${(r.snippet ?? "").slice(0, 300)}`),
       "",
       ...scraped.map((s, i) => `【ページ ${i + 1}: ${s.url}】\n${s.markdown}`),
+      ...(FIRECRAWL_URL ? [] : ["\n(no page scraping configured — set FIRECRAWL_URL to include page content)"]),
     ].join("\n\n");
 
     res.json({ query: q, results, digest: digest.slice(0, 20_000) });

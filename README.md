@@ -48,6 +48,8 @@ pnpm dev               # api :8083 + web :5173
 
 Open http://localhost:5173. Verify: `pnpm build && pnpm lint && pnpm test`. Production: `pnpm build && pnpm start`.
 
+**Full walkthrough — accounts, your own search/scraping (SearXNG + Firecrawl), and troubleshooting: see [`SETUP.md`](SETUP.md).**
+
 ## Notes
 
 - The Connect identity lives server-side (env-held credentials); there is no user login.
