@@ -110,6 +110,11 @@ export function CallScreen() {
 
   const handleFinish = useCallback(async () => {
     if (!script) return;
+    /* Reuse a pre-seeded cheat sheet (demo path) rather than re-generating. */
+    if (state.cheatSheet) {
+      toCheatSheet();
+      return;
+    }
     setBusy(true);
     try {
       const sheet = await pipeline.makeCheatSheet(script, glossary, state.answers);

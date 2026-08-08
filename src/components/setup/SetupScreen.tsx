@@ -5,6 +5,7 @@ import { useAppStore, type SetupStep } from "@/state/app-store";
 import { useAvatar } from "@/state/avatar-context";
 import { useCatalog } from "@/hooks/use-catalog";
 import { resolveDefaults } from "@/lib/presets";
+import { DENTIST_DEMO } from "@/fixtures/dentist-demo";
 import { pipeline } from "@/state/pipeline";
 import { DocUpload } from "./DocUpload";
 import { Grounding } from "./Grounding";
@@ -44,6 +45,7 @@ export function SetupScreen() {
     saveAnswers,
     chooseScenario,
     setSim,
+    setCheatSheet,
     setError,
     setBusy,
     toCall,
@@ -91,6 +93,17 @@ export function SetupScreen() {
     void unlockAudio().catch(() => {});
   }, [setSetupOpen, unlockAudio]);
 
+  /* One-click demo: canned dentist-appointment scenario, hospital background. */
+  const handleDemo = useCallback(() => {
+    chooseScenario(DENTIST_DEMO.scenario);
+    setSim(DENTIST_DEMO.script, DENTIST_DEMO.glossary);
+    setCheatSheet(DENTIST_DEMO.cheatSheet);
+    void session.launch(DENTIST_DEMO.scenario).catch((err) => {
+      setError(err instanceof Error ? err.message : "Failed to launch the presenter.");
+    });
+    toCall();
+  }, [chooseScenario, setSim, setCheatSheet, setError, session, toCall]);
+
   const analyzeDoc = useCallback(
     async (doc: DocInput) => {
       setAnalyzing(true);
@@ -119,7 +132,8 @@ export function SetupScreen() {
 
   const handleScenario = useCallback(
     async (scenario: { avatarId: string; sceneId: string; voiceId: string }) => {
-      chooseScenario(scenario);
+      /* Demo focus: the practice call uses the hospital background. */
+      chooseScenario({ ...scenario, background: "hospital" });
       setBusy(true);
       try {
         const result = await pipeline.runSim(
@@ -218,7 +232,19 @@ export function SetupScreen() {
         </div>
 
         <div className="mt-5">
-          {state.setupStep === "doc" && <DocUpload onAnalyzed={analyzeDoc} busy={analyzing} />}
+          {state.setupStep === "doc" && (
+            <div className="flex flex-col gap-4">
+              <Button
+                variant="outline"
+                onClick={handleDemo}
+                className="justify-center gap-2 border-accent/50 text-primary hover:bg-accent/20"
+              >
+                <Sparkles className="size-4 text-accent" />
+                Try the demo — book a dentist appointment
+              </Button>
+              <DocUpload onAnalyzed={analyzeDoc} busy={analyzing} />
+            </div>
+          )}
           {state.setupStep === "grounding" && (
             <div className="flex flex-col gap-4">
               <ReferenceSearch agency={state.docSummary?.issuingAgency} />
