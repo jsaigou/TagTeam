@@ -33,6 +33,15 @@ and an OpenAI-compatible LLM.
 - Shared data shapes live in `src/shared/contract.ts` (coordinator-owned, import-only).
 - `pnpm dev` runs api + web via concurrently; `pnpm start` serves the built app from `server.mjs`.
 
+## Star avatar
+
+- The avatar is ALWAYS on screen (`AvatarStage`, fixed full-screen background) and guides the user
+  through setup with speech bubbles (`AvatarGuide`) + spoken Japanese guidance. Default avatar is
+  `cc051_meeks` (`src/lib/presets.ts`), launched from SetupScreen once the catalog loads.
+- `resumeAudioPlayback` needs a trusted user gesture: the "Turn sound on" affordance / Start-call
+  click calls `unlockAudio()` (autoplay). Synthetic clicks (e.g. CDP) are NOT trusted gestures.
+- Guide lines are `{ en, jp }` — bubble shows `en`, spoken text is `jp` (matches the JP voices).
+
 ## Conventions
 
 - TypeScript + React function components with hooks; Tailwind + shadcn/ui; keep it dependency-light.
