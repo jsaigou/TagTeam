@@ -2,6 +2,7 @@ import { Leaf } from "lucide-react";
 import { AppStoreProvider, useAppStore } from "@/state/app-store";
 import { AvatarProvider } from "@/state/avatar-context";
 import { AvatarStage } from "@/components/stage/AvatarStage";
+import { AvatarOverlay } from "@/components/stage/AvatarOverlay";
 import { SetupScreen } from "@/components/setup/SetupScreen";
 import { CallScreen } from "@/components/call/CallScreen";
 import { CheatSheetView } from "@/components/cheat-sheet/CheatSheetView";
@@ -13,6 +14,8 @@ function Shell() {
     <div className="relative min-h-svh overflow-hidden bg-background">
       {/* The star is always present behind everything. */}
       <AvatarStage />
+      {/* Floating controls on top of the screens (sound toggle + guide). */}
+      <AvatarOverlay />
 
       <div className="relative z-10">
         {state.screen !== "call" && (
