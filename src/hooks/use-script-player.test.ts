@@ -102,6 +102,24 @@ describe("createScriptPlayer", () => {
     expect(present).toHaveBeenCalledTimes(1);
   });
 
+  it("does not halt when present() returns undefined (unmounted presenter)", async () => {
+    const { deps, present } = makeDeps();
+    const player: PlayerInternals = createScriptPlayer(deps);
+
+    present.mockResolvedValueOnce(undefined as unknown as PresentationResult);
+
+    player.load(scriptAllBureaucrat, glossary);
+    player.play();
+    await flush();
+
+    expect(player.getState()).toBe("talking");
+    expect(present).toHaveBeenCalledTimes(1);
+
+    player.notifyPerformanceEnd();
+    await flush();
+    expect(present).toHaveBeenCalledTimes(2);
+  });
+
   it("does not halt when present() is intentionally interrupted (code 303)", async () => {
     const { deps, present } = makeDeps();
     const player: PlayerInternals = createScriptPlayer(deps);
