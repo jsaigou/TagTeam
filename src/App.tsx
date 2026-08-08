@@ -32,7 +32,7 @@ function Shell() {
         {state.screen === "call" && <CallScreen />}
         {state.screen === "cheat-sheet" &&
           (state.cheatSheet ? (
-            <div className="mx-auto flex min-h-svh w-full max-w-3xl flex-col justify-center px-4 py-8">
+            <div className="ml-auto flex min-h-svh w-full max-w-3xl flex-col justify-center px-4 py-8 pr-4 md:pr-12">
               <CheatSheetView sheet={state.cheatSheet} onRestart={reset} />
             </div>
           ) : (
