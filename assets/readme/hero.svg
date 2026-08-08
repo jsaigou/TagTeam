@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="1200" height="380" viewBox="0 0 1200 380"
+     role="img" aria-labelledby="hero-title hero-desc">
+  <title id="hero-title">TagTeam — practice Japanese office calls with a live avatar coach</title>
+  <desc id="hero-desc">TagTeam lets non-native residents practice real Japanese bureaucracy phone calls with an avatar. The right panel shows the in-call co-pilot: the receptionist's line, live vocabulary cards, and hold-help.</desc>
+
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f6efdc"/>
+      <stop offset="1" stop-color="#f2e8cf"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1200" height="380" rx="26" fill="url(#bg)"/>
+
+  <!-- Title block -->
+  <g id="title-block" transform="translate(56 52)">
+    <g transform="translate(0 0)">
+      <circle cx="0" cy="0" r="9" fill="#386641"/>
+      <path d="M12 -6 q8 6 0 12 q-8 -6 0 -12" fill="#a7c957"/>
+      <path d="M18 -12 q11 9 0 18 q-11 -9 0 -18" fill="#a7c957"/>
+      <path d="M24 -18 q14 12 0 24 q-14 -12 0 -18" fill="#6b7a63"/>
+    </g>
+    <text x="40" y="6" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18" letter-spacing="2" fill="#6b7a63">AI CALL COACH · JAPANESE OFFICE CALLS</text>
+
+    <text x="0" y="92" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, PingFang SC, sans-serif" font-size="78" font-weight="700" fill="#386641">TagTeam</text>
+
+    <text x="0" y="142" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, PingFang SC, sans-serif" font-size="25" fill="#1f2a1f">Practice real Japanese phone calls with a live</text>
+    <text x="0" y="176" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, PingFang SC, sans-serif" font-size="25" fill="#1f2a1f">avatar — every key word explained as it's spoken.</text>
+    <text x="0" y="210" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, PingFang SC, sans-serif" font-size="25" fill="#1f2a1f">Walk into the real call confident.</text>
+
+    <text x="0" y="268" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18" letter-spacing="1" fill="#6b7a63">PERXONA CONNECT KIT · LLM · OPEN SOURCE</text>
+  </g>
+
+  <!-- In-call co-pilot card -->
+  <g id="call-card" transform="translate(660 44)">
+    <rect width="484" height="292" rx="20" fill="#fbf7ea" stroke="#d8d3be" stroke-width="1.5"/>
+
+    <circle cx="24" cy="30" r="5" fill="#a7c957"/>
+    <text x="38" y="36" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16" letter-spacing="1.5" fill="#6b7a63">IN-CALL CO-PILOT · LIVE</text>
+
+    <!-- Receptionist bubble -->
+    <rect x="16" y="52" width="452" height="86" rx="14" fill="#ffffff" stroke="#d8d3be" stroke-width="1.5"/>
+    <text x="32" y="76" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" letter-spacing="1" fill="#386641">RECEPTIONIST</text>
+    <text x="32" y="104" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, PingFang SC, sans-serif" font-size="22" fill="#1f2a1f">かしこまりました。</text>
+    <text x="32" y="132" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, PingFang SC, sans-serif" font-size="22" fill="#1f2a1f">マイナンバーカードはお持ちですか。</text>
+
+    <!-- Vocabulary hints -->
+    <g id="vocab-row" transform="translate(16 160)">
+      <rect width="206" height="52" rx="26" fill="#a7c957"/>
+      <text x="20" y="33" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, PingFang SC, sans-serif" font-size="21" font-weight="700" fill="#1f2a1f">予約</text>
+      <text x="60" y="33" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, PingFang SC, sans-serif" font-size="18" fill="#1f2a1f">よやく · appointment</text>
+
+      <rect x="218" y="0" width="234" height="52" rx="26" fill="#386641"/>
+      <text x="238" y="33" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, PingFang SC, sans-serif" font-size="21" font-weight="700" fill="#f2e8cf">マイナンバーカード</text>
+      <text x="382" y="33" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, PingFang SC, sans-serif" font-size="18" fill="#f2e8cf">My Number card</text>
+    </g>
+
+    <!-- Hold help -->
+    <rect x="16" y="226" width="230" height="40" rx="20" fill="#ffffff" stroke="#d8d3be" stroke-width="1.5"/>
+    <text x="34" y="251" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, PingFang SC, sans-serif" font-size="17" fill="#386641">Tap a word for help</text>
+    <rect x="258" y="226" width="210" height="40" rx="20" fill="#ffffff" stroke="#d8d3be" stroke-width="1.5"/>
+    <text x="276" y="251" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, PingFang SC, sans-serif" font-size="17" fill="#386641">Hold to break it down</text>
+  </g>
+</svg>
