@@ -13,7 +13,8 @@ import {
 export interface LaunchParams {
   avatarId: string;
   sceneId: string;
-  voiceId: string;
+  /** Optional — the presenter works without a voice configured. */
+  voiceId?: string;
 }
 
 export interface AvatarSession {

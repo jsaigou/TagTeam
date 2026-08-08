@@ -11,13 +11,14 @@ import {
 const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
 function makeDeps() {
-  const present = vi.fn(async () => ({
-    success: true,
-    code: "0" as PresentationResult["code"],
-  }));
+  const present = vi.fn(
+    async (): Promise<PresentationResult> => ({
+      success: true,
+      code: "0" as PresentationResult["code"],
+    }),
+  );
   const deps: ScriptPlayerDeps = {
     present,
-    resumeAudio: vi.fn(async () => {}),
     interrupt: vi.fn(),
     subscribe: vi.fn(() => () => {}),
   };
@@ -34,6 +35,15 @@ const script: SimScript = {
     { id: "t1", speaker: "bureaucrat", jp: "こんにちは。", en: "Hello.", vocab: ["zairyu"], motion: "[MOTION id:1]" },
     { id: "t2", speaker: "user", jp: "よろしくお願いします。", en: "Please.", vocab: [] },
     { id: "t3", speaker: "bureaucrat", jp: "お待ちください。", en: "One moment.", vocab: [] },
+  ],
+};
+
+const scriptAllBureaucrat: SimScript = {
+  scenarioTitle: "test-all",
+  turns: [
+    { id: "t1", speaker: "bureaucrat", jp: "こんにちは。", en: "Hello.", vocab: [] },
+    { id: "t2", speaker: "bureaucrat", jp: "お待ちください。", en: "One moment.", vocab: [] },
+    { id: "t3", speaker: "bureaucrat", jp: "ありがとうございました。", en: "Thank you.", vocab: [] },
   ],
 };
 
@@ -69,6 +79,29 @@ describe("createScriptPlayer", () => {
     expect(player.getState()).toBe("ended");
   });
 
+  it("halts to idle when present() reports a failed result", async () => {
+    const { deps, present } = makeDeps();
+    const player: PlayerInternals = createScriptPlayer(deps);
+
+    present.mockResolvedValueOnce({
+      success: false,
+      code: "200" as PresentationResult["code"],
+      message: "boom",
+    });
+
+    player.load(script, glossary);
+    player.play();
+    await flush();
+
+    expect(player.getState()).toBe("idle");
+    expect(present).toHaveBeenCalledTimes(1);
+
+    // A late PERFORMANCE_END must not revive a halted run.
+    player.notifyPerformanceEnd();
+    await flush();
+    expect(present).toHaveBeenCalledTimes(1);
+  });
+
   it("hold pauses at the next turn boundary and speaks the breakdown", async () => {
     const { deps, present } = makeDeps();
     const player: PlayerInternals = createScriptPlayer(deps);
@@ -93,19 +126,43 @@ describe("createScriptPlayer", () => {
     expect(player.getState()).toBe("talking");
   });
 
-  it("tapHelp returns the glossary hint or null for unknown ids", () => {
-    const { deps } = makeDeps();
-    const player = createScriptPlayer(deps);
-    player.load(script, glossary);
+  it("resume during a pending hold resolves it without double-advancing", async () => {
+    const { deps, present } = makeDeps();
+    const player: PlayerInternals = createScriptPlayer(deps);
+    const turns: string[] = [];
+    player.setEvents({ onTurn: (turn) => turns.push(turn.id) });
 
-    expect(player.tapHelp("zairyu")).toEqual({
-      entryId: "zairyu",
-      hint: "Status of residence",
-    });
-    expect(player.tapHelp("nope")).toBeNull();
+    player.load(scriptAllBureaucrat, glossary);
+    player.play();
+    await flush();
+    expect(present).toHaveBeenCalledTimes(1); // t1 speaking
+
+    const hold = player.hold();
+    expect(player.getState()).toBe("talking");
+
+    // Resume before the boundary: the pending hold must resolve, not hang.
+    player.resume();
+    const help = await hold;
+    expect(help.explanationJp).toBeTruthy();
+
+    // The interrupted speech's PERFORMANCE_END arrives: it is the stale end and
+    // must NOT advance the queue.
+    player.notifyPerformanceEnd();
+    await flush();
+    expect(turns).toEqual(["t1", "t2"]);
+    expect(present).toHaveBeenCalledTimes(2); // t1 + t2 — no double advance
+
+    // The real end of t2 advances to t3; t3's end ends the run.
+    player.notifyPerformanceEnd();
+    await flush();
+    expect(turns).toEqual(["t1", "t2", "t3"]);
+    expect(present).toHaveBeenCalledTimes(3);
+
+    player.notifyPerformanceEnd();
+    expect(player.getState()).toBe("ended");
   });
 
-  it("interrupt halts playback and resets to idle", async () => {
+  it("interrupt during a pending hold resolves it and resets to idle", async () => {
     const { deps } = makeDeps();
     const player = createScriptPlayer(deps);
     player.load(script, glossary);
@@ -116,5 +173,17 @@ describe("createScriptPlayer", () => {
     const help = await hold;
     expect(player.getState()).toBe("idle");
     expect(help.explanationJp).toBeTruthy();
+  });
+
+  it("tapHelp returns the glossary hint or null for unknown ids", () => {
+    const { deps } = makeDeps();
+    const player = createScriptPlayer(deps);
+    player.load(script, glossary);
+
+    expect(player.tapHelp("zairyu")).toEqual({
+      entryId: "zairyu",
+      hint: "Status of residence",
+    });
+    expect(player.tapHelp("nope")).toBeNull();
   });
 });

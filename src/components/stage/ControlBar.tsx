@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 export interface StageSelection {
   avatarId: string;
   sceneId: string;
-  voiceId: string;
+  voiceId?: string;
 }
 
 interface ControlBarProps {
@@ -71,10 +71,10 @@ export function ControlBar({
         />
         <SelectField
           label="Voice"
-          value={selection.voiceId}
+          value={selection.voiceId ?? ""}
           onChange={onVoiceChange}
           disabled={isLoading}
-          placeholder="Select voice"
+          placeholder="Select voice (optional)"
           options={voices.map((voice) => ({
             value: voice.id,
             label: voice.name,

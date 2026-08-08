@@ -15,7 +15,6 @@ import type { AvatarSession } from "./use-avatar-session";
 
 export interface ScriptPlayerDeps {
   present: AvatarSession["present"];
-  resumeAudio: AvatarSession["resumeAudio"];
   interrupt: AvatarSession["interrupt"];
   subscribe: AvatarSession["subscribe"];
 }
@@ -33,6 +32,11 @@ export type PlayerInternals = ScriptPlayerHandle & {
 
 /**
  * Paces a SimScript through the presenter one turn at a time.
+ *
+ * AUDIO GESTURE: the player never resumes the AudioContext itself. The caller
+ * must call `session.resumeAudio()` inside the Start-call click gesture before
+ * `player.play()`; otherwise the first `present()` resolves with
+ * AUDIO_CONTEXT_UNAVAILABLE and the run halts (`onState("idle")`).
  *
  * Pause semantics (SDK has NO pause API): `hold()` stops advancing the queue at
  * the next turn boundary and speaks the breakdown; `resume()` continues. User
@@ -96,10 +100,14 @@ export function createScriptPlayer(deps: ScriptPlayerDeps): PlayerInternals {
   let paused = false;
   let pausedAtUser = false;
   let inSpeech = false;
-  let audioResumed = false;
   let currentTurn: Turn | null = null;
   let events: ScriptPlayerEvents = {};
   let holdResolvers: Array<(help: HoldHelp) => void> = [];
+  // Swallows exactly one PERFORMANCE_END after an interrupt — the one the SDK
+  // may emit for the speech we cut off — so it is never mistaken for the end of
+  // the next turn. Self-clears in the next macrotask so a non-dispatching
+  // interrupt can't swallow the next real end.
+  let staleEndGuard = 0;
 
   function setState(next: PlayerState) {
     state = next;
@@ -152,19 +160,16 @@ export function createScriptPlayer(deps: ScriptPlayerDeps): PlayerInternals {
   }
 
   async function speakTurn(content: string) {
-    if (!audioResumed) {
-      try {
-        await deps.resumeAudio();
-      } catch {
-        // AudioContext unavailable; present() will report a failure result.
-      }
-      audioResumed = true;
-    }
     const result: PresentationResult | undefined = await deps.present(content);
     if (!running) return;
     if (result && !result.success) {
       running = false;
       inSpeech = false;
+      if (import.meta.env.DEV) {
+        console.error(
+          `Playback failed (${result.code}): ${result.message ?? ""}`,
+        );
+      }
       setState("idle");
     }
   }
@@ -191,6 +196,7 @@ export function createScriptPlayer(deps: ScriptPlayerDeps): PlayerInternals {
       paused = false;
       pausedAtUser = false;
       inSpeech = false;
+      staleEndGuard = 0;
       const resolvers = holdResolvers;
       holdResolvers = [];
       for (const resolve of resolvers) resolve(FALLBACK_HOLD_HELP);
@@ -221,9 +227,21 @@ export function createScriptPlayer(deps: ScriptPlayerDeps): PlayerInternals {
 
     resume() {
       if (paused) {
+        // A hold is pending but the user resumed early — the boundary is
+        // cancelled, so resolve it rather than leaving the promise dangling.
+        const resolvers = holdResolvers;
+        holdResolvers = [];
+        for (const resolve of resolvers) resolve(FALLBACK_HOLD_HELP);
         paused = false;
-        // Cut any leftover breakdown speech so the next turn starts fresh.
+        // Guard against the interrupted speech's PERFORMANCE_END being read as
+        // the end of the next turn, and clear the in-flight marker first so a
+        // synchronously dispatched end is ignored.
+        staleEndGuard += 1;
+        inSpeech = false;
         deps.interrupt();
+        setTimeout(() => {
+          if (staleEndGuard > 0) staleEndGuard -= 1;
+        }, 0);
         setState("talking");
         advance();
       } else if (pausedAtUser) {
@@ -245,6 +263,7 @@ export function createScriptPlayer(deps: ScriptPlayerDeps): PlayerInternals {
       paused = false;
       pausedAtUser = false;
       inSpeech = false;
+      staleEndGuard = 0;
       currentTurn = null;
       const resolvers = holdResolvers;
       holdResolvers = [];
@@ -271,6 +290,10 @@ export function createScriptPlayer(deps: ScriptPlayerDeps): PlayerInternals {
     },
 
     notifyPerformanceEnd() {
+      if (staleEndGuard > 0) {
+        staleEndGuard -= 1;
+        return;
+      }
       if (!inSpeech || !running) return;
       inSpeech = false;
       if (paused) {
