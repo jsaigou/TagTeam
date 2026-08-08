@@ -5,6 +5,7 @@ import { useAppStore } from "@/state/app-store";
 import { useAvatar } from "@/state/avatar-context";
 import { useScriptPlayer } from "@/hooks/use-script-player";
 import { pipeline } from "@/state/pipeline";
+import { DEFAULT_AVATAR_ID, DEFAULT_SCENE_ID, DEFAULT_VOICE_ID } from "@/lib/presets";
 import { Transcript } from "./Transcript";
 import { VocabOverlay } from "./VocabOverlay";
 import { HelpLayer } from "./HelpLayer";
@@ -20,8 +21,7 @@ export function CallScreen() {
     setError,
     reset,
   } = useAppStore();
-  const { session, unlockAudio, speakGuide } = useAvatar();
-  const script = state.script;
+  const { session, unlockAudio, speakGuide } = useAvatar();  const script = state.script;
   const glossary = state.glossary;
 
   const playerDeps = useMemo(
@@ -111,21 +111,44 @@ export function CallScreen() {
   const handleFinish = useCallback(async () => {
     if (!script) return;
     /* Reuse a pre-seeded cheat sheet (demo path) rather than re-generating. */
-    if (state.cheatSheet) {
-      toCheatSheet();
-      return;
-    }
-    setBusy(true);
-    try {
-      const sheet = await pipeline.makeCheatSheet(script, glossary, state.answers);
-      setCheatSheet(sheet);
-      toCheatSheet();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to build cheat sheet");
-    } finally {
+    if (!state.cheatSheet) {
+      setBusy(true);
+      try {
+        const sheet = await pipeline.makeCheatSheet(script, glossary, state.answers);
+        setCheatSheet(sheet);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to build cheat sheet");
+        setBusy(false);
+        return;
+      }
       setBusy(false);
     }
-  }, [script, glossary, state.answers, setBusy, setCheatSheet, setError, toCheatSheet]);
+    toCheatSheet();
+    /* Walk the cheat sheet through as Meeks (the guide), not the practice role. */
+    void (async () => {
+      try {
+        await session.launch({
+          avatarId: DEFAULT_AVATAR_ID,
+          sceneId: DEFAULT_SCENE_ID,
+          voiceId: DEFAULT_VOICE_ID,
+        });
+      } catch {
+        /* keep current avatar if the swap fails */
+      }
+      speakGuide({ en: "Nice work! Here's your cheat sheet for the real call — keep it handy." });
+    })();
+  }, [
+    script,
+    glossary,
+    state.answers,
+    state.cheatSheet,
+    setBusy,
+    setCheatSheet,
+    setError,
+    toCheatSheet,
+    session,
+    speakGuide,
+  ]);
 
   const ended = playerState === "ended";
   const canStart = !started && !ended && Boolean(script);
