@@ -1,5 +1,5 @@
 import type { CheatSheet, GlossaryEntry, SimScript } from "../shared/contract";
-import { PRACTICE_AVATAR_ID, DEFAULT_SCENE_ID } from "../lib/presets";
+import { PRACTICE_AVATAR_ID, PRACTICE_SCENE_ID } from "../lib/presets";
 
 /**
  * Canned "book a dentist appointment" demo — a one-click path that bypasses the
@@ -12,7 +12,7 @@ import { PRACTICE_AVATAR_ID, DEFAULT_SCENE_ID } from "../lib/presets";
 export const DENTIST_DEMO = {
   scenario: {
     avatarId: PRACTICE_AVATAR_ID, // cc066_male_waiter plays the clinic receptionist
-    sceneId: DEFAULT_SCENE_ID,
+    sceneId: PRACTICE_SCENE_ID,
     voiceId: "01KZFHK5FX4D4CFVKN9TXAJSBX", // Male - warm and expressive (JP)
   },
 

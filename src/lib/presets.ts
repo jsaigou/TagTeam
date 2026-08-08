@@ -6,6 +6,8 @@ export const DEFAULT_AVATAR_ID = "01KD2H4NWSZP4Y3CK8P3PSHTYP"; // cc051_meeks
 export const PRACTICE_AVATAR_ID = "01KH0D8ZAZHZ762FV5SK3503ZR"; // cc066_male_waiter
 /** Default scene while guiding through setup — an anime backdrop. */
 export const DEFAULT_SCENE_ID = "01K4NYB6627539QRJR2HXESJJK"; // sova_anime_1
+/** Default scene for the PRACTICE call — a different anime backdrop. */
+export const PRACTICE_SCENE_ID = "01K4NYBH42K727CZYGH6DC7Z2C"; // sova_anime_2
 /** Default voice for the cute guide avatar — English-capable (guide speaks English). */
 export const DEFAULT_VOICE_ID = "01KTBJGRFKWS029KQKQBC3318V"; // Female - cute and fast (For English)
 
