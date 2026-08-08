@@ -9,13 +9,13 @@
  *   -> ScriptPlayer (per-turn present) -> CheatSheet
  */
 
-/** Photo-only document input for the MVP. */
-export type DocInput = {
-  /** base64 data URL of the uploaded image. */
-  dataUrl: string;
-  /** MIME type, e.g. image/png, image/jpeg. */
-  mimeType: string;
-};
+/** Document input for the MVP: a photo, or a free-text description of the issue. */
+export type DocInput =
+  | { kind: "image"; dataUrl: string; mimeType: string }
+  | { kind: "text"; text: string };
+
+/** The photo variant of {@link DocInput}. */
+export type ImageDoc = Extract<DocInput, { kind: "image" }>;
 
 /** A single English grounding question the AI asks to establish call objective. */
 export type GroundingQuestion = {

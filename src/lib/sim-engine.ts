@@ -48,6 +48,8 @@ export const DEFAULT_VOICE_PRESET: VoicePresetId = "standard";
 
 export type GenerateSimulationOptions = {
   preset?: VoicePresetId;
+  /** Optional web-researched reference digest about the office/agency. */
+  reference?: string;
   config?: ChatOptions["config"];
   timeoutMs?: number;
 };
@@ -58,6 +60,7 @@ export type SimulationResult = { script: SimScript; glossary: GlossaryEntry[] };
 export function buildSimulationContext(
   docSummary: DocSummary,
   answers: GroundingAnswer[],
+  reference?: string,
 ): string {
   const lines = [
     "【解析した書類】",
@@ -68,9 +71,14 @@ export function buildSimulationContext(
     "",
     "【電話の目的（利用者の回答）】",
     ...answers.map((a) => `- ${a.questionId}: ${a.answer}`),
+  ];
+  if (reference) {
+    lines.push("", "【検索した参考情報（発行元・窓口の実態）】", reference);
+  }
+  lines.push(
     "",
     "上記の情報をもとに、市役所の担当者との電話のやり取りを台本化してください。1ターン目は必ず担当者（bureaucrat）の応答で始めてください。",
-  ];
+  );
   return lines.join("\n");
 }
 
@@ -90,7 +98,7 @@ export async function generateSimulation(
       role: "system",
       content: `${bureaucratSystemPrompt(preset.guidance)}\n\n【JSONスキーマ】\n${SIM_SCHEMA_TEXT}`,
     },
-    { role: "user", content: buildSimulationContext(docSummary, answers) },
+    { role: "user", content: buildSimulationContext(docSummary, answers, options.reference) },
   ];
 
   const raw = await chatJson(messages, isSimulationRaw, "SimulationRaw", {

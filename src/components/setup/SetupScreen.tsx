@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Check } from "lucide-react";
+import { Check, Sparkles } from "lucide-react";
 import type { DocInput, GroundingAnswer } from "@/shared/contract";
 import { useAppStore, type SetupStep } from "@/state/app-store";
 import { useAvatar } from "@/state/avatar-context";
@@ -9,6 +9,8 @@ import { pipeline } from "@/state/pipeline";
 import { DocUpload } from "./DocUpload";
 import { Grounding } from "./Grounding";
 import { ScenarioPicker } from "./ScenarioPicker";
+import { ReferenceSearch } from "./ReferenceSearch";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const STEPS: { key: SetupStep; label: string }[] = [
@@ -17,18 +19,19 @@ const STEPS: { key: SetupStep; label: string }[] = [
   { key: "scenario", label: "Scenario" },
 ];
 
-const GUIDES: Record<SetupStep, { en: string; jp: string }> = {
+const INVITE_LINE = {
+  en: "こんにちは! I'm Meeks — your practice-call coach. I'll help you talk to Japanese offices with confidence. Tap Get started when you're ready.",
+};
+
+const GUIDES: Record<SetupStep, { en: string }> = {
   doc: {
-    en: "Welcome! I'm Meeks. Let's set up your practice call — upload a photo of the document you need help with.",
-    jp: "こんにちは！メイクスです。練習の準備をしましょう。まず、書類の写真をアップロードしてください。",
+    en: "Great! Show me the letter you need help with — or just describe the issue in your own words.",
   },
   grounding: {
-    en: "Got it! Let me ask a couple of quick questions so I know exactly what you need.",
-    jp: "わかりました。いくつか確認させてください。",
+    en: "Got it! A couple of quick questions and I'll know exactly what you need to say.",
   },
   scenario: {
-    en: "Almost there! Pick the setting for your call — I'll play the office for you.",
-    jp: "もう少しです。通話の設定を選んでください。",
+    en: "Almost there! Pick the office setting for your call — I'll play the staff member for you.",
   },
 };
 
@@ -36,6 +39,7 @@ export function SetupScreen() {
   const {
     state,
     setSetupStep,
+    setSetupOpen,
     parsed,
     saveAnswers,
     chooseScenario,
@@ -44,14 +48,15 @@ export function SetupScreen() {
     setBusy,
     toCall,
   } = useAppStore();
+  const { setupOpen } = state;
   const catalog = useCatalog();
-  const { session, speakGuide } = useAvatar();
+  const { session, unlockAudio, speakGuide } = useAvatar();
   const [analyzing, setAnalyzing] = useState(false);
   const launchedRef = useRef(false);
   const lastGuideStepRef = useRef<SetupStep | null>(null);
 
-  /* Launch the star avatar (cc051_meeks by default) once the catalog is ready so
-     it is present while guiding through setup. */
+  /* Launch the guide avatar (cc051_meeks by default) once the catalog is ready so
+     it is present while inviting the user + guiding through setup. */
   useEffect(() => {
     if (launchedRef.current || catalog.isLoading) return;
     const defaults = resolveDefaults(catalog.avatars, catalog.scenes, catalog.voices);
@@ -65,16 +70,26 @@ export function SetupScreen() {
       });
   }, [catalog, session, setError]);
 
-  /* Guide line per setup step. */
+  /* Guide line: invite while the setup pop-up is closed, else per-step. */
   useEffect(() => {
+    if (!setupOpen) {
+      speakGuide(INVITE_LINE);
+      return;
+    }
     if (state.setupStep === lastGuideStepRef.current) return;
     lastGuideStepRef.current = state.setupStep;
     speakGuide(GUIDES[state.setupStep]);
-  }, [state.setupStep, speakGuide]);
+  }, [setupOpen, state.setupStep, speakGuide]);
 
   useEffect(() => {
     if (!state.doc && state.setupStep !== "doc") setSetupStep("doc");
   }, [state.doc, state.setupStep, setSetupStep]);
+
+  const handleGetStarted = useCallback(() => {
+    setSetupOpen(true);
+    /* This click is a user gesture — unlock audio so Meeks speaks. */
+    void unlockAudio().catch(() => {});
+  }, [setSetupOpen, unlockAudio]);
 
   const analyzeDoc = useCallback(
     async (doc: DocInput) => {
@@ -107,7 +122,12 @@ export function SetupScreen() {
       chooseScenario(scenario);
       setBusy(true);
       try {
-        const result = await pipeline.runSim(state.summary, state.answers, state.docSummary);
+        const result = await pipeline.runSim(
+          state.summary,
+          state.answers,
+          state.docSummary,
+          state.reference,
+        );
         setSim(result.script, result.glossary);
         await session.launch(scenario);
         toCall();
@@ -135,35 +155,57 @@ export function SetupScreen() {
     [state.setupStep],
   );
 
+  /* Invite state — the avatar is on screen with a Get started trigger. */
+  if (!setupOpen) {
+    return (
+      <div className="flex min-h-svh flex-col items-center justify-center">
+        <div className="flex flex-col items-center gap-3 pb-44">
+          <Button
+            size="lg"
+            onClick={handleGetStarted}
+            className="gap-2 px-8 py-6 text-lg shadow-xl"
+          >
+            <Sparkles className="size-5" />
+            Get started
+          </Button>
+          <p className="text-sm text-muted-foreground">
+            Meet Meeks — your practice-call coach.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  /* Setup pop-up — compact panel, at most ~25% of the screen. */
   return (
-    <div className="flex min-h-svh items-center justify-end px-4 py-8 pr-6 md:pr-16">
-      <div className="w-full max-w-xl rounded-2xl border bg-card/85 p-6 shadow-xl backdrop-blur-md sm:p-8">
-        <div className="flex flex-col gap-2">
-          <h2 className="text-2xl font-semibold text-primary">Set up your call</h2>
+    <div className="flex min-h-svh items-center justify-end px-4 py-6 pr-4 md:pr-8">
+      <div className="w-1/4 min-w-[320px] rounded-2xl border bg-card/90 p-5 shadow-xl backdrop-blur-md sm:p-6">
+        <div className="flex flex-col gap-1.5">
+          <h2 className="text-xl font-semibold text-primary">Set up your call</h2>
           <p className="text-sm text-muted-foreground">
             Three quick steps, then we connect you with the ward office.
           </p>
         </div>
 
-        <div className="mt-5 flex items-center gap-2">
+        <div className="mt-4 flex items-center gap-1.5">
           {STEPS.map((step, i) => {
             const done = i < stepIndex;
             const active = i === stepIndex;
             return (
-              <div key={step.key} className="flex flex-1 items-center gap-2">
+              <div key={step.key} className="flex flex-1 items-center gap-1.5">
                 <div
                   className={cn(
-                    "flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-xs font-medium",
+                    "flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-[11px] font-medium",
                     done && "border-primary bg-primary text-primary-foreground",
                     active && "border-primary bg-primary/10 text-primary",
                     !done && !active && "border-border text-muted-foreground",
                   )}
                 >
-                  {done ? <Check className="size-4" /> : i + 1}
+                  {done ? <Check className="size-3.5" /> : i + 1}
                 </div>
                 <span
                   className={cn(
-                    "text-sm",
+                    "text-xs",
                     active ? "font-medium text-foreground" : "text-muted-foreground",
                   )}
                 >
@@ -175,15 +217,18 @@ export function SetupScreen() {
           })}
         </div>
 
-        <div className="mt-6">
+        <div className="mt-5">
           {state.setupStep === "doc" && <DocUpload onAnalyzed={analyzeDoc} busy={analyzing} />}
           {state.setupStep === "grounding" && (
-            <Grounding
-              questions={state.questions}
-              summary={state.summary}
-              onComplete={handleAnswers}
-              busy={state.busy}
-            />
+            <div className="flex flex-col gap-4">
+              <ReferenceSearch agency={state.docSummary?.issuingAgency} />
+              <Grounding
+                questions={state.questions}
+                summary={state.summary}
+                onComplete={handleAnswers}
+                busy={state.busy}
+              />
+            </div>
           )}
           {state.setupStep === "scenario" && (
             <ScenarioPicker

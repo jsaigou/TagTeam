@@ -12,6 +12,8 @@ const CONNECT_PASSWORD = process.env.PERXONA_CONNECT_PASSWORD;
 const PRESENTER_URL =
   process.env.PRESENTER_URL ||
   "https://cdn.perxona.ai/asia/prod/latest/widget/entry/presenter.js";
+const SEARXNG_URL = process.env.SEARXNG_URL || "https://searxng.mango-rockhopper.ts.net";
+const FIRECRAWL_URL = process.env.FIRECRAWL_URL || "https://firecrawl.mango-rockhopper.ts.net";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIST_DIR = path.join(__dirname, "dist");
@@ -182,6 +184,67 @@ app.get(
   "/api/scenes",
   route(async (_req, res) => {
     res.json(await authedCall((token) => connectApi.scenes(token)));
+  }),
+);
+
+// Reference search — used to research the office/agency the user will call.
+// Search via the self-hosted SearXNG instance, then scrape the top results'
+// pages with the self-hosted Firecrawl instance. Returns a text digest the
+// LLM can ground the simulation in.
+app.get(
+  "/api/search",
+  route(async (req, res) => {
+    const q = String(req.query.q ?? "").trim();
+    if (!q) {
+      res.status(400).json({ error: "Missing q parameter" });
+      return;
+    }
+
+    const searchUrl = new URL(`${SEARXNG_URL}/search`);
+    searchUrl.searchParams.set("q", q);
+    searchUrl.searchParams.set("format", "json");
+    searchUrl.searchParams.set("safesearch", "0");
+    const sRes = await fetch(searchUrl, { signal: AbortSignal.timeout(15_000) });
+    if (!sRes.ok) {
+      throw Object.assign(new Error(`SearXNG search failed: ${sRes.status}`), { status: 502 });
+    }
+    const sJson = await sRes.json();
+    const results = (sJson.results ?? [])
+      .filter((r) => r && r.url)
+      .slice(0, 5)
+      .map((r) => ({
+        title: r.title ?? "",
+        url: r.url,
+        snippet: r.content ?? "",
+      }));
+
+    const scraped = [];
+    for (const r of results.slice(0, 2)) {
+      try {
+        const fRes = await fetch(`${FIRECRAWL_URL}/v1/scrape`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url: r.url, formats: ["markdown"] }),
+          signal: AbortSignal.timeout(25_000),
+        });
+        if (fRes.ok) {
+          const fJson = await fRes.json();
+          const md = fJson?.data?.markdown ?? "";
+          if (md) scraped.push({ url: r.url, markdown: md.slice(0, 6000) });
+        }
+      } catch {
+        /* skip un-scrapable pages */
+      }
+    }
+
+    const digest = [
+      `【検索: ${q}】`,
+      ...results.map((r, i) => `${i + 1}. ${r.title} — ${r.url}\n${(r.snippet ?? "").slice(0, 300)}`),
+      "",
+      ...scraped.map((s, i) => `【ページ ${i + 1}: ${s.url}】\n${s.markdown}`),
+    ].join("\n\n");
+
+    res.json({ query: q, results, digest: digest.slice(0, 20_000) });
   }),
 );
 

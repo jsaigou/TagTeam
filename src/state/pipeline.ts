@@ -7,6 +7,7 @@ import type {
   SimScript,
 } from "@/shared/contract";
 import {
+  parseDescription,
   parseDocument,
   toGroundingQuestions,
   type DocSummary,
@@ -37,7 +38,8 @@ function summarize(doc: DocSummary): string {
 /** Thin wrapper around the ai-pipeline modules. No demo fallbacks. */
 export const pipeline = {
   async parseDoc(doc: DocInput): Promise<ParseResult> {
-    const parsed = await parseDocument(doc);
+    const parsed =
+      doc.kind === "text" ? await parseDescription(doc.text) : await parseDocument(doc);
     return {
       summary: summarize(parsed),
       doc: parsed,
@@ -49,11 +51,14 @@ export const pipeline = {
     _summary: string | null,
     answers: GroundingAnswer[],
     doc: DocSummary | null,
+    reference: string | null = null,
   ): Promise<SimResult> {
     if (!doc) {
       throw new Error("Document summary is missing — please go back and re-upload the document.");
     }
-    return generateSimulation(doc, answers);
+    return generateSimulation(doc, answers, {
+      reference: reference ?? undefined,
+    });
   },
 
   async makeCheatSheet(

@@ -10,7 +10,8 @@ import {
 } from "react";
 import { useAvatarSession, type AvatarSession } from "@/hooks/use-avatar-session";
 
-export type GuideLine = { en: string; jp: string };
+/** A guide line. Spoken + shown in English; may embed specific Japanese words. */
+export type GuideLine = { en: string };
 
 type AvatarContextValue = {
   stageRef: RefObject<HTMLDivElement | null>;
@@ -20,7 +21,7 @@ type AvatarContextValue = {
   /** Resume audio from a user gesture; then speak the current guide line. */
   unlockAudio: () => Promise<void>;
   guide: GuideLine | null;
-  /** Show a guide line; if audio is unlocked, speak its Japanese. */
+  /** Show a guide line; if audio is unlocked, speak it (English). */
   speakGuide: (line: GuideLine | null) => void;
 };
 
@@ -42,7 +43,7 @@ export function AvatarProvider({ children }: { children: ReactNode }) {
     (line: GuideLine | null) => {
       setGuide(line);
       guideRef.current = line;
-      if (line) void session.speak(line.jp).catch(() => {});
+      if (line) void session.speak(line.en).catch(() => {});
     },
     [session],
   );
@@ -51,7 +52,7 @@ export function AvatarProvider({ children }: { children: ReactNode }) {
     await session.resumeAudio();
     setAudioUnlocked(true);
     const line = guideRef.current;
-    if (line) void session.speak(line.jp).catch(() => {});
+    if (line) void session.speak(line.en).catch(() => {});
   }, [session]);
   const value = useMemo(
     () => ({

@@ -3,7 +3,7 @@ import { ChevronRight, Sparkles } from "lucide-react";
 import type { ScenarioSelection } from "@/state/app-store";
 import type { PresetAvatar } from "@/hooks/use-catalog";
 import type { ApiError, CatalogItem } from "@/lib/api";
-import { DEFAULT_AVATAR_ID } from "@/lib/presets";
+import { PRACTICE_AVATAR_ID } from "@/lib/presets";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -55,8 +55,8 @@ export function ScenarioPicker({
   const [sceneId, setSceneId] = useState<string | null>(null);
   const [voiceId, setVoiceId] = useState<string | null>(null);
 
-  const defaultAvatar = avatars.some((a) => a.id === DEFAULT_AVATAR_ID)
-    ? DEFAULT_AVATAR_ID
+  const defaultAvatar = avatars.some((a) => a.id === PRACTICE_AVATAR_ID)
+    ? PRACTICE_AVATAR_ID
     : avatars[0]?.id;
   const currentAvatar = avatarId ?? defaultAvatar;
   const currentScene = sceneId ?? scenes[0]?.id;

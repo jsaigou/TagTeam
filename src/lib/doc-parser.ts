@@ -3,7 +3,7 @@
  * into a structured {@link DocSummary} whose `questions` establish the phone
  * call objective as English GroundingQuestions.
  */
-import type { DocInput, GroundingQuestion } from "../shared/contract";
+import type { GroundingQuestion, ImageDoc } from "../shared/contract";
 import {
   buildImageUserContent,
   chatJson,
@@ -48,7 +48,7 @@ export const isDocSummary = (value: unknown): value is DocSummary =>
  * summary. Defaults to a generous timeout for image analysis.
  */
 export async function parseDocument(
-  doc: DocInput,
+  doc: ImageDoc,
   options: ParseDocumentOptions = {},
 ): Promise<DocSummary> {
   const messages: ChatMessage[] = [
@@ -59,6 +59,30 @@ export async function parseDocument(
     {
       role: "user",
       content: buildImageUserContent("この書類の写真を解析してください。", doc),
+    },
+  ];
+  return chatJson(messages, isDocSummary, "DocSummary", {
+    ...options,
+    timeoutMs: options.timeoutMs ?? 120_000,
+  });
+}
+
+/**
+ * Parse a free-text description of the issue/scenario (no photo). Same schema
+ * and grounding questions as the image path.
+ */
+export async function parseDescription(
+  text: string,
+  options: ParseDocumentOptions = {},
+): Promise<DocSummary> {
+  const messages: ChatMessage[] = [
+    {
+      role: "system",
+      content: `${DOC_PARSE_SYSTEM_PROMPT}\n\n【JSONスキーマ】\n${DOC_PARSE_SCHEMA_TEXT}`,
+    },
+    {
+      role: "user",
+      content: `【利用者の状況説明】\n${text}\n\n上記の状況を分析し、指定されたJSONスキーマに従って文書が存在する場合と同様に、documentType / issuingAgency / purpose / keyFields / questions を抽出してください。写真はありません。回答は必ずJSONオブジェクトで返してください。`,
     },
   ];
   return chatJson(messages, isDocSummary, "DocSummary", {

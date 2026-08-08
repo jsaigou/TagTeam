@@ -10,9 +10,9 @@
 import type {
   CheatSheet,
   CheatSheetPhrase,
-  DocInput,
   GlossaryEntry,
   GroundingQuestion,
+  ImageDoc,
   SimScript,
   Turn,
 } from "../shared/contract";
@@ -90,7 +90,7 @@ export type ChatMessage = {
 };
 
 /** Build the multimodal user message content for a document photo. */
-export function buildImageUserContent(text: string, doc: DocInput): ChatContentPart[] {
+export function buildImageUserContent(text: string, doc: ImageDoc): ChatContentPart[] {
   return [
     { type: "text", text },
     { type: "image_url", image_url: { url: doc.dataUrl } },

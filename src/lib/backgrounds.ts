@@ -7,6 +7,7 @@ export const DEFAULT_BACKGROUND = "cute";
 
 const BACKGROUND_URLS: Record<string, string> = {
   cute: "/backgrounds/cute.webp",
+  hospital: "/backgrounds/hospital.webp",
 };
 
 export function getBackgroundUrl(key: string | null | undefined): string {

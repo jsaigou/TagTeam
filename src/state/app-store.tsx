@@ -29,6 +29,8 @@ export type ScenarioSelection = {
 type AppState = {
   screen: Screen;
   setupStep: SetupStep;
+  /** Setup panel is a pop-up the avatar invites the user to open. */
+  setupOpen: boolean;
   doc: DocInput | null;
   summary: string | null;
   docSummary: DocSummary | null;
@@ -39,6 +41,8 @@ type AppState = {
   cheatSheet: CheatSheet | null;
   scenario: ScenarioSelection | null;
   background: string;
+  /** Web-researched reference digest about the office/agency for the call. */
+  reference: string | null;
   busy: boolean;
   error: string | null;
 };
@@ -46,12 +50,14 @@ type AppState = {
 type Action =
   | { type: "SET_SCREEN"; screen: Screen }
   | { type: "SET_SETUP_STEP"; step: SetupStep }
+  | { type: "SET_SETUP_OPEN"; open: boolean }
   | { type: "DOC_UPLOADED"; doc: DocInput }
   | { type: "PARSED"; summary: string; doc: DocSummary; questions: GroundingQuestion[] }
   | { type: "ANSWERS_SAVED"; answers: GroundingAnswer[] }
   | { type: "SCENARIO_CHOSEN"; scenario: ScenarioSelection }
   | { type: "SIM_READY"; script: SimScript; glossary: GlossaryEntry[] }
   | { type: "CHEAT_SHEET_READY"; cheatSheet: CheatSheet }
+  | { type: "REFERENCE_READY"; digest: string }
   | { type: "BUSY"; busy: boolean }
   | { type: "ERROR"; message: string | null }
   | { type: "RESET" };
@@ -59,6 +65,7 @@ type Action =
 const initialState: AppState = {
   screen: "setup",
   setupStep: "doc",
+  setupOpen: false,
   doc: null,
   summary: null,
   docSummary: null,
@@ -69,6 +76,7 @@ const initialState: AppState = {
   cheatSheet: null,
   scenario: null,
   background: DEFAULT_BACKGROUND,
+  reference: null,
   busy: false,
   error: null,
 };
@@ -79,6 +87,8 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, screen: action.screen, error: null };
     case "SET_SETUP_STEP":
       return { ...state, setupStep: action.step, error: null };
+    case "SET_SETUP_OPEN":
+      return { ...state, setupOpen: action.open, error: null };
     case "DOC_UPLOADED":
       return { ...state, doc: action.doc, error: null };
     case "PARSED":
@@ -101,6 +111,8 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, script: action.script, glossary: action.glossary, busy: false };
     case "CHEAT_SHEET_READY":
       return { ...state, cheatSheet: action.cheatSheet, busy: false };
+    case "REFERENCE_READY":
+      return { ...state, reference: action.digest, busy: false };
     case "BUSY":
       return { ...state, busy: action.busy };
     case "ERROR":
@@ -116,6 +128,7 @@ type Store = {
   state: AppState;
   toSetup: () => void;
   setSetupStep: (step: SetupStep) => void;
+  setSetupOpen: (open: boolean) => void;
   toCall: () => void;
   toCheatSheet: () => void;
   reset: () => void;
@@ -125,6 +138,7 @@ type Store = {
   chooseScenario: (scenario: ScenarioSelection) => void;
   setSim: (script: SimScript, glossary: GlossaryEntry[]) => void;
   setCheatSheet: (cheatSheet: CheatSheet) => void;
+  setReference: (digest: string) => void;
   setBusy: (busy: boolean) => void;
   setError: (message: string | null) => void;
 };
@@ -139,6 +153,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       state,
       toSetup: () => dispatch({ type: "SET_SCREEN", screen: "setup" }),
       setSetupStep: (step) => dispatch({ type: "SET_SETUP_STEP", step }),
+      setSetupOpen: (open) => dispatch({ type: "SET_SETUP_OPEN", open }),
       toCall: () => dispatch({ type: "SET_SCREEN", screen: "call" }),
       toCheatSheet: () => dispatch({ type: "SET_SCREEN", screen: "cheat-sheet" }),
       reset: () => dispatch({ type: "RESET" }),
@@ -149,6 +164,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       chooseScenario: (scenario) => dispatch({ type: "SCENARIO_CHOSEN", scenario }),
       setSim: (script, glossary) => dispatch({ type: "SIM_READY", script, glossary }),
       setCheatSheet: (cheatSheet) => dispatch({ type: "CHEAT_SHEET_READY", cheatSheet }),
+      setReference: (digest) => dispatch({ type: "REFERENCE_READY", digest }),
       setBusy: (busy) => dispatch({ type: "BUSY", busy }),
       setError: (message) => dispatch({ type: "ERROR", message }),
     }),

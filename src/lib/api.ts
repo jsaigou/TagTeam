@@ -46,3 +46,13 @@ export const getVoices = () =>
  *  holds the real Connect credentials in env and never ships them to the browser. */
 export const getConnectToken = () =>
   request<{ connect_token: string }>("/api/connect-token");
+
+export type ReferenceResult = {
+  query: string;
+  results: { title: string; url: string; snippet: string }[];
+  digest: string;
+};
+
+/** Web-search reference info (via the backend's SearXNG + Firecrawl). */
+export const searchReference = (q: string) =>
+  request<ReferenceResult>(`/api/search?q=${encodeURIComponent(q)}`);
