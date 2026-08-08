@@ -84,3 +84,12 @@
     -webkit-font-smoothing: antialiased;
   }
 }
+
+@media print {
+  @page {
+    margin: 12mm;
+  }
+  body {
+    background: #fff;
+  }
+}
