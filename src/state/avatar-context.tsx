@@ -23,9 +23,7 @@ const EAGER_CADENCE_MS = 3400;
 type AvatarContextValue = {
   stageRef: RefObject<HTMLDivElement | null>;
   session: AvatarSession;
-  /** True once resumeAudio has run from a user gesture (autoplay unlocked). */
-  audioUnlocked: boolean;
-  /** Resume audio from a user gesture; then speak the current guide line. */
+  /** Resume the AudioContext from a user gesture so present()/speak() can play. */
   unlockAudio: () => Promise<void>;
   guide: GuideLine | null;
   /** Show a guide line WITHOUT speaking it (invite screen). */
@@ -47,7 +45,6 @@ const AvatarContext = createContext<AvatarContextValue | null>(null);
 export function AvatarProvider({ children }: { children: ReactNode }) {
   const stageRef = useRef<HTMLDivElement>(null);
   const session = useAvatarSession(stageRef);
-  const [audioUnlocked, setAudioUnlocked] = useState(false);
   const [guide, setGuide] = useState<GuideLine | null>(null);
 
   const speakGuide = useCallback(
@@ -62,11 +59,10 @@ export function AvatarProvider({ children }: { children: ReactNode }) {
     setGuide(line);
   }, []);
 
-  /* Enables audio from a user gesture. Does NOT speak — speech is driven by
-     explicit speakGuide() calls only (Meeks never talks before Get started). */
+  /* Resumes the AudioContext from a user gesture (autoplay). Does NOT speak —
+     speech is driven by explicit speakGuide()/player calls. */
   const unlockAudio = useCallback(async () => {
     await session.resumeAudio();
-    setAudioUnlocked(true);
   }, [session]);
 
   /* Eager attention-getting loop (wave/laugh), no speech. */
@@ -103,7 +99,6 @@ export function AvatarProvider({ children }: { children: ReactNode }) {
     () => ({
       stageRef,
       session,
-      audioUnlocked,
       unlockAudio,
       guide,
       showGuide,
@@ -111,16 +106,7 @@ export function AvatarProvider({ children }: { children: ReactNode }) {
       startEager,
       stopEager,
     }),
-    [
-      session,
-      audioUnlocked,
-      unlockAudio,
-      guide,
-      showGuide,
-      speakGuide,
-      startEager,
-      stopEager,
-    ],
+    [session, unlockAudio, guide, showGuide, speakGuide, startEager, stopEager],
   );
 
   return <AvatarContext.Provider value={value}>{children}</AvatarContext.Provider>;
