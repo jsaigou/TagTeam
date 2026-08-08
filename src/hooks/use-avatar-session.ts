@@ -30,6 +30,8 @@ export interface AvatarSession {
   speakError: Error | null;
   /** Low-level presenter passthroughs (used by the script player). */
   present: (content: string) => Promise<PresentationResult | undefined>;
+  /** Play a single motion clip (e.g. eager attention gestures). */
+  playMotion: (motionId: string) => Promise<PresentationResult | undefined>;
   resumeAudio: () => Promise<void>;
   interrupt: () => void;
   subscribe: (event: PresenterEventName, handler: PresenterEventHandler) => () => void;
@@ -115,6 +117,11 @@ export function useAvatarSession(
     [presenter],
   );
 
+  const playMotion = useCallback(
+    (motionId: string) => presenter.playMotion(motionId),
+    [presenter],
+  );
+
   const resumeAudio = useCallback(
     () => presenter.resumeAudio(),
     [presenter],
@@ -142,6 +149,7 @@ export function useAvatarSession(
     isSpeaking,
     speakError,
     present,
+    playMotion,
     resumeAudio,
     interrupt,
     subscribe,

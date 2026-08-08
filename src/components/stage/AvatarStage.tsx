@@ -21,11 +21,19 @@ export function AvatarStage() {
         className="absolute inset-0 h-full w-full object-cover"
       />
 
-      {/* Small avatar window — just big enough for the avatar. */}
-      <div className="absolute left-[8%] top-1/2 h-[min(70vh,620px)] w-[min(330px,34vw)] -translate-y-1/2">
+      {/* Small avatar window — just big enough for the avatar, framed. Meeks
+          anchors ~23% across the presenter view, so the window is positioned to
+          place that anchor at screen center. */}
+      <div
+        className="absolute h-[min(72vh,620px)] w-[min(420px,44vw)]"
+        style={{
+          left: "calc(50% - 0.228 * min(420px, 44vw))",
+          top: "calc(50% - 0.595 * min(72vh, 620px))",
+        }}
+      >
         <div
           ref={stageRef}
-          className="h-full w-full overflow-hidden rounded-2xl border border-border/60 shadow-2xl"
+          className="h-full w-full overflow-hidden rounded-[1.5rem] border-2 border-white/95 shadow-[0_18px_45px_-12px_rgba(15,35,15,0.55)]"
         />
 
         {!session.ready && (

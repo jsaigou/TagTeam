@@ -52,7 +52,7 @@ export function SetupScreen() {
   } = useAppStore();
   const { setupOpen } = state;
   const catalog = useCatalog();
-  const { session, unlockAudio, speakGuide } = useAvatar();
+  const { session, unlockAudio, showGuide, speakGuide, startEager, stopEager } = useAvatar();
   const [analyzing, setAnalyzing] = useState(false);
   const launchedRef = useRef(false);
   const lastGuideStepRef = useRef<SetupStep | null>(null);
@@ -72,16 +72,19 @@ export function SetupScreen() {
       });
   }, [catalog, session, setError]);
 
-  /* Guide line: invite while the setup pop-up is closed, else per-step. */
+  /* Guide line: invite while the setup pop-up is closed, else per-step.
+     Before Get started, Meeks does NOT speak — eager gestures only. */
   useEffect(() => {
     if (!setupOpen) {
-      speakGuide(INVITE_LINE);
-      return;
+      showGuide(INVITE_LINE);
+      startEager();
+      return () => stopEager();
     }
+    stopEager();
     if (state.setupStep === lastGuideStepRef.current) return;
     lastGuideStepRef.current = state.setupStep;
     speakGuide(GUIDES[state.setupStep]);
-  }, [setupOpen, state.setupStep, speakGuide]);
+  }, [setupOpen, state.setupStep, showGuide, speakGuide, startEager, stopEager]);
 
   useEffect(() => {
     if (!state.doc && state.setupStep !== "doc") setSetupStep("doc");

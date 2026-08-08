@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type React from "react";
 
+import type { CameraAngle } from "@perxona/presenter-types";
 import {
   loadPresenterEngine,
   type Presenter,
@@ -92,8 +93,11 @@ export function usePresenter(options: UsePresenterOptions): UsePresenter {
             el.hidden = false;
             setReady(true);
 
-            // Narrow the default vertical FOV so the avatar fills the stage.
-            el.updateCameraFOV({ distance: 1, vertical: 0, horizontal: 4.5 });
+            // Frame the full body, zoomed out so the whole avatar fits the
+            // small window. The avatar anchors ~67% across the view; the stage
+            // positions the window to place that anchor at screen center.
+            el.updateCameraAngle("fullbody" as CameraAngle);
+            el.updateCameraFOV({ distance: 3, vertical: 0, horizontal: 7 });
 
             // On first mount the element goes from hidden (0x0) to visible, which
             // is itself a ResizeObserver-detectable change. On re-initialization
