@@ -6,7 +6,7 @@ import path from "node:path";
 // ── Config ──────────────────────────────────────────────────
 
 const PORT = process.env.PORT || 8083;
-const PERXONA_API_BASE_URL = process.env.PERXONA_API_BASE_URL;
+const PERXONA_API_BASE_URL = (process.env.PERXONA_API_BASE_URL || "").replace(/\/+$/, "");
 const CONNECT_EMAIL = process.env.PERXONA_CONNECT_EMAIL;
 const CONNECT_PASSWORD = process.env.PERXONA_CONNECT_PASSWORD;
 const PRESENTER_URL =
@@ -19,6 +19,13 @@ const FIRECRAWL_URL = (process.env.FIRECRAWL_URL || "").replace(/\/+$/, "");
 // Optional: Firecrawl API key (cloud api.firecrawl.dev). Self-hosted Firecrawl
 // instances usually run without a key.
 const FIRECRAWL_API_KEY = process.env.FIRECRAWL_API_KEY || "";
+
+// LLM. The browser never calls the LLM directly (CORS) — server.mjs proxies
+// /api/llm, so the key stays server-side. Model is non-secret and still sent
+// by the client (VITE_LLM_MODEL) so it can be changed per call.
+const LLM_BASE_URL = (process.env.LLM_BASE_URL || "https://api.openai.com/v1").replace(/\/+$/, "");
+const LLM_API_KEY = process.env.LLM_API_KEY || "";
+const LLM_MODEL = process.env.LLM_MODEL || "gpt-4o-mini";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIST_DIR = path.join(__dirname, "dist");
@@ -136,6 +143,7 @@ async function authedCall(fn) {
 
 const app = express();
 app.disable("x-powered-by");
+app.use(express.json());
 
 function route(handler) {
   return async (req, res) => {
@@ -264,6 +272,48 @@ app.get(
     ].join("\n\n");
 
     res.json({ query: q, results, digest: digest.slice(0, 20_000) });
+  }),
+);
+
+// LLM proxy — the browser posts OpenAI-compatible chat completions here
+// (same-origin, no CORS); the key/base URL stay server-side.
+app.post(
+  "/api/llm",
+  route(async (req, res) => {
+    const { model, messages, temperature, response_format, max_tokens } = req.body ?? {};
+    if (!Array.isArray(messages) || messages.length === 0) {
+      res.status(400).json({ error: "Missing messages" });
+      return;
+    }
+    if (!LLM_API_KEY) {
+      res.status(501).json({
+        error: "LLM is not configured. Set LLM_API_KEY (and LLM_BASE_URL / LLM_MODEL) in .env — see SETUP.md.",
+      });
+      return;
+    }
+    const headers = { "Content-Type": "application/json" };
+    if (LLM_API_KEY) headers.Authorization = `Bearer ${LLM_API_KEY}`;
+    const upstream = {
+      model: typeof model === "string" && model ? model : LLM_MODEL,
+      messages,
+      temperature: typeof temperature === "number" ? temperature : 0.2,
+      max_tokens: typeof max_tokens === "number" ? max_tokens : 8192,
+      ...(response_format ? { response_format } : {}),
+    };
+    const r = await fetch(`${LLM_BASE_URL}/chat/completions`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(upstream),
+      signal: AbortSignal.timeout(120_000),
+    });
+    if (!r.ok) {
+      const detail = await r.text().catch(() => "");
+      throw Object.assign(new Error(`LLM request failed (${r.status})`), {
+        status: 502,
+        payload: { error: (detail || "LLM upstream error").slice(0, 500) },
+      });
+    }
+    res.json(await r.json());
   }),
 );
 

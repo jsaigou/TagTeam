@@ -49,12 +49,10 @@ export function AvatarProvider({ children }: { children: ReactNode }) {
   const session = useAvatarSession(stageRef);
   const [audioUnlocked, setAudioUnlocked] = useState(false);
   const [guide, setGuide] = useState<GuideLine | null>(null);
-  const guideRef = useRef<GuideLine | null>(null);
 
   const speakGuide = useCallback(
     (line: GuideLine | null) => {
       setGuide(line);
-      guideRef.current = line;
       if (line) void session.speak(line.en).catch(() => {});
     },
     [session],
@@ -62,14 +60,13 @@ export function AvatarProvider({ children }: { children: ReactNode }) {
 
   const showGuide = useCallback((line: GuideLine | null) => {
     setGuide(line);
-    guideRef.current = line;
   }, []);
 
+  /* Enables audio from a user gesture. Does NOT speak — speech is driven by
+     explicit speakGuide() calls only (Meeks never talks before Get started). */
   const unlockAudio = useCallback(async () => {
     await session.resumeAudio();
     setAudioUnlocked(true);
-    const line = guideRef.current;
-    if (line) void session.speak(line.en).catch(() => {});
   }, [session]);
 
   /* Eager attention-getting loop (wave/laugh), no speech. */

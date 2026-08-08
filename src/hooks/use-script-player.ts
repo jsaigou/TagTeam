@@ -24,6 +24,10 @@ const FALLBACK_HOLD_HELP: HoldHelp = {
   explanationEn: "That's all for now. Ask anytime if you need to pause again.",
 };
 
+/** Per @perxona/presenter-types: PRESENTATION_INTERRUPTED = "303" — an
+ *  intentional abort (resume/interrupt), not a real failure. */
+const PRESENTATION_INTERRUPTED = "303";
+
 export type PlayerInternals = ScriptPlayerHandle & {
   notifySpeakingText: (text: string) => void;
   notifyPerformanceState: (state: string) => void;
@@ -162,7 +166,11 @@ export function createScriptPlayer(deps: ScriptPlayerDeps): PlayerInternals {
   async function speakTurn(content: string) {
     const result: PresentationResult | undefined = await deps.present(content);
     if (!running) return;
-    if (result && !result.success) {
+    // PRESENTATION_INTERRUPTED ("303") is an intentional abort from resume()/
+    // interrupt() — the caller keeps control of the run, so do NOT treat it as
+    // fatal. Other failures (e.g. AUDIO_CONTEXT_UNAVAILABLE, PRESENTER_NOT_READY)
+    // still halt the run.
+    if (result && !result.success && result.code !== PRESENTATION_INTERRUPTED) {
       running = false;
       inSpeech = false;
       if (import.meta.env.DEV) {

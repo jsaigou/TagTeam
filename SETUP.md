@@ -29,7 +29,8 @@ Fill in the required values:
 | --- | --- |
 | `PERXONA_API_BASE_URL` | Your Connect region, e.g. `https://console.perxona.ai/asia` |
 | `PERXONA_CONNECT_EMAIL` / `PERXONA_CONNECT_PASSWORD` | The one shared Connect identity used to mint tokens for all visitors |
-| `VITE_LLM_BASE_URL` / `VITE_LLM_API_KEY` / `VITE_LLM_MODEL` | The OpenAI-compatible LLM used for document grounding, script generation, and cheat sheets |
+| `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` | The OpenAI-compatible LLM used for document grounding, script generation, and cheat sheets — **server-side**, proxied via `/api/llm` so the key never reaches the browser |
+| `VITE_LLM_MODEL` | (optional) Model id sent by the client to the `/api/llm` proxy; overrides `LLM_MODEL` |
 | `VITE_PRESENTER_URL` | (optional) `<sv-presenter>` engine CDN; defaults to the asia channel |
 | `SEARXNG_URL` / `FIRECRAWL_URL` / `FIRECRAWL_API_KEY` | (optional) your search + scrape endpoints — see [§4](#4-connect-your-own-search) |
 
@@ -135,8 +136,8 @@ Browser (React)  ──/api/connect-token──▶  server.mjs  ──login─�
 
 - The Connect identity (`PERXONA_*`) never reaches the browser — `server.mjs` mints short-lived
   tokens via `GET /api/connect-token`.
-- The LLM key ships to the browser as a `VITE_` var (demo tradeoff; move it server-side for
-  production).
+- The LLM is proxied through `POST /api/llm` (server-side `LLM_*` env) — the browser never holds
+  the API key.
 
 ## 6. Troubleshooting
 
@@ -147,4 +148,4 @@ Browser (React)  ──/api/connect-token──▶  server.mjs  ──login─�
 | "Search is not configured" | Set `SEARXNG_URL` (see §4a) |
 | SearXNG returns errors | Confirm JSON output is enabled on the instance; try self-hosting |
 | Firecrawl scrape fails | Confirm `FIRECRAWL_URL` + `FIRECRAWL_API_KEY`; self-hosted instances need Redis/Postgres/Playwright up |
-| LLM calls fail | Check `VITE_LLM_API_KEY`/`VITE_LLM_BASE_URL`; the model must support `response_format: json_object` |
+| LLM calls fail | Check `LLM_API_KEY`/`LLM_BASE_URL`; the model must support `response_format: json_object` |

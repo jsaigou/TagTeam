@@ -42,7 +42,7 @@ Try the demo with one click: **Get started → "Try the demo — book a dentist 
 
 ```bash
 pnpm install
-cp .env.example .env   # fill PERXONA_CONNECT_EMAIL/PASSWORD + VITE_LLM_API_KEY
+cp .env.example .env   # fill PERXONA_CONNECT_EMAIL/PASSWORD + LLM_API_KEY
 pnpm dev               # api :8083 + web :5173
 ```
 
@@ -53,7 +53,7 @@ Open http://localhost:5173. Verify: `pnpm build && pnpm lint && pnpm test`. Prod
 ## Notes
 
 - The Connect identity lives server-side (env-held credentials); there is no user login.
-- The LLM key ships to the browser as a `VITE_` var — a demo tradeoff.
+- The LLM runs through a server-side proxy (`/api/llm`); the API key never reaches the browser.
 - Built with React 19 + Vite + TypeScript + Tailwind CSS and an OpenAI-compatible LLM (foundry `gemma4-mtp`).
 
 ## Repo map

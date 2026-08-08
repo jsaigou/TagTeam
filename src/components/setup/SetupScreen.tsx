@@ -87,23 +87,30 @@ export function SetupScreen() {
   }, [setupOpen, state.setupStep, showGuide, speakGuide, startEager, stopEager]);
 
   useEffect(() => {
-    if (!state.doc && state.setupStep !== "doc") setSetupStep("doc");
-  }, [state.doc, state.setupStep, setSetupStep]);
+    /* Bounce back to the doc step only if nothing has been parsed yet. `docSummary`
+       is set by PARSED (the store's `doc` field is unused by the parse flow). */
+    if (!state.docSummary && state.setupStep !== "doc") setSetupStep("doc");
+  }, [state.docSummary, state.setupStep, setSetupStep]);
 
   const handleGetStarted = useCallback(() => {
     setSetupOpen(true);
-    /* This click is a user gesture — unlock audio so Meeks speaks. */
+    /* This click is a user gesture — enable audio. The guide effect speaks the
+       doc step line; unlockAudio itself never speaks. */
     void unlockAudio().catch(() => {});
   }, [setSetupOpen, unlockAudio]);
 
-  /* One-click demo: canned dentist-appointment scenario, anime scene. */
-  const handleDemo = useCallback(() => {
+  /* One-click demo: canned dentist-appointment scenario, anime scene. Wait for
+     the presenter to initialize before navigating so Start call can't race it. */
+  const handleDemo = useCallback(async () => {
     chooseScenario(DENTIST_DEMO.scenario);
     setSim(DENTIST_DEMO.script, DENTIST_DEMO.glossary);
     setCheatSheet(DENTIST_DEMO.cheatSheet);
-    void session.launch(DENTIST_DEMO.scenario).catch((err) => {
+    try {
+      await session.launch(DENTIST_DEMO.scenario);
+    } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to launch the presenter.");
-    });
+      return;
+    }
     toCall();
   }, [chooseScenario, setSim, setCheatSheet, setError, session, toCall]);
 

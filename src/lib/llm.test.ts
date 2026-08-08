@@ -36,21 +36,21 @@ afterEach(() => {
 });
 
 describe("resolveLlmConfig", () => {
-  it("falls back to documented defaults when env is empty", () => {
+  it("uses the same-origin proxy and falls back to the default model when env is empty", () => {
     const cfg = resolveLlmConfig({}, {});
-    expect(cfg.baseUrl).toBe("https://api.openai.com/v1");
+    expect(cfg.baseUrl).toBe("/api/llm");
     expect(cfg.model).toBe("gpt-4o-mini");
     expect(cfg.apiKey).toBe("");
   });
 
-  it("reads VITE_ vars from the env and trims trailing slashes", () => {
+  it("reads the model from VITE_ vars; baseUrl/apiKey are fixed to the proxy", () => {
     const cfg = resolveLlmConfig({}, {
       VITE_LLM_BASE_URL: "https://ollama.local/v1/",
       VITE_LLM_API_KEY: "abc",
       VITE_LLM_MODEL: "llama3",
     });
-    expect(cfg.baseUrl).toBe("https://ollama.local/v1");
-    expect(cfg.apiKey).toBe("abc");
+    expect(cfg.baseUrl).toBe("/api/llm");
+    expect(cfg.apiKey).toBe("");
     expect(cfg.model).toBe("llama3");
   });
 
@@ -62,10 +62,10 @@ describe("resolveLlmConfig", () => {
     expect(cfg.model).toBe("override-model");
   });
 
-  it("falls back to the default baseUrl when empty or whitespace", () => {
-    expect(resolveLlmConfig({ baseUrl: "" }, {}).baseUrl).toBe("https://api.openai.com/v1");
-    expect(resolveLlmConfig({ baseUrl: "   " }, {}).baseUrl).toBe("https://api.openai.com/v1");
-    expect(resolveLlmConfig({}, { VITE_LLM_BASE_URL: "" }).baseUrl).toBe("https://api.openai.com/v1");
+  it("always uses the proxy baseUrl", () => {
+    expect(resolveLlmConfig({ baseUrl: "" }, {}).baseUrl).toBe("/api/llm");
+    expect(resolveLlmConfig({ baseUrl: "   " }, {}).baseUrl).toBe("/api/llm");
+    expect(resolveLlmConfig({}, { VITE_LLM_BASE_URL: "" }).baseUrl).toBe("/api/llm");
   });
 
   it("falls back to the default model when empty or whitespace", () => {
@@ -75,7 +75,7 @@ describe("resolveLlmConfig", () => {
 });
 
 describe("chat", () => {
-  it("posts the expected request and parses the assistant content", async () => {
+  it("posts the expected request to the proxy and parses the assistant content", async () => {
     const fetchMock = stubFetchJson({
       choices: [{ message: { content: '{"ok":true}' }, finish_reason: "stop" }],
     });
@@ -96,7 +96,7 @@ describe("chat", () => {
     expect(result.finishReason).toBe("stop");
 
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe("https://example.test/v1/chat/completions");
+    expect(url).toBe("/api/llm");
     const body = JSON.parse(String(init.body));
     expect(body.model).toBe("test-model");
     expect(body.messages).toEqual([
@@ -105,13 +105,13 @@ describe("chat", () => {
     ]);
     expect(body.response_format).toEqual({ type: "json_object" });
     expect(body.temperature).toBe(0);
-    expect(init.headers).toMatchObject({
-      "Content-Type": "application/json",
-      Authorization: "Bearer sk-test",
-    });
+    expect(body.max_tokens).toBe(8192);
+    // The proxy holds the API key — the browser never sends one.
+    expect(init.headers).toMatchObject({ "Content-Type": "application/json" });
+    expect(init.headers).not.toHaveProperty("Authorization");
   });
 
-  it("does not send an Authorization header when no key is configured", async () => {
+  it("does not send an Authorization header", async () => {
     const fetchMock = stubFetchJson({ choices: [{ message: { content: "ok" } }] });
     await chat([{ role: "user", content: "hi" }], {
       config: { baseUrl: TEST_CONFIG.baseUrl, model: TEST_CONFIG.model },

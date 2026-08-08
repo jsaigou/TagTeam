@@ -102,6 +102,31 @@ describe("createScriptPlayer", () => {
     expect(present).toHaveBeenCalledTimes(1);
   });
 
+  it("does not halt when present() is intentionally interrupted (code 303)", async () => {
+    const { deps, present } = makeDeps();
+    const player: PlayerInternals = createScriptPlayer(deps);
+
+    present.mockResolvedValueOnce({
+      success: false,
+      code: "303" as PresentationResult["code"],
+      message: "interrupted",
+    });
+
+    player.load(scriptAllBureaucrat, glossary);
+    player.play();
+    await flush();
+
+    // An interrupted dispatch is an intentional abort (resume/interrupt), not a
+    // failure — the run must stay alive.
+    expect(player.getState()).toBe("talking");
+    expect(present).toHaveBeenCalledTimes(1);
+
+    // A real performance end still advances to the next turn.
+    player.notifyPerformanceEnd();
+    await flush();
+    expect(present).toHaveBeenCalledTimes(2);
+  });
+
   it("hold pauses at the next turn boundary and speaks the breakdown", async () => {
     const { deps, present } = makeDeps();
     const player: PlayerInternals = createScriptPlayer(deps);

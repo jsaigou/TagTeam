@@ -39,15 +39,12 @@ export function resolveLlmConfig(
   env?: Record<string, string | undefined>,
 ): LlmConfig {
   const source = env ?? (import.meta.env as Record<string, string | undefined>);
-  const rawBaseUrl = overrides?.baseUrl ?? source.VITE_LLM_BASE_URL;
-  const baseUrl = (rawBaseUrl !== undefined && rawBaseUrl.trim().length > 0
-    ? rawBaseUrl.trim()
-    : DEFAULT_BASE_URL
-  ).replace(/\/+$/, "");
   const model = overrides?.model ?? source.VITE_LLM_MODEL;
   return {
-    baseUrl,
-    apiKey: overrides?.apiKey ?? source.VITE_LLM_API_KEY ?? "",
+    // The browser always calls the same-origin proxy (server.mjs /api/llm) —
+    // the LLM base URL and API key live server-side, never in the browser.
+    baseUrl: "/api/llm",
+    apiKey: "",
     model: model !== undefined && model.trim().length > 0 ? model.trim() : DEFAULT_MODEL,
   };
 }
@@ -123,7 +120,7 @@ export type ChatResult = {
 export async function chat(messages: ChatMessage[], options: ChatOptions = {}): Promise<ChatResult> {
   const cfg = resolveLlmConfig(options.config, options.env);
   if (!cfg.baseUrl) {
-    throw new LlmError("config", "LLM base URL is not configured (VITE_LLM_BASE_URL)");
+    throw new LlmError("config", "LLM endpoint is not configured");
   }
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
@@ -142,6 +139,10 @@ export async function chat(messages: ChatMessage[], options: ChatOptions = {}): 
     model: cfg.model,
     messages,
     temperature: options.temperature ?? 0.2,
+    // Generous budget: reasoning models (e.g. gemma4-mtp) burn tokens on
+    // reasoning before emitting `content` — without this, content can come back
+    // empty and structured output fails.
+    max_tokens: 8192,
   };
   if (options.responseFormat === "json_object") {
     body.response_format = { type: "json_object" };
@@ -154,7 +155,7 @@ export async function chat(messages: ChatMessage[], options: ChatOptions = {}): 
 
   let res: Response;
   try {
-    res = await fetchImpl(`${cfg.baseUrl}/chat/completions`, {
+    res = await fetchImpl(cfg.baseUrl, {
       method: "POST",
       headers,
       body: JSON.stringify(body),

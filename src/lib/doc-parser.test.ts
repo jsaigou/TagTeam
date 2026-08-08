@@ -37,7 +37,7 @@ describe("parseDocument", () => {
     expect(summary.questions.length).toBeGreaterThanOrEqual(1);
 
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe("https://example.test/v1/chat/completions");
+    expect(url).toBe("/api/llm");
     const body = JSON.parse(String(init.body));
     expect(body.response_format).toEqual({ type: "json_object" });
     expect(body.model).toBe("test-model");
