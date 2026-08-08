@@ -73,6 +73,7 @@ const sleep = (ms: number) => new Promise<void>((r) => window.setTimeout(r, ms))
 export const pipeline = {
   async parseDoc(doc: DocInput): Promise<ParseResult> {
     if (docParser) return docParser(doc);
+    console.warn("TagTeam demo pipeline: using fallback data — ai-pipeline modules not yet merged");
     await sleep(650);
     return { summary: DEMO_SUMMARY, questions: DEMO_QUESTIONS };
   },
@@ -82,6 +83,7 @@ export const pipeline = {
     answers: GroundingAnswer[],
   ): Promise<SimResult> {
     if (simEngine) return simEngine(summary, answers);
+    console.warn("TagTeam demo pipeline: using fallback data — ai-pipeline modules not yet merged");
     await sleep(700);
     return { script: DEMO_SCRIPT, glossary: DEMO_GLOSSARY };
   },
@@ -92,6 +94,7 @@ export const pipeline = {
     answers: GroundingAnswer[],
   ): Promise<CheatSheet> {
     if (cheatSheet) return cheatSheet(script, glossary, answers);
+    console.warn("TagTeam demo pipeline: using fallback data — ai-pipeline modules not yet merged");
     await sleep(500);
     return deriveDemoCheatSheet(script, glossary);
   },

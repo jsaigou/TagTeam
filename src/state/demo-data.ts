@@ -1,6 +1,5 @@
 import type {
   GlossaryEntry,
-  GroundingAnswer,
   GroundingQuestion,
   SimScript,
 } from "@/shared/contract";
@@ -35,12 +34,6 @@ export const DEMO_QUESTIONS: GroundingQuestion[] = [
     question: "Do you already have your documents ready?",
     options: ["Yes, I have them ready", "Not yet — I need a checklist"],
   },
-];
-
-export const DEMO_ANSWERS: GroundingAnswer[] = [
-  { questionId: "goal", answer: "Change the address on my residence card" },
-  { questionId: "when", answer: "This week" },
-  { questionId: "docs", answer: "Yes, I have them ready" },
 ];
 
 export const DEMO_GLOSSARY: GlossaryEntry[] = [

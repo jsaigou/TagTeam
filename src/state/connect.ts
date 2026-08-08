@@ -110,7 +110,7 @@ export type AvatarSessionResult = {
   speakingText: string;
   launch: (avatarId: string, sceneId: string, voiceId: string) => void;
   speak: (text: string) => void;
-  resumeAudio: () => void;
+  resumeAudio: () => Promise<void>;
 };
 
 export function useAvatarSession(): AvatarSessionResult {
@@ -140,8 +140,10 @@ export function useAvatarSession(): AvatarSessionResult {
     }, 1400);
   }, []);
 
-  const resumeAudio = useCallback(() => {
-    /* the real SDK must resume audio from the Start-call gesture. Demo: no-op. */
+  const resumeAudio = useCallback(async () => {
+    /* the real SDK must resume audio from the Start-call gesture; it may reject
+       if the AudioContext is closed. Demo: resolve after a tick. */
+    await sleep(50);
   }, []);
 
   return useMemo(
@@ -276,10 +278,15 @@ export function useScriptPlayer(options?: ScriptPlayerOptions): ScriptPlayerHand
           .join(" ")
       : "The clerk will repeat the last point more slowly.";
 
+    /* Carry the current turn's motion markup through so the real SDK plays the
+       holding motion when it presents the verbal breakdown. */
+    const motion = turn?.motion ?? "";
+    const jpWithMotion = motion ? `${jp} ${motion}` : jp;
+
     holdRef.current = true;
     if (stateRef.current !== "talking") changeState("held");
-    speakRef.current?.(jp);
-    return { explanationJp: jp, explanationEn: en };
+    speakRef.current?.(jpWithMotion);
+    return { explanationJp: jpWithMotion, explanationEn: en };
   }, [changeState]);
 
   const tapHelp = useCallback((entryId: string): TapHelp | null => {

@@ -34,6 +34,9 @@ export function CallScreen() {
   const [holdHelp, setHoldHelp] = useState<HoldHelp | null>(null);
   const [tapHelp, setTapHelp] = useState<TapHelp | null>(null);
   const [started, setStarted] = useState(false);
+  /* Integration point (connect-core owns it): the real <sv-presenter> element mounts
+     inside this div. Keep it visible — do NOT add overflow-hidden to the stage itself,
+     or the presenter (and its floating co-pilot overlays) can be clipped. */
   const stageRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -57,14 +60,28 @@ export function CallScreen() {
     };
   }, [player]);
 
+  /* TODO(stub): connect-core owns the presenter events. At integration, replace
+     this listener with the real CONNECT_TOKEN_EXPIRED wiring from src/lib/presenter.ts;
+     it currently just surfaces a session-expired error into the store. */
+  useEffect(() => {
+    const onTokenExpired = () => setError("Session expired — please sign in again.");
+    window.addEventListener("CONNECT_TOKEN_EXPIRED", onTokenExpired);
+    return () => window.removeEventListener("CONNECT_TOKEN_EXPIRED", onTokenExpired);
+  }, [setError]);
+
   const activeTurn = turns.find((t) => t.id === activeTurnId) ?? null;
 
-  const handleStart = useCallback(() => {
+  const handleStart = useCallback(async () => {
     if (!script) return;
-    session.resumeAudio();
+    try {
+      await session.resumeAudio();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not start audio. Tap Start again.");
+      return;
+    }
     player.play();
     setStarted(true);
-  }, [script, session, player]);
+  }, [script, session, player, setError]);
 
   const handleHold = useCallback(async () => {
     const help = await player.hold();
@@ -113,6 +130,15 @@ export function CallScreen() {
           End & restart
         </Button>
       </header>
+
+      {state.error && (
+        <div className="flex items-center justify-between gap-2 border-b border-destructive/40 bg-destructive/5 px-4 py-2 text-sm text-destructive">
+          <span>{state.error}</span>
+          <Button variant="ghost" size="sm" onClick={() => setError(null)}>
+            Dismiss
+          </Button>
+        </div>
+      )}
 
       <main className="grid flex-1 grid-cols-1 gap-0 overflow-hidden md:grid-cols-[1fr_320px]">
         <section className="relative flex min-h-0 flex-col bg-gradient-to-br from-background to-accent/20">
