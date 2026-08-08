@@ -1,0 +1,139 @@
+import type React from "react";
+import { useCallback, useState } from "react";
+
+import { getConnectToken } from "@/lib/api";
+import { logout } from "@/lib/auth";
+import type { PresentationResult } from "@/lib/presenter";
+import {
+  usePresenter,
+  type PresenterEventName,
+  type PresenterEventHandler,
+} from "./use-presenter";
+
+export interface LaunchParams {
+  avatarId: string;
+  sceneId: string;
+  voiceId: string;
+}
+
+export interface AvatarSession {
+  engineReady: boolean;
+  ready: boolean;
+  loadError: Error | null;
+  retryLoad: () => void;
+  launch: (params: LaunchParams) => Promise<void>;
+  isLaunching: boolean;
+  launchError: Error | null;
+  /** UI-facing: resume audio, then speak `text`. Throws on a failed playback. */
+  speak: (text: string) => Promise<void>;
+  isSpeaking: boolean;
+  speakError: Error | null;
+  /** Low-level presenter passthroughs (used by the script player). */
+  present: (content: string) => Promise<PresentationResult | undefined>;
+  resumeAudio: () => Promise<void>;
+  interrupt: () => void;
+  subscribe: (event: PresenterEventName, handler: PresenterEventHandler) => () => void;
+}
+
+/**
+ * Bridges the Connect API with the imperative presenter.
+ *
+ * - `launch` fetches the Connect token then initializes the presenter with the
+ *   chosen avatar/scene/voice.
+ * - `speak` resumes the AudioContext (from this user-gesture click) and calls
+ *   `presenter.present(text)`.
+ * - No real token refresh: on `CONNECT_TOKEN_EXPIRED` the session is cleared
+ *   via `logout()`, which routes the user back to the login screen.
+ */
+export function useAvatarSession(
+  stageRef: React.RefObject<HTMLDivElement | null>,
+): AvatarSession {
+  const presenter = usePresenter({
+    stageRef,
+    onConnectTokenExpired: () => logout(),
+  });
+
+  const [isLaunching, setIsLaunching] = useState(false);
+  const [launchError, setLaunchError] = useState<Error | null>(null);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [speakError, setSpeakError] = useState<Error | null>(null);
+
+  const launch = useCallback(
+    async ({ avatarId, sceneId, voiceId }: LaunchParams) => {
+      setIsLaunching(true);
+      setLaunchError(null);
+      try {
+        const { connect_token } = await getConnectToken();
+        await presenter.initialize(connect_token, { avatarId, sceneId, voiceId });
+      } catch (err) {
+        setLaunchError(err instanceof Error ? err : new Error(String(err)));
+        throw err;
+      } finally {
+        setIsLaunching(false);
+      }
+    },
+    [presenter],
+  );
+
+  const present = useCallback(
+    async (content: string) => presenter.present(content),
+    [presenter],
+  );
+
+  const speak = useCallback(
+    async (text: string) => {
+      const message = text.trim();
+      if (!message || !presenter.ready) return;
+      setIsSpeaking(true);
+      setSpeakError(null);
+      try {
+        // Resume AudioContext from this user-gesture click before synthesizing.
+        await presenter.resumeAudio();
+        const result = await presenter.present(message);
+        if (result && !result.success) {
+          throw new Error(
+            `Playback failed (${result.code}): ${result.message ?? ""}`,
+          );
+        }
+      } catch (err) {
+        setSpeakError(err instanceof Error ? err : new Error(String(err)));
+        throw err;
+      } finally {
+        setIsSpeaking(false);
+      }
+    },
+    [presenter],
+  );
+
+  const resumeAudio = useCallback(
+    () => presenter.resumeAudio(),
+    [presenter],
+  );
+
+  const interrupt = useCallback(() => {
+    presenter.interruptPresentation();
+  }, [presenter]);
+
+  const subscribe = useCallback(
+    (event: PresenterEventName, handler: PresenterEventHandler) =>
+      presenter.subscribe(event, handler),
+    [presenter],
+  );
+
+  return {
+    engineReady: presenter.mounted,
+    ready: presenter.ready,
+    loadError: presenter.loadError,
+    retryLoad: presenter.retry,
+    launch,
+    isLaunching,
+    launchError,
+    speak,
+    isSpeaking,
+    speakError,
+    present,
+    resumeAudio,
+    interrupt,
+    subscribe,
+  };
+}
