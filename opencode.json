@@ -1,4 +1,10 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "foundry/deepseek-v4-flash"
+  "model": "foundry/deepseek-v4-flash",
+  "references": {
+    "connect-kit": {
+      "path": "/Users/jon/Documents/repo/Perxona/perxona-connect-kit",
+      "description": "Perxona Connect Kit reference: motion-browser patterns (auth/catalog/presenter/session hooks), presenter-types index.d.ts, openapi.yaml"
+    }
+  }
 }
