@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Search, Sparkles } from "lucide-react";
 import { searchReference } from "@/lib/api";
 import { useAppStore } from "@/state/app-store";
@@ -8,12 +8,39 @@ import { Input } from "@/components/ui/input";
 type ReferenceSearchProps = {
   /** Detected office/agency to prefill the search. */
   agency?: string | null;
+  /** Doc purpose — fallback prefill when the extracted agency is unreliable. */
+  purpose?: string | null;
 };
 
+/** Filler/meaningless values the LLM sometimes returns for issuingAgency. */
+const AGENCY_FILLER =
+  /利用者|ユーザー|ユーザ|本人|私|わたし|あなた|不明|該当|なし|問題|状況|内容|目的|電話|相談/;
+
+function looksLikeAgency(value: string | null | undefined): boolean {
+  const v = (value ?? "").trim();
+  if (v.length < 2 || v.length > 40) return false;
+  if (AGENCY_FILLER.test(v)) return false;
+  // An agency name is a Japanese proper noun (kanji/kana); reject romanized filler.
+  if (!/[\u4e00-\u9fff\u3040-\u30ff]/.test(v)) return false;
+  return true;
+}
+
+function looksLikePurpose(value: string | null | undefined): boolean {
+  const v = (value ?? "").trim();
+  return v.length >= 3 && v.length <= 80 && !/利用者|不明/.test(v);
+}
+
 /** Web-search reference info about the office the user will call. */
-export function ReferenceSearch({ agency }: ReferenceSearchProps) {
+export function ReferenceSearch({ agency, purpose }: ReferenceSearchProps) {
   const { state, setReference, setError } = useAppStore();
-  const [query, setQuery] = useState(agency ?? "");
+  const defaultQuery = useMemo(() => {
+    // Prefill the agency only if it plausibly is one; otherwise fall back to the
+    // doc purpose (meaningful search), else leave the box empty for the user.
+    if (looksLikeAgency(agency)) return agency!.trim();
+    if (looksLikePurpose(purpose)) return purpose!.trim();
+    return "";
+  }, [agency, purpose]);
+  const [query, setQuery] = useState(defaultQuery);
   const [loading, setLoading] = useState(false);
 
   const doSearch = useCallback(async () => {

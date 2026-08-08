@@ -256,7 +256,10 @@ export function SetupScreen() {
           )}
           {state.setupStep === "grounding" && (
             <div className="flex flex-col gap-4">
-              <ReferenceSearch agency={state.docSummary?.issuingAgency} />
+              <ReferenceSearch
+                agency={state.docSummary?.issuingAgency}
+                purpose={state.docSummary?.purpose}
+              />
               <Grounding
                 questions={state.questions}
                 summary={state.summary}
