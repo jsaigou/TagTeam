@@ -30,13 +30,14 @@ export function DeviceBadge() {
 }
 
 /**
- * Desktop QR pairing panel. The phone scans this (or types the 6-char code) to
- * join as a companion camera + control surface.
+ * Desktop QR pairing panel. Hidden by default — a "Connect a phone" button
+ * reveals the QR code + 6-char code for the phone to scan (or type).
  */
 export function SessionBar() {
   const { session, hubStatus, devices, hubError, rotatePairing } = useSession();
   const [qr, setQr] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [showQr, setShowQr] = useState(false);
   const connectedCount = devices.filter((d) => d.connected).length;
   const busy = hubStatus === "connecting";
 
@@ -93,48 +94,65 @@ export function SessionBar() {
         </span>
       </div>
 
-      <div className="flex items-center gap-3">
-        <div className="shrink-0 rounded-lg border bg-white p-1.5">
-          {qr ? (
-            <img src={qr} alt="Scan to join on your phone" className="size-[168px]" />
-          ) : (
-            <div className="flex size-[168px] items-center justify-center">
-              <Loader2 className="size-5 animate-spin text-muted-foreground" />
+      {showQr ? (
+        <>
+          <div className="flex items-center gap-3">
+            <div className="shrink-0 rounded-lg border bg-white p-1.5">
+              {qr ? (
+                <img src={qr} alt="Scan to join on your phone" className="size-[168px]" />
+              ) : (
+                <div className="flex size-[168px] items-center justify-center">
+                  <Loader2 className="size-5 animate-spin text-muted-foreground" />
+                </div>
+              )}
             </div>
-          )}
-        </div>
 
-        <div className="flex min-w-0 flex-1 flex-col gap-2">
-          <p className="text-xs text-muted-foreground">
-            Open this QR with your phone camera to join as a camera + control surface.
-            Both devices must reach this same address.
-          </p>
-          <button
-            type="button"
-            onClick={() => void copyCode()}
-            className="group flex flex-col gap-1 self-start"
-            title="Tap to copy"
-          >
-            <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
-              Or type the code
-            </span>
-            <span className="rounded-md border bg-background px-2.5 py-1 font-mono text-lg font-semibold tracking-[0.25em] text-primary group-hover:bg-accent">
-              {session.pairingToken}
-            </span>
-          </button>
-          {copied && <span className="text-xs text-primary">Copied!</span>}
-          <Button
-            variant="outline"
-            size="xs"
-            className="self-start"
-            onClick={() => void rotatePairing().catch(() => {})}
-            disabled={busy}
-          >
-            <RotateCcw />
-            New code
+            <div className="flex min-w-0 flex-1 flex-col gap-2">
+              <p className="text-xs text-muted-foreground">
+                Open this QR with your phone camera to join as a camera + control surface. Both
+                devices must reach this same address.
+              </p>
+              <button
+                type="button"
+                onClick={() => void copyCode()}
+                className="group flex flex-col gap-1 self-start"
+                title="Tap to copy"
+              >
+                <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                  Or type the code
+                </span>
+                <span className="rounded-md border bg-background px-2.5 py-1 font-mono text-lg font-semibold tracking-[0.25em] text-primary group-hover:bg-accent">
+                  {session.pairingToken}
+                </span>
+              </button>
+              {copied && <span className="text-xs text-primary">Copied!</span>}
+              <Button
+                variant="outline"
+                size="xs"
+                className="self-start"
+                onClick={() => void rotatePairing().catch(() => {})}
+                disabled={busy}
+              >
+                <RotateCcw />
+                New code
+              </Button>
+            </div>
+          </div>
+          <Button variant="ghost" size="xs" className="self-end" onClick={() => setShowQr(false)}>
+            Hide
           </Button>
-        </div>
-      </div>
+        </>
+      ) : (
+        <Button
+          variant="outline"
+          size="sm"
+          className="justify-start gap-1.5"
+          onClick={() => setShowQr(true)}
+        >
+          <Smartphone className="size-3.5" />
+          Connect a phone
+        </Button>
+      )}
 
       {hubError && <p className="text-xs text-destructive">{hubError}</p>}
     </div>

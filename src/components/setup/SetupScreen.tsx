@@ -26,7 +26,7 @@ const STEPS: { key: SetupStep; label: string }[] = [
 ];
 
 const INVITE_LINE = {
-  en: "こんにちは! I'm Meeks — your practice-call coach. I'll help you talk to Japanese offices with confidence. Tap Get started when you're ready.",
+  en: "こんにちは! I'm Luna — your practice-call assistant. I'll help you talk to Japanese offices with confidence. Tap Get started when you're ready.",
 };
 
 const GUIDES: Record<SetupStep, { en: string }> = {
@@ -71,7 +71,7 @@ export function SetupScreen() {
   const launchedRef = useRef(false);
   const lastGuideStepRef = useRef<SetupStep | null>(null);
 
-  /* Launch the guide avatar (cc051_meeks by default) once the catalog is ready so
+  /* Launch the guide avatar (Luna / cc051_meeks by default) once the catalog is ready so
      it is present while inviting the user + guiding through setup. */
   useEffect(() => {
     if (launchedRef.current || catalog.isLoading) return;
@@ -87,7 +87,7 @@ export function SetupScreen() {
   }, [catalog, session, setError]);
 
   /* Guide line: invite while the setup pop-up is closed, else per-step.
-     Before Get started, Meeks does NOT speak — eager gestures only. */
+     Before Get started, Luna does NOT speak — eager gestures only. */
   useEffect(() => {
     if (!setupOpen) {
       showGuide(INVITE_LINE);
@@ -135,14 +135,25 @@ export function SetupScreen() {
     (answers: GroundingAnswer[]) => {
       saveAnswers(answers);
       setSetupStep("scenario");
+      /* Auto-suggest who answers the phone from the document + answers. Best
+         effort — if inference fails or is slow, the default role stays and the
+         user can pick. Non-blocking so the scenario screen shows immediately. */
+      if (state.docSummary) {
+        void pipeline
+          .suggestRole(state.docSummary, answers)
+          .then((role) => setSettings({ role }))
+          .catch(() => {});
+      }
     },
-    [saveAnswers, setSetupStep],
+    [saveAnswers, setSetupStep, state.docSummary, setSettings],
   );
 
   const handleScenario = useCallback(
     async (scenario: { avatarId: string; sceneId: string; voiceId: string }) => {
       chooseScenario(scenario);
       setBusy(true);
+      /* Luna visibly "writes" the call while the LLM works. */
+      session.setThinking(true);
       try {
         const result = await pipeline.runSim(
           state.summary,
@@ -157,6 +168,7 @@ export function SetupScreen() {
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to generate simulation");
       } finally {
+        session.setThinking(false);
         setBusy(false);
       }
     },
@@ -170,8 +182,8 @@ export function SetupScreen() {
       state.docSummary,
       state.reference,
       state.settings,
-      setError,
       session,
+      setError,
     ],
   );
 
@@ -248,7 +260,7 @@ export function SetupScreen() {
             Get started
           </Button>
           <p className="text-sm text-muted-foreground">
-            Meet Meeks — your practice-call coach.
+            Meet Luna — your practice-call assistant.
           </p>
           <PerxonaBadge />
         </div>

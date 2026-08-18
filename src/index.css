@@ -2,6 +2,17 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Self-hosted Fraunces (variable, Latin) — the wordmark / display face.
+   Warm + humanist to match the "approachable coach" brand; body text stays
+   system-ui (CJK-safe for Japanese). */
+@font-face {
+  font-family: "Fraunces";
+  font-style: normal;
+  font-weight: 300 800;
+  font-display: swap;
+  src: url("/fonts/fraunces-latin.woff2") format("woff2");
+}
+
 :root {
   --background: #f2e8cf;
   --foreground: #1f2a1f;
@@ -83,6 +94,17 @@
       "Noto Sans JP", sans-serif;
     -webkit-font-smoothing: antialiased;
   }
+}
+
+/* The TagTeam wordmark — Fraunces, tight tracking, the signature element. */
+.wordmark {
+  font-family: "Fraunces", Georgia, serif;
+  font-weight: 620;
+  letter-spacing: -0.02em;
+  font-variation-settings: "SOFT" 100, "WONK" 1;
+}
+.wordmark .accent {
+  color: var(--color-accent);
 }
 
 @media print {

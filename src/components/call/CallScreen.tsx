@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ChevronRight, Loader2, Mic, PhoneCall, Sparkles } from "lucide-react";
+import { ChevronRight, Loader2, Mic, PhoneCall } from "lucide-react";
 import type { HoldHelp, PlayerState, TapHelp, Turn } from "@/shared/contract";
 import { useAppStore } from "@/state/app-store";
 import { useAvatar } from "@/state/avatar-context";
@@ -9,12 +9,10 @@ import { usePushToTalk } from "@/hooks/use-push-to-talk";
 import { setCallContext } from "@/lib/session-api";
 import { createScenario, updateScenario } from "@/lib/scenario-api";
 import { pipeline } from "@/state/pipeline";
-import { DEFAULT_AVATAR_ID, DEFAULT_SCENE_ID, DEFAULT_VOICE_ID, PRACTICE_AVATAR_ID } from "@/lib/presets";
+import { DEFAULT_AVATAR_ID, DEFAULT_SCENE_ID, DEFAULT_VOICE_ID } from "@/lib/presets";
 import { Transcript } from "./Transcript";
 import { VocabOverlay } from "./VocabOverlay";
 import { HelpLayer } from "./HelpLayer";
-import { MotionBrowser } from "@/components/stage/MotionBrowser";
-import { DeviceBadge } from "@/components/session/SessionBar";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
@@ -26,7 +24,6 @@ export function CallScreen() {
     setCheatSheet,
     setBusy,
     setError,
-    reset,
     setScenarioId,
   } = useAppStore();
   const { session: avatar, unlockAudio, speakGuide } = useAvatar();
@@ -292,7 +289,7 @@ export function CallScreen() {
       setBusy(false);
     }
     toCheatSheet();
-    /* Walk the cheat sheet through as Meeks (the guide), not the practice role. */
+    /* Walk the cheat sheet through as Luna (the guide), not the practice role. */
     void (async () => {
       try {
         await avatar.launch({
@@ -325,23 +322,6 @@ export function CallScreen() {
 
   return (
     <div className="relative z-10 flex h-svh flex-col">
-      <header className="flex items-center justify-between border-b bg-card px-4 py-2.5">
-        <div className="flex items-center gap-2">
-          <Sparkles className="size-4 text-accent" />
-          <span className="text-sm font-medium">{script?.scenarioTitle ?? "Call"}</span>
-        </div>
-        <div className="flex items-center gap-3">
-          <DeviceBadge />
-          <MotionBrowser
-            avatarId={state.scenario?.avatarId ?? PRACTICE_AVATAR_ID}
-            onPlay={(motionId) => void avatar.playMotion(motionId)}
-          />
-          <Button variant="ghost" size="sm" onClick={reset}>
-            End & restart
-          </Button>
-        </div>
-      </header>
-
       {state.error && (
         <div className="flex items-center justify-between gap-2 border-b border-destructive/40 bg-destructive/5 px-4 py-2 text-sm text-destructive">
           <span>{state.error}</span>

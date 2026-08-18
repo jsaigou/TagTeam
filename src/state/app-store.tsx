@@ -70,7 +70,7 @@ type Action =
   | { type: "PARSED"; summary: string; doc: DocSummary; questions: GroundingQuestion[] }
   | { type: "ANSWERS_SAVED"; answers: GroundingAnswer[] }
   | { type: "SCENARIO_CHOSEN"; scenario: ScenarioSelection }
-  | { type: "SETTINGS_CHANGED"; settings: CallSettings }
+  | { type: "SETTINGS_CHANGED"; settings: Partial<CallSettings> }
   | { type: "SCENARIO_SAVED"; id: string }
   | { type: "SCENARIO_RESTORED"; payload: ScenarioRestore }
   | { type: "SIM_READY"; script: SimScript; glossary: GlossaryEntry[] }
@@ -123,7 +123,7 @@ function reducer(state: AppState, action: Action): AppState {
     case "SCENARIO_CHOSEN":
       return { ...state, scenario: action.scenario };
     case "SETTINGS_CHANGED":
-      return { ...state, settings: action.settings };
+      return { ...state, settings: { ...state.settings, ...action.settings } };
     case "SCENARIO_SAVED":
       return { ...state, scenarioId: action.id };
     case "SCENARIO_RESTORED":
@@ -169,7 +169,7 @@ type Store = {
   parsed: (summary: string, doc: DocSummary, questions: GroundingQuestion[]) => void;
   saveAnswers: (answers: GroundingAnswer[]) => void;
   chooseScenario: (scenario: ScenarioSelection) => void;
-  setSettings: (settings: CallSettings) => void;
+  setSettings: (settings: Partial<CallSettings>) => void;
   setScenarioId: (id: string) => void;
   restoreScenario: (payload: ScenarioRestore) => void;
   setSim: (script: SimScript, glossary: GlossaryEntry[]) => void;

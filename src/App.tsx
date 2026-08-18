@@ -1,13 +1,14 @@
-import { Leaf, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { AppStoreProvider, useAppStore } from "@/state/app-store";
 import { SessionProvider } from "@/state/session-context";
 import { AvatarProvider } from "@/state/avatar-context";
 import { useAuth } from "@/hooks/use-auth";
-import { authClient } from "@/lib/auth";
 import { isPhoneJoinUrl } from "@/lib/session-utils";
 import { LoginScreen } from "@/components/auth/LoginScreen";
 import { AvatarStage } from "@/components/stage/AvatarStage";
 import { AvatarOverlay } from "@/components/stage/AvatarOverlay";
+import { AppHeader } from "@/components/app/AppHeader";
+import { CallHeaderControls } from "@/components/call/CallHeaderControls";
 import { SetupScreen } from "@/components/setup/SetupScreen";
 import { CallScreen } from "@/components/call/CallScreen";
 import { CheatSheetView } from "@/components/cheat-sheet/CheatSheetView";
@@ -15,41 +16,21 @@ import { PhoneApp } from "@/components/phone/PhoneApp";
 
 function AppContent() {
   const { state, toSetup, reset } = useAppStore();
-  const { session } = useAuth();
 
   return (
     <div className="relative min-h-svh overflow-hidden bg-background">
-      {/* The star is always present behind everything. */}
+      {/* Luna (the assistant) is always present behind everything. */}
       <AvatarStage />
-      {/* Floating controls on top of the screens (sound toggle + guide). */}
+      {/* Floating avatar UI on top of the screens (guide bubble). */}
       <AvatarOverlay />
 
-      <div className="relative z-10">
-        {state.screen !== "call" && (
-          <header className="flex items-center justify-between border-b bg-card px-4 py-2.5 print:hidden">
-            <button
-              type="button"
-              onClick={toSetup}
-              className="flex items-center gap-2 text-primary"
-            >
-              <Leaf className="size-5" />
-              <span className="text-base font-semibold">TagTeam</span>
-            </button>
-            <div className="flex items-center gap-3">
-              <span className="hidden text-xs text-muted-foreground sm:block">
-                {session?.user.email}
-              </span>
-              <button
-                type="button"
-                onClick={() => void authClient.signOut()}
-                className="text-xs font-medium text-muted-foreground hover:text-destructive"
-              >
-                Sign out
-              </button>
-            </div>
-          </header>
-        )}
+      <AppHeader
+        onHome={toSetup}
+        title={state.screen === "call" ? state.script?.scenarioTitle : undefined}
+        right={state.screen === "call" ? <CallHeaderControls /> : undefined}
+      />
 
+      <div className="relative z-10">
         {state.screen === "setup" && <SetupScreen />}
         {state.screen === "call" && <CallScreen />}
         {state.screen === "cheat-sheet" &&

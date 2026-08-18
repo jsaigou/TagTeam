@@ -21,7 +21,7 @@ export function AvatarStage() {
             </div>
           ) : (
             <p className="rounded-full border bg-card/90 px-4 py-2 text-sm text-muted-foreground shadow-lg">
-              Waking Meeks up…
+              Waking Luna up…
             </p>
           )}
         </div>

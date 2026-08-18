@@ -113,11 +113,12 @@ once on an empty/malformed reply (reasoning models burn the budget).
 - Shared data shapes live in `src/shared/contract.ts` (coordinator-owned, import-only).
 - `pnpm dev` runs api + web via concurrently; `pnpm start` serves the built app from `server.mjs`.
 
-## Star avatar
+## Guide avatar (Luna)
 
-- The avatar is ALWAYS on screen (`AvatarStage`, fixed full-screen background) and guides the user
-  through setup with speech bubbles (`AvatarGuide`) + spoken Japanese guidance. Default avatar is
-  `cc051_meeks` (`src/lib/presets.ts`), launched from SetupScreen once the catalog loads.
+- Luna (avatar id `cc051_meeks`, `src/lib/presets.ts`) is ALWAYS on screen (`AvatarStage`, fixed
+  full-screen background) and assists the user through setup with speech bubbles (`AvatarGuide`) +
+  spoken English guidance. She is the assistant, not the brand — the app has a persistent
+  `AppHeader` (wordmark, Help/Settings, theme, user badge).
 - `resumeAudioPlayback` needs a trusted user gesture: the Get-started / Start-call click calls
   `unlockAudio()` (autoplay). Synthetic clicks (e.g. CDP) are NOT trusted gestures.
 - Guide lines are `{ en }` — the bubble shows English (matches `GuideLine` in `avatar-context.tsx`).

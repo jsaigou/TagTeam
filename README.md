@@ -15,16 +15,16 @@ TagTeam turns that wall into a safe practice room.
 ## See it in action
 
 <p align="center">
-  <img src="./assets/readme/screenshot-guide.webp" width="100%" alt="Meeks the avatar guide greets you with a welcome message and a Get started button over an anime scene">
+  <img src="./assets/readme/screenshot-guide.webp" width="100%" alt="Luna the avatar guide greets you with a welcome message and a Get started button over an anime scene">
 </p>
 
-Try it: **Get started → upload a letter (or describe the issue) → pick the office staff → Start call.** Pick who answers (Reception / Claims desk / Accounts), your difficulty and pace, and either read your lines or hold-to-talk for a live reply from the avatar.
+Try it: **Get started → upload a letter (or describe the issue) → pick who answers the phone, difficulty and pace → Start call.** Luna suggests the right office staff from your document, then either read your lines or hold-to-talk for a live reply from the avatar.
 
 ## What it does
 
 1. **Ground** — upload a photo of your notice or letter, or just describe the issue. TagTeam asks 1–2 quick English questions to pin down your call's objective.
 2. **Research (optional)** — look up the office you're calling (real web results via SearXNG + Firecrawl) so the practice mirrors reality, not a generic script.
-3. **Practice** — an avatar in the office role you chose (receptionist, claims desk, or accounts) runs a Japanese call at the difficulty and pace you picked. Read your lines or **hold to speak** — the avatar answers like the real office.
+3. **Practice** — Luna suggests who answers (receptionist, claims desk, or accounts) from your document; you confirm, pick difficulty/pace, and an avatar in that office role runs a Japanese call. Read your lines or **hold to speak** — the avatar answers like the real office.
 4. **Review** — a scan-friendly cheat sheet captures your goal, the exact if-then phrases, the office rules to know before you call, and what to practice.
 
 <p align="center">
@@ -35,7 +35,7 @@ Try it: **Get started → upload a letter (or describe the issue) → pick the o
 
 - **A real co-pilot, not a script reader.** Live vocabulary cards (kanji, furigana, English) appear at 5x size the moment the word is spoken — on the desktop and on your phone.
 - **Pause on your terms.** Tap a word for a quick hint; hold to pause the call at the next turn and have the avatar break it down — then resume.
-- **Pick your office.** Choose who answers, your difficulty, and the pace — the persona, avatar, scene, and voice follow your choice.
+- **The right office staff.** Luna suggests who answers the phone from your document — confirm or pick another (Reception / Claims desk / Accounts); the persona, avatar, scene, and voice follow your choice.
 - **Build on your past calls.** Scenarios are saved automatically and restored from the setup screen.
 - **Built on real avatar tech.** The Perxona Connect Kit `<sv-presenter>` web component — tokens minted via a thin backend proxy, with real avatar/scene/voice/motion catalogs.
 

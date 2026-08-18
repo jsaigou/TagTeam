@@ -64,6 +64,63 @@ export type ReferenceResult = {
   digest: string;
 };
 
-/** Web-search reference info (via the backend's SearXNG + Firecrawl). */
-export const searchReference = (q: string) =>
-  request<ReferenceResult>(`/api/search?q=${encodeURIComponent(q)}`);
+export type ReferenceHit = { title: string; url: string; snippet: string };
+export type ReferencePageEvent = { url: string; index: number; total: number };
+
+/** Web-search reference info (via the backend's SearXNG + Firecrawl), streamed
+ *  as Server-Sent Events so hits and scraped pages appear as they're found. */
+export function streamSearchReference(
+  q: string,
+  callbacks: {
+    onHits?: (query: string, results: ReferenceHit[]) => void;
+    onPage?: (event: ReferencePageEvent) => void;
+    onDone?: (result: ReferenceResult) => void;
+    onError?: (message: string) => void;
+  },
+): () => void {
+  const es = new EventSource(`/api/search?q=${encodeURIComponent(q)}`);
+
+  es.addEventListener("hits", ((event: MessageEvent<string>) => {
+    const data = JSON.parse(event.data) as { query: string; results: ReferenceHit[] };
+    callbacks.onHits?.(data.query, data.results);
+  }) as EventListener);
+
+  es.addEventListener("page", ((event: MessageEvent<string>) => {
+    callbacks.onPage?.(JSON.parse(event.data) as ReferencePageEvent);
+  }) as EventListener);
+
+  es.addEventListener("done", ((event: MessageEvent<string>) => {
+    callbacks.onDone?.(JSON.parse(event.data) as ReferenceResult);
+    es.close();
+  }) as EventListener);
+
+  es.addEventListener("error", ((event: MessageEvent<string>) => {
+    if (event.data) {
+      const data = JSON.parse(event.data) as { error: string };
+      callbacks.onError?.(data.error);
+    }
+    es.close();
+  }) as EventListener);
+
+  es.onerror = () => {
+    /* transient network drop — the server eventually closes on error/end */
+  };
+
+  return () => es.close();
+}
+
+/** One-shot search (blocks until the digest is ready) — used by callers that
+ *  don't need streaming (e.g. tests). Prefer {@link streamSearchReference}. */
+export const searchReference = (q: string): Promise<ReferenceResult> =>
+  new Promise((resolve, reject) => {
+    const close = streamSearchReference(q, {
+      onDone: (result) => {
+        close();
+        resolve(result);
+      },
+      onError: (message) => {
+        close();
+        reject(new Error(message));
+      },
+    });
+  });

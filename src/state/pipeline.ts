@@ -5,6 +5,7 @@ import type {
   GlossaryEntry,
   GroundingAnswer,
   GroundingQuestion,
+  RoleId,
   SimScript,
 } from "@/shared/contract";
 import {
@@ -13,7 +14,7 @@ import {
   toGroundingQuestions,
   type DocSummary,
 } from "@/lib/doc-parser";
-import { generateSimulation } from "@/lib/sim-engine";
+import { generateSimulation, inferRole } from "@/lib/sim-engine";
 import { generateCheatSheet } from "@/lib/cheat-sheet";
 
 export type ParseResult = {
@@ -71,5 +72,10 @@ export const pipeline = {
     reference?: string | null,
   ): Promise<CheatSheet> {
     return generateCheatSheet({ script, glossary, answers, reference: reference ?? undefined });
+  },
+
+  /** Infer which office staff member the caller should practice with. */
+  async suggestRole(doc: DocSummary, answers: GroundingAnswer[]): Promise<RoleId> {
+    return inferRole(doc, answers);
   },
 };

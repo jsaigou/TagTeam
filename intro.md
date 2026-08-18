@@ -26,10 +26,10 @@ Practice the real call with a live 3D avatar *before* you ever dial. TagTeam rea
 3. **Practice** — A receptionist avatar runs a natural, authentic-speed Japanese call: *first visit? My Number card? Preferred time?* You answer; the avatar responds like the real office.
 4. **Review** — A scan-friendly cheat sheet captures your goal, the exact if-then phrases for the real call, and what to practice.
 
-## The avatar is the star
+## Your practice assistant, Luna
 
-- **Meeks** (cc051_meeks) greets you, waves to get your attention before you begin, and speaks an English welcome the moment you tap **Get started**.
-- Meeks guides you through setup, swaps into the practice role for your call (the receptionist), then returns to walk you through your cheat sheet — one consistent character across the whole journey.
+- **Luna** (cc051_meeks) greets you, waves to get your attention before you begin, and speaks an English welcome the moment you tap **Get started**.
+- Luna guides you through setup, swaps into the practice role for your call (the receptionist), then returns to walk you through your cheat sheet — one consistent character across the whole journey.
 - Pre-recorded Perxona motion clips (greeting wave, laugh, talk) and live speech events give her a warm, alive presence.
 
 ## The in-call co-pilot

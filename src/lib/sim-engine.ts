@@ -7,18 +7,21 @@ import type {
   CallSettings,
   GlossaryEntry,
   GroundingAnswer,
+  RoleId,
   SimScript,
 } from "../shared/contract";
 import {
   chatJson,
+  isOneOf,
   isSimulationRaw,
+  validateShape,
   type ChatMessage,
   type ChatOptions,
 } from "./llm";
 import type { DocSummary } from "./doc-parser";
 import { reconcileSimulation } from "./glossary";
 import { SIM_SCHEMA_TEXT, bureaucratSystemPrompt } from "../prompts/bureaucrat";
-import { buildCoachingGuidance } from "./coaching";
+import { buildCoachingGuidance, CALL_ROLES, ROLE_IDS } from "./coaching";
 
 export type VoicePresetId = "formal" | "standard" | "friendly";
 
@@ -121,4 +124,62 @@ export async function generateSimulation(
     script: { scenarioTitle: raw.scenarioTitle, turns: raw.turns },
     glossary: raw.glossary,
   });
+}
+
+const ROLE_INFER_SCHEMA = `{"role": "reception" | "claims" | "account"}`;
+
+const isRoleInference = (value: unknown): value is { role: RoleId } =>
+  validateShape<{ role: RoleId }>(
+    value,
+    { role: isOneOf(ROLE_IDS as unknown as RoleId[]) },
+    ["role"],
+  );
+
+/** Infer which office staff member the caller should practice with, from the
+ *  document + their grounding answers. Falls back to `reception` when the LLM
+ *  reply is unparsable (e.g. the model is briefly unavailable). */
+export async function inferRole(
+  docSummary: DocSummary,
+  answers: GroundingAnswer[],
+  options: { config?: ChatOptions["config"]; timeoutMs?: number } = {},
+): Promise<RoleId> {
+  const roleDescriptions = ROLE_IDS.map((id) => `- ${id}: ${CALL_ROLES[id].description}`).join(
+    "\n",
+  );
+  const context = [
+    `【解析した書類】`,
+    `文書の種類: ${docSummary.documentType}`,
+    `発行元: ${docSummary.issuingAgency}`,
+    `目的: ${docSummary.purpose}`,
+    "",
+    "【電話の目的（利用者の回答）】",
+    ...answers.map((a) => `- ${a.questionId}: ${a.answer}`),
+    "",
+    "この利用者はどの窓口に電話するのが最も適切か、1つだけ選んでください。",
+    roleDescriptions,
+  ].join("\n");
+
+  try {
+    const raw = await chatJson(messagesForRoleInfer(context), isRoleInference, "RoleInference", {
+      config: options.config,
+      timeoutMs: options.timeoutMs ?? 60_000,
+    });
+    return raw.role;
+  } catch {
+    return "reception";
+  }
+}
+
+function messagesForRoleInfer(context: string): ChatMessage[] {
+  return [
+    {
+      role: "system",
+      content: [
+        "あなたは市役所の電話案内の専門家です。利用者の書類と用件から、対応すべき窓口を選びます。",
+        "必ず以下のJSONオブジェクトのみを返してください（追加の文章は不要）。",
+        `JSONスキーマ: ${ROLE_INFER_SCHEMA}`,
+      ].join("\n"),
+    },
+    { role: "user", content: context },
+  ];
 }
