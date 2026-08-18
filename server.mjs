@@ -8,7 +8,7 @@ import { eq, desc } from "drizzle-orm";
 
 import { auth } from "./server/auth.mjs";
 import { toNodeHandler, fromNodeHeaders } from "better-auth/node";
-import { config, llmChat, transcribeAudio } from "./server/providers.mjs";
+import { config, llmChat, synthesizeSpeech, transcribeAudio } from "./server/providers.mjs";
 import { createCallOrchestrator } from "./server/orchestrator.mjs";
 import { NEXT_TURN_SCHEMA_TEXT } from "./server/next-turn.mjs";
 import {
@@ -462,6 +462,32 @@ app.post(
       language: typeof language === "string" ? language : undefined,
     });
     res.json(result);
+  }),
+);
+
+// BYO TTS (Phase 5f) — synthesize speech server-side (kokoro/qwen or any
+// OpenAI-compatible /audio/speech) and return a 16 kHz mono WAV the avatar's
+// presentWithAudio can play. Requires TTS_PROVIDER=byo.
+app.post(
+  "/api/tts",
+  requireAuth,
+  rateLimit({ windowMs: 60_000, max: 30 }),
+  express.json({ limit: "1mb" }),
+  route(async (req, res) => {
+    const { text, language } = req.body ?? {};
+    if (typeof text !== "string" || !text.trim()) {
+      res.status(400).json({ error: "'text' is required." });
+      return;
+    }
+    const audio = await synthesizeSpeech(text, {
+      language: typeof language === "string" ? language : undefined,
+    });
+    res.set({
+      "Content-Type": "audio/wav",
+      "Content-Length": audio.length,
+      "Cache-Control": "no-store",
+    });
+    res.end(audio);
   }),
 );
 

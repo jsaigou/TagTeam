@@ -34,7 +34,8 @@ per-role avatar packs ✓ — curated avatar/scene/voice per role in `coaching.j
 scenarios saved at call start + cheat-sheet attach, restored via `PastCalls` on the setup screen;
 Connect Chatbot as `nextTurn` backend ✓ — `NEXTTURN_PROVIDER=connect-chatbot` + `CHATBOT_ID`, see
 SETUP.md §5c; phone-side vocab picker ✓ — `AppSnapshot.activeVocab` drives companion Tap-help
-chips). Phase 5 candidate list is now exhausted.
+chips; BYO TTS ✓ — `TTS_PROVIDER=byo` + `VITE_TTS_PROVIDER=byo`, 16 kHz mono WAV via
+`presentWithAudio`, see SETUP.md §5d). The Phase 5 candidate list is exhausted; next phase is TBD.
 
 ## Stack
 

@@ -33,6 +33,19 @@ export const config = {
     model: process.env.STT_MODEL || "whisper-1",
     language: process.env.STT_LANGUAGE || "ja",
   },
+  tts: {
+    // Avatar speech: "perxona" (default) | "byo" — generate audio server-side
+    // and play it via presentWithAudio (kokoro/qwen or any OpenAI-compatible
+    // /audio/speech). The widget's verified codec contract is 16 kHz mono WAV;
+    // TTS_NORMALIZE (default on) resamples via ffmpeg to guarantee it.
+    provider: (process.env.TTS_PROVIDER || "perxona").toLowerCase(),
+    baseUrl: (process.env.TTS_BASE_URL || "").replace(/\/+$/, ""),
+    apiKey: process.env.TTS_API_KEY || "",
+    model: process.env.TTS_MODEL || "",
+    voice: process.env.TTS_VOICE || "",
+    language: process.env.TTS_LANGUAGE || "ja",
+    normalize: (process.env.TTS_NORMALIZE || "1") !== "0",
+  },
   search: {
     searxngUrl: (process.env.SEARXNG_URL || "").replace(/\/+$/, ""),
     // Geo-scoping: biases results to Japan so a bare office name doesn't
@@ -246,4 +259,107 @@ export async function llmChat(
   }
   const payload = await res.json();
   return openAiCompatibleResponse(payload);
+}
+
+// ── BYO TTS (Phase 5f) ─────────────────────────────────────────────────────
+// Generates speech server-side (OpenAI-compatible /audio/speech — kokoro,
+// qwen, Edge TTS gateways…) and returns a 16 kHz mono WAV for the avatar's
+// `presentWithAudio`. The Phase 0 spike verified that exact codec is accepted
+// by the widget; normalization resamples whatever the engine emits via ffmpeg.
+
+function ttsNotConfigured() {
+  throw Object.assign(
+    new Error(
+      "BYO TTS is not configured. Set TTS_PROVIDER=byo with TTS_BASE_URL / TTS_API_KEY / TTS_MODEL (and optional TTS_VOICE) in .env — see SETUP.md.",
+    ),
+    { status: 501 },
+  );
+}
+
+/** Resample any audio buffer to a 16 kHz mono PCM WAV via ffmpeg. */
+function normalizeToWav16k(buffer) {
+  return new Promise((resolve, reject) => {
+    const child = spawn("ffmpeg", [
+      "-hide_banner",
+      "-loglevel", "error",
+      "-i", "pipe:0",
+      "-f", "wav",
+      "-acodec", "pcm_s16le",
+      "-ar", "16000",
+      "-ac", "1",
+      "-y",
+      "pipe:1",
+    ], { stdio: ["pipe", "pipe", "pipe"] });
+    const chunks = [];
+    let stderr = "";
+    child.stdout.on("data", (chunk) => chunks.push(chunk));
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk;
+    });
+    child.on("error", (err) => {
+      reject(
+        Object.assign(
+          new Error(
+            `Could not run ffmpeg for BYO TTS normalization: ${err.message}. Install ffmpeg or set TTS_NORMALIZE=0.`,
+          ),
+          { status: 501 },
+        ),
+      );
+    });
+    child.on("close", (code) => {
+      if (code !== 0) {
+        reject(
+          Object.assign(
+            new Error(`ffmpeg exited ${code}: ${stderr.trim().slice(0, 300)}`),
+            { status: 502 },
+          ),
+        );
+        return;
+      }
+      resolve(Buffer.concat(chunks));
+    });
+    child.stdin.on("error", () => {});
+    child.stdin.end(buffer);
+  });
+}
+
+/**
+ * Synthesize Japanese speech for the given text. Resolves with a 16 kHz mono
+ * WAV buffer (normalized via ffmpeg when TTS_NORMALIZE is on).
+ */
+export async function synthesizeSpeech(text, { language } = {}) {
+  if (config.tts.provider !== "byo") {
+    throw Object.assign(
+      new Error("BYO TTS is disabled. Set TTS_PROVIDER=byo to enable."),
+      { status: 501 },
+    );
+  }
+  if (!config.tts.baseUrl || !config.tts.apiKey || !config.tts.model) ttsNotConfigured();
+  const res = await fetch(`${config.tts.baseUrl}/audio/speech`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${config.tts.apiKey}`,
+    },
+    body: JSON.stringify({
+      model: config.tts.model,
+      input: text,
+      ...(config.tts.voice ? { voice: config.tts.voice } : {}),
+      response_format: "wav",
+      language: language || config.tts.language,
+    }),
+    signal: AbortSignal.timeout(60_000),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw Object.assign(new Error(`TTS request failed (${res.status})`), {
+      status: 502,
+      payload: { error: (detail || "TTS upstream error").slice(0, 500) },
+    });
+  }
+  const audio = Buffer.from(await res.arrayBuffer());
+  if (!audio.length) {
+    throw Object.assign(new Error("TTS returned empty audio."), { status: 502 });
+  }
+  return config.tts.normalize ? normalizeToWav16k(audio) : audio;
 }

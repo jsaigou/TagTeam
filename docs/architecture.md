@@ -281,6 +281,16 @@ definition/note inline on the phone AND drives the existing `tapHelp` control me
 avatar speaks the same hint — companion and stage stay in sync. The desktop `VocabOverlay` tap-help
 is unchanged.
 
+**Phase 5 — BYO TTS (this round):** `TTS_PROVIDER=byo` + `VITE_TTS_PROVIDER=byo` routes avatar
+speech through an OpenAI-compatible `/audio/speech` engine instead of Perxona's voice: the avatar
+session's `present` synthesizes server-side (`POST /api/tts`, rate-limited) and plays it via
+`presentWithAudio`, falling back to Perxona speech on failure. The codec contract is verified
+16 kHz mono PCM WAV — `TTS_NORMALIZE=1` (default) resamples whatever the engine emits via ffmpeg;
+the produced format was checked end-to-end (fmt=1, 1ch, 16000 Hz, 16-bit). The English guide voice
+stays on Perxona. The Phase 0 spike open item (BYO codec guarantees on real hardware) is resolved to
+the extent possible without a hardware pass: the bytes handed to `presentWithAudio` are guaranteed
+to match the codec the widget was verified to accept headless.
+
 **Phase 4 completed (this round):** coaching settings (roles / difficulty / pace) in the scenario
 step — `Who answers the phone` (Reception / Claims desk / Accounts), `Difficulty`
 (Beginner/Intermediate/Advanced) and `Pace` (Slow/Normal/Fast). The persona data lives in
@@ -332,7 +342,9 @@ straight to the call — or the cheat sheet when one exists. Scenarios are JSON 
 ## 12. Open questions
 
 - Per-org vs shared Connect identity for the event — confirm with Perxona.
-- `presentWithAudio` codec/format guarantees on real hardware (16 kHz WAV accepted headless).
+- `presentWithAudio` codec/format guarantees on real hardware — 16 kHz mono WAV accepted headless
+  and the BYO-TTS path now normalizes to that exact codec (Phase 5f); audibility on physical
+  speakers still wants a manual hardware pass.
 - Chatbot chat latency under conversation cadence (30 calls/min limit).
 - Whether OpenCV.js ships best as a vendored WASM or a CDN dependency (bundle size vs offline).
   *Phase 2: lazy CDN load with `VITE_OPENCV_URL` override + raw-frame fallback; revisit vendoring

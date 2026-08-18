@@ -244,6 +244,33 @@ The server sends each call's scenario context, coaching directives and transcrip
 message and appends the nextTurn JSON schema, so the chatbot's reply still feeds the same
 validated-turn pipeline (own-LLM remains the default and the fallback). Rate limit: 30 calls/min.
 
+## 5d. BYO TTS (avatar speech from your own engine)
+
+By default the avatar speaks with Perxona's built-in voices (`TTS_PROVIDER=perxona`). To run speech
+through your own engine (kokoro, qwen, or any OpenAI-compatible `/audio/speech` endpoint), set the
+server-side config:
+
+```
+TTS_PROVIDER=byo
+TTS_BASE_URL=https://your-tts.example.com/v1
+TTS_API_KEY=sk-...
+TTS_MODEL=kokoro
+TTS_VOICE=af_heart        # optional engine voice id
+TTS_LANGUAGE=ja
+```
+
+and mirror it on the client:
+
+```
+VITE_TTS_PROVIDER=byo
+```
+
+How it works: each avatar `present()` synthesizes server-side (`POST /api/tts`) and plays the audio
+through the presenter's `presentWithAudio`. The verified codec contract is **16 kHz mono PCM WAV** —
+by default the server resamples whatever the engine emits via ffmpeg (`TTS_NORMALIZE=1`; install
+ffmpeg, or set `TTS_NORMALIZE=0` to pass the engine bytes through untouched). If synthesis fails the
+avatar falls back to Perxona's voice. The English guide voice stays on Perxona regardless.
+
 ## 6. Troubleshooting
 
 | Symptom | Fix |

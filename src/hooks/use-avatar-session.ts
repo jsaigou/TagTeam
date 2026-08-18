@@ -2,6 +2,7 @@ import type React from "react";
 import { useCallback, useState } from "react";
 
 import { getConnectToken } from "@/lib/api";
+import { isByoEnabled, synthesizeSpeech } from "@/lib/tts";
 import type {
   CameraAngle,
   PresentOptions,
@@ -106,8 +107,19 @@ export function useAvatarSession(
   );
 
   const present = useCallback(
-    async (content: string, options?: PresentOptions) =>
-      presenter.present(content, options),
+    async (content: string, options?: PresentOptions) => {
+      // BYO TTS (Phase 5f): synthesize server-side and play the WAV instead of
+      // Perxona's voice. Falls back to the built-in voice if synthesis fails.
+      if (isByoEnabled()) {
+        try {
+          const wav = await synthesizeSpeech(content);
+          return await presenter.presentWithAudio(wav, content, options);
+        } catch {
+          /* fall through to Perxona speech */
+        }
+      }
+      return presenter.present(content, options);
+    },
     [presenter],
   );
 
