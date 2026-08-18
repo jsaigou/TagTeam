@@ -10,12 +10,20 @@
 import coachingData from "../shared/coaching.json";
 import type { CallDifficulty, CallPace, CallSettings, RoleId } from "../shared/contract";
 
+/** Curated avatar/scene/voice for a role (Phase 5b). The picker applies the
+ *  pack on role selection and falls back to defaults when an id is missing. */
+export type RolePack = {
+  avatarId?: string;
+  sceneId?: string;
+  voiceId?: string;
+};
+
 export type CoachingRole = {
   id: RoleId;
   label: string;
   description: string;
-  /** Preferred practice avatar for this role (fall back if absent). */
-  avatarId?: string;
+  /** Per-role curated avatar/scene/voice (fall back to defaults if absent). */
+  pack?: RolePack;
   /** Japanese persona directive for the bureaucrat prompt. */
   persona: string;
 };

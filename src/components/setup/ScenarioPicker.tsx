@@ -58,9 +58,24 @@ export function ScenarioPicker({
   settings,
   onSettingsChange,
 }: ScenarioPickerProps) {
-  const [avatarId, setAvatarId] = useState<string | null>(null);
-  const [sceneId, setSceneId] = useState<string | null>(null);
-  const [voiceId, setVoiceId] = useState<string | null>(null);
+  /* Seed the avatar/scene/voice from the current role's curated pack so the
+     default role's persona and face stay aligned from first paint. */
+  const initialPack = CALL_ROLES[settings.role].pack ?? {};
+  const [avatarId, setAvatarId] = useState<string | null>(() =>
+    initialPack.avatarId && avatars.some((a) => a.id === initialPack.avatarId)
+      ? initialPack.avatarId
+      : null,
+  );
+  const [sceneId, setSceneId] = useState<string | null>(() =>
+    initialPack.sceneId && scenes.some((s) => s.id === initialPack.sceneId)
+      ? initialPack.sceneId
+      : null,
+  );
+  const [voiceId, setVoiceId] = useState<string | null>(() =>
+    initialPack.voiceId && voices.some((v) => v.id === initialPack.voiceId)
+      ? initialPack.voiceId
+      : null,
+  );
 
   const defaultAvatar = avatars.some((a) => a.id === PRACTICE_AVATAR_ID)
     ? PRACTICE_AVATAR_ID
@@ -74,12 +89,18 @@ export function ScenarioPicker({
 
   const ready = Boolean(currentAvatar && currentScene && currentVoice && !busy);
 
-  /* Choosing a role pre-selects its preferred practice avatar (if available) —
-     the persona and the face stay aligned. */
+  /* Choosing a role applies its curated avatar/scene/voice pack (when the ids
+     are in the catalog) — the persona's face, room and voice stay aligned. */
   const handleRoleChange = (role: RoleId) => {
-    const preferred = CALL_ROLES[role].avatarId;
-    if (preferred && avatars.some((a) => a.id === preferred)) {
-      setAvatarId(preferred);
+    const pack = CALL_ROLES[role].pack ?? {};
+    if (pack.avatarId && avatars.some((a) => a.id === pack.avatarId)) {
+      setAvatarId(pack.avatarId);
+    }
+    if (pack.sceneId && scenes.some((s) => s.id === pack.sceneId)) {
+      setSceneId(pack.sceneId);
+    }
+    if (pack.voiceId && voices.some((v) => v.id === pack.voiceId)) {
+      setVoiceId(pack.voiceId);
     }
     onSettingsChange({ ...settings, role });
   };

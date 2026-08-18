@@ -27,6 +27,19 @@ describe("coaching", () => {
     }
   });
 
+  it("curates a distinct avatar/scene/voice pack per role", () => {
+    const packs = Object.values(CALL_ROLES).map((role) => role.pack);
+    for (const pack of packs) {
+      expect(pack?.avatarId).toBeTruthy();
+      expect(pack?.sceneId).toBeTruthy();
+      expect(pack?.voiceId).toBeTruthy();
+    }
+    const avatarIds = new Set(packs.map((p) => p?.avatarId));
+    const voiceIds = new Set(packs.map((p) => p?.voiceId));
+    expect(avatarIds.size).toBe(3);
+    expect(voiceIds.size).toBe(3);
+  });
+
   it("builds a guidance block for the settings", () => {
     const guidance = buildCoachingGuidance(DEFAULT_CALL_SETTINGS);
     expect(guidance).toContain("【役割】");

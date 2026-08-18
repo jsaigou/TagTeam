@@ -30,9 +30,9 @@ emotion/intensity badges on active turns (sim schema now emits them); motion cat
 `CheatSheet.targetRules` (schema + validator + `Know before you call` section w/ citations);
 Perxona branding badge. See `docs/architecture.md` §11 for the writeup.
 Next: **Phase 5** (real camera QR scanning ✓ — `CameraScanner` + jsQR on the phone companion;
-remaining candidates: per-role avatar packs, persistence of scenarios/settings, Connect Chatbot as
-`nextTurn` backend). Companion tap-help still has no phone-side vocab picker yet (desktop vocab
-chips show Tap-help).
+per-role avatar packs ✓ — curated avatar/scene/voice per role in `coaching.json`; remaining
+candidates: persistence of scenarios/settings, Connect Chatbot as `nextTurn` backend). Companion
+tap-help still has no phone-side vocab picker yet (desktop vocab chips show Tap-help).
 
 ## Stack
 

@@ -298,6 +298,14 @@ main bundle stays lean; jsqr ships in its own 47 KB-gzip chunk). The decoded pay
 and adopted as the join hash. Camera permission/not-found/not-readable errors surface inline. The
 native-camera-app route still works as before.
 
+**Phase 5 — per-role avatar packs (this round):** each role now has a curated
+avatar/scene/voice `pack` in `src/shared/coaching.json` (ids verified live against the Connect
+catalog): Reception → `cc007_female_hr` + Interior_1 + a steady female voice; Claims desk →
+`cc039_female_legal` + Interior_2 + formal voice; Accounts → `cc006_male_finance` + Interior_3 + a
+calm male voice. The scenario step seeds avatar/scene/voice from the selected role's pack (falling
+back to the curated defaults when an id is missing from the catalog) and re-applies the pack when
+the role changes, so persona, face, room and voice stay aligned.
+
 ## 12. Open questions
 
 - Per-org vs shared Connect identity for the event — confirm with Perxona.

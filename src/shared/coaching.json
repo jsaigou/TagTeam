@@ -1,25 +1,37 @@
 {
-  "_comment": "Phase 4 — shared coaching data (roles/difficulty/pace). Single source for BOTH the client (src/lib/coaching.ts, script generation) and the server (server/coaching.mjs, nextTurn brain) so the two personas never drift. Keep guidance as Japanese prompt directives; labels/descriptions are English UI copy.",
+  "_comment": "Phase 4 — shared coaching data (roles/difficulty/pace). Single source for BOTH the client (src/lib/coaching.ts, script generation) and the server (server/coaching.mjs, nextTurn brain) so the two personas never drift. Keep guidance as Japanese prompt directives; labels/descriptions are English UI copy. pack = per-role curated avatar/scene/voice (Phase 5b) — ids verified against the live Connect catalog; the picker falls back to defaults if an id is missing.",
   "roles": {
     "reception": {
       "id": "reception",
       "label": "Reception",
       "description": "The first person who answers — routes your call.",
-      "avatarId": "01KH0D8ZAZHZ762FV5SK3503ZR",
+      "pack": {
+        "avatarId": "01K4M8T4RF9HTYE1W0M0957VSJ",
+        "sceneId": "01K4NYCSVMHPP5WWE21GMAGYA1",
+        "voiceId": "01KZFHK5FW671H7CX0Z6CMCV1R"
+      },
       "persona": "あなたは市役所・区役所の電話受付です。最初の応対係として、利用者の用件を聞き取り、担当窓口を案内します。明るく丁寧に、定型の冒頭（「お電話ありがとうございます。〜でございます」）で応答し、用件に応じて「担当課へおつなぎいたします」「窓口で承ります」など現実的な案内をしてください。"
     },
     "claims": {
       "id": "claims",
       "label": "Claims desk",
       "description": "The officer handling your specific paperwork.",
-      "avatarId": "01KH0D8ZAZHZ762FV5SK3503ZR",
+      "pack": {
+        "avatarId": "01KERKKT1708Q9GHWQ3552JEZV",
+        "sceneId": "01K4NYD73PXV1Y2ZX27DSPC2HN",
+        "voiceId": "01KZFHK5FV530D234HJ3PSWY3V"
+      },
       "persona": "あなたは市役所・区役所の担当係の職員です。受付から引き継いだ、利用者の具体的な手続き・申請の用件を最後まで担当します。書類の内容確認、本人確認、申請手続きの説明、再発行や郵送の案内など、実務的に会話を進めてください。"
     },
     "account": {
       "id": "account",
       "label": "Accounts",
       "description": "The desk for payments, fees and refunds.",
-      "avatarId": "01KH0D8ZAZHZ762FV5SK3503ZR",
+      "pack": {
+        "avatarId": "01K4M8SH17VHBRTXWEB2KKYPCS",
+        "sceneId": "01K4NYDJED35R2T928Q95630KP",
+        "voiceId": "01KZFHK5FX4D4CFVKN9TXAJSBW"
+      },
       "persona": "あなたは市役所の会計・経理窓口の職員です。料金の支払い、納付書、還付（返金）、領収書など、お金に関する問い合わせを担当します。金額・期限・支払方法（窓口・口座振替・コンビニ納付など）を正確に案内してください。"
     }
   },
