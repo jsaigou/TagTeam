@@ -33,6 +33,29 @@ export type GroundingAnswer = {
 
 export type Speaker = "bureaucrat" | "user";
 
+/**
+ * Emotional tone of a turn — passed to `present(text, { emotion, intensity })`
+ * and drives Perxona facial-expression selection. Mirrors the platform's
+ * PresentationEmotion values.
+ */
+export type TurnEmotion =
+  | "joy"
+  | "excitement"
+  | "admiration"
+  | "caring"
+  | "gratitude"
+  | "sadness"
+  | "disappointment"
+  | "annoyance"
+  | "embarrassment"
+  | "curiosity"
+  | "surprise"
+  | "realization"
+  | "confusion";
+
+/** Strength of the emotional tone. */
+export type TurnIntensity = "low" | "neutral" | "high";
+
 /** One exchange in the simulated call. */
 export type Turn = {
   id: string;
@@ -45,6 +68,9 @@ export type Turn = {
   vocab: string[];
   /** optional Perxona motion markup, e.g. "[MOTION id:1]". */
   motion?: string;
+  /** optional emotional tone for the bureaucrat line (avatar facial expression). */
+  emotion?: TurnEmotion;
+  intensity?: TurnIntensity;
 };
 
 export type SimScript = {

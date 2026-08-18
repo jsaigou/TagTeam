@@ -3,6 +3,10 @@ import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
+import { auth } from "./server/auth.mjs";
+import { toNodeHandler, fromNodeHeaders } from "better-auth/node";
+import { config, llmChat } from "./server/providers.mjs";
+
 // ── Config ──────────────────────────────────────────────────
 
 const PORT = process.env.PORT || 8083;
@@ -12,20 +16,6 @@ const CONNECT_PASSWORD = process.env.PERXONA_CONNECT_PASSWORD;
 const PRESENTER_URL =
   process.env.PRESENTER_URL ||
   "https://cdn.perxona.ai/asia/prod/latest/widget/entry/presenter.js";
-// Search + scrape for the reference step. Each integrator provides their own
-// instances — SearXNG (metasearch) and Firecrawl (page scraping). See SETUP.md.
-const SEARXNG_URL = (process.env.SEARXNG_URL || "").replace(/\/+$/, "");
-const FIRECRAWL_URL = (process.env.FIRECRAWL_URL || "").replace(/\/+$/, "");
-// Optional: Firecrawl API key (cloud api.firecrawl.dev). Self-hosted Firecrawl
-// instances usually run without a key.
-const FIRECRAWL_API_KEY = process.env.FIRECRAWL_API_KEY || "";
-
-// LLM. The browser never calls the LLM directly (CORS) — server.mjs proxies
-// /api/llm, so the key stays server-side. Model is non-secret and still sent
-// by the client (VITE_LLM_MODEL) so it can be changed per call.
-const LLM_BASE_URL = (process.env.LLM_BASE_URL || "https://api.openai.com/v1").replace(/\/+$/, "");
-const LLM_API_KEY = process.env.LLM_API_KEY || "";
-const LLM_MODEL = process.env.LLM_MODEL || "gpt-4o-mini";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIST_DIR = path.join(__dirname, "dist");
@@ -34,6 +24,14 @@ if (!PERXONA_API_BASE_URL || !CONNECT_EMAIL || !CONNECT_PASSWORD) {
   console.error(
     "ERROR: PERXONA_API_BASE_URL, PERXONA_CONNECT_EMAIL and PERXONA_CONNECT_PASSWORD are required.\n" +
       "Copy .env.example to .env and fill them in with your Perxona service credentials.",
+  );
+  process.exit(1);
+}
+
+if (!process.env.BETTER_AUTH_SECRET) {
+  console.error(
+    "ERROR: BETTER_AUTH_SECRET is required.\n" +
+      "Add a random secret to .env, e.g. BETTER_AUTH_SECRET=$(openssl rand -hex 32).",
   );
   process.exit(1);
 }
@@ -143,7 +141,35 @@ async function authedCall(fn) {
 
 const app = express();
 app.disable("x-powered-by");
+
+// ── Auth (better-auth) ─────────────────────────────────────────────────────
+
+// Mounted BEFORE express.json() so toNodeHandler can read the raw body stream.
+const authHandler = toNodeHandler(auth);
+app.all("/api/auth/*splat", async (req, res) => {
+  try {
+    await authHandler(req, res);
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
 app.use(express.json());
+
+/** Express middleware: require a valid session, else 401. Attaches req.user. */
+async function requireAuth(req, res, next) {
+  try {
+    const session = await auth.api.getSession({ headers: fromNodeHeaders(req.headers) });
+    if (!session) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+    req.user = session.user;
+    next();
+  } catch {
+    res.status(401).json({ error: "Unauthorized" });
+  }
+}
 
 function route(handler) {
   return async (req, res) => {
@@ -169,6 +195,7 @@ app.get("/api/config", (_req, res) => {
 // credentials (env) and never ships them to the browser.
 app.get(
   "/api/connect-token",
+  requireAuth,
   route(async (_req, res) => {
     res.set({ "Cache-Control": "no-store", Pragma: "no-cache" });
     const connectToken = await authedCall(async (token) => {
@@ -181,6 +208,7 @@ app.get(
 
 app.get(
   "/api/voices",
+  requireAuth,
   route(async (_req, res) => {
     res.json(await authedCall((token) => connectApi.voices(token)));
   }),
@@ -188,6 +216,7 @@ app.get(
 
 app.get(
   "/api/avatars",
+  requireAuth,
   route(async (_req, res) => {
     res.json(await authedCall((token) => connectApi.avatars(token)));
   }),
@@ -195,6 +224,7 @@ app.get(
 
 app.get(
   "/api/scenes",
+  requireAuth,
   route(async (_req, res) => {
     res.json(await authedCall((token) => connectApi.scenes(token)));
   }),
@@ -209,23 +239,28 @@ app.get(
 // unavailable and returns a clear error rather than silently failing.
 app.get(
   "/api/search",
+  requireAuth,
   route(async (req, res) => {
     const q = String(req.query.q ?? "").trim();
     if (!q) {
       res.status(400).json({ error: "Missing q parameter" });
       return;
     }
-    if (!SEARXNG_URL) {
+    if (!config.search.searxngUrl) {
       res.status(501).json({
         error: "Search is not configured. Set SEARXNG_URL (and FIRECRAWL_URL) in .env — see SETUP.md.",
       });
       return;
     }
 
-    const searchUrl = new URL(`${SEARXNG_URL}/search`);
+    const searchUrl = new URL(`${config.search.searxngUrl}/search`);
     searchUrl.searchParams.set("q", q);
     searchUrl.searchParams.set("format", "json");
     searchUrl.searchParams.set("safesearch", "0");
+    // Geo-scoping (Phase 0 spike): a bare office name otherwise surfaces
+    // wrong-country businesses. ja-JP biases results to Japan; callers append
+    // location terms for the specific prefecture/city.
+    searchUrl.searchParams.set("language", config.search.language);
     const sRes = await fetch(searchUrl, { signal: AbortSignal.timeout(15_000) });
     if (!sRes.ok) {
       throw Object.assign(new Error(`SearXNG search failed: ${sRes.status}`), { status: 502 });
@@ -241,12 +276,12 @@ app.get(
       }));
 
     const scraped = [];
-    if (FIRECRAWL_URL) {
+    if (config.scrape.firecrawlUrl) {
       const fHeaders = { "Content-Type": "application/json" };
-      if (FIRECRAWL_API_KEY) fHeaders.Authorization = `Bearer ${FIRECRAWL_API_KEY}`;
+      if (config.scrape.firecrawlApiKey) fHeaders.Authorization = `Bearer ${config.scrape.firecrawlApiKey}`;
       for (const r of results.slice(0, 2)) {
         try {
-          const fRes = await fetch(`${FIRECRAWL_URL}/v1/scrape`, {
+          const fRes = await fetch(`${config.scrape.firecrawlUrl}/v1/scrape`, {
             method: "POST",
             headers: fHeaders,
             body: JSON.stringify({ url: r.url, formats: ["markdown"] }),
@@ -268,7 +303,7 @@ app.get(
       ...results.map((r, i) => `${i + 1}. ${r.title} — ${r.url}\n${(r.snippet ?? "").slice(0, 300)}`),
       "",
       ...scraped.map((s, i) => `【ページ ${i + 1}: ${s.url}】\n${s.markdown}`),
-      ...(FIRECRAWL_URL ? [] : ["\n(no page scraping configured — set FIRECRAWL_URL to include page content)"]),
+      ...(config.scrape.firecrawlUrl ? [] : ["\n(no page scraping configured — set FIRECRAWL_URL to include page content)"]),
     ].join("\n\n");
 
     res.json({ query: q, results, digest: digest.slice(0, 20_000) });
@@ -279,41 +314,24 @@ app.get(
 // (same-origin, no CORS); the key/base URL stay server-side.
 app.post(
   "/api/llm",
+  requireAuth,
   route(async (req, res) => {
     const { model, messages, temperature, response_format, max_tokens } = req.body ?? {};
     if (!Array.isArray(messages) || messages.length === 0) {
       res.status(400).json({ error: "Missing messages" });
       return;
     }
-    if (!LLM_API_KEY) {
-      res.status(501).json({
-        error: "LLM is not configured. Set LLM_API_KEY (and LLM_BASE_URL / LLM_MODEL) in .env — see SETUP.md.",
+    try {
+      const payload = await llmChat(messages, {
+        model: typeof model === "string" && model ? model : undefined,
+        temperature: typeof temperature === "number" ? temperature : 0.2,
+        responseFormat: response_format,
+        maxTokens: typeof max_tokens === "number" ? max_tokens : 8192,
       });
-      return;
+      res.json(payload);
+    } catch (err) {
+      res.status(err.status ?? 502).json(err.payload ?? { error: String(err) });
     }
-    const headers = { "Content-Type": "application/json" };
-    if (LLM_API_KEY) headers.Authorization = `Bearer ${LLM_API_KEY}`;
-    const upstream = {
-      model: typeof model === "string" && model ? model : LLM_MODEL,
-      messages,
-      temperature: typeof temperature === "number" ? temperature : 0.2,
-      max_tokens: typeof max_tokens === "number" ? max_tokens : 8192,
-      ...(response_format ? { response_format } : {}),
-    };
-    const r = await fetch(`${LLM_BASE_URL}/chat/completions`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(upstream),
-      signal: AbortSignal.timeout(120_000),
-    });
-    if (!r.ok) {
-      const detail = await r.text().catch(() => "");
-      throw Object.assign(new Error(`LLM request failed (${r.status})`), {
-        status: 502,
-        payload: { error: (detail || "LLM upstream error").slice(0, 500) },
-      });
-    }
-    res.json(await r.json());
   }),
 );
 

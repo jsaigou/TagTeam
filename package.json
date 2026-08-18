@@ -14,9 +14,13 @@
     "start": "node --env-file=.env server.mjs"
   },
   "dependencies": {
+    "@better-auth/drizzle-adapter": "^1.6.29",
     "@tailwindcss/vite": "^4.3.3",
+    "better-auth": "^1.6.29",
+    "better-sqlite3": "^13.0.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "drizzle-orm": "^0.45.2",
     "express": "^5.2.1",
     "lucide-react": "^1.29.0",
     "radix-ui": "^1.6.7",
@@ -27,15 +31,23 @@
   },
   "devDependencies": {
     "@perxona/presenter-types": "0.2.0",
+    "@types/better-sqlite3": "^7.6.13",
     "@types/express": "^5.0.6",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.4",
     "concurrently": "^10.0.4",
+    "drizzle-kit": "^0.31.2",
     "oxlint": "^1.75.0",
     "typescript": "~6.0.2",
     "vite": "^8.2.0",
     "vitest": "^4.1.10"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "better-sqlite3",
+      "esbuild"
+    ]
   }
 }

@@ -3,6 +3,8 @@ import type React from "react";
 
 import {
   loadPresenterEngine,
+  type CameraAngle,
+  type PresentOptions,
   type Presenter,
   type PresentationResult,
   type PresentationTarget,
@@ -11,6 +13,9 @@ import {
 export type PresenterEventName =
   | "PRESENTER_STATUS"
   | "CONNECT_TOKEN_EXPIRED"
+  | "SPEECH_TOKEN_EXPIRED"
+  | "ASSET_LOADING_PROGRESS"
+  | "AUDIO_PLAYBACK_STATE"
   | "PLAYING_SPEECH_TEXT"
   | "PERFORMANCE_STATE"
   | "PERFORMANCE_START"
@@ -35,10 +40,22 @@ export interface UsePresenter {
     connectToken: string,
     target: PresentationTarget,
   ) => Promise<void>;
-  present: (content: string) => Promise<PresentationResult | undefined>;
+  present: (
+    content: string,
+    options?: PresentOptions,
+  ) => Promise<PresentationResult | undefined>;
+  presentWithAudio: (
+    audio: ArrayBuffer,
+    content: string,
+    options?: PresentOptions,
+  ) => Promise<PresentationResult | undefined>;
   interruptPresentation: () => void;
   refreshConnectToken: (token: string) => void;
   playMotion: (motionId: string) => Promise<PresentationResult | undefined>;
+  setListening: (isListening: boolean) => void;
+  setThinking: (isThinking: boolean) => void;
+  muteAudio: (muted: boolean) => void;
+  updateCameraAngle: (angle: CameraAngle) => void;
   /** Attach a listener to a presenter element event. Safe before mount. */
   subscribe: (event: PresenterEventName, handler: PresenterEventHandler) => () => void;
 }
@@ -166,12 +183,38 @@ export function usePresenter(options: UsePresenterOptions): UsePresenter {
     [],
   );
 
-  const present = useCallback(async (content: string) => {
-    return presenterRef.current?.present(content);
-  }, []);
+  const present = useCallback(
+    async (content: string, options?: PresentOptions) => {
+      return presenterRef.current?.present(content, options);
+    },
+    [],
+  );
+
+  const presentWithAudio = useCallback(
+    async (audio: ArrayBuffer, content: string, options?: PresentOptions) => {
+      return presenterRef.current?.presentWithAudio(audio, content, options);
+    },
+    [],
+  );
 
   const playMotion = useCallback(async (motionId: string) => {
     return presenterRef.current?.playMotion(motionId);
+  }, []);
+
+  const setListening = useCallback((isListening: boolean) => {
+    presenterRef.current?.setListening(isListening);
+  }, []);
+
+  const setThinking = useCallback((isThinking: boolean) => {
+    presenterRef.current?.setThinking(isThinking);
+  }, []);
+
+  const muteAudio = useCallback((muted: boolean) => {
+    presenterRef.current?.muteAudio(muted);
+  }, []);
+
+  const updateCameraAngle = useCallback((angle: CameraAngle) => {
+    presenterRef.current?.updateCameraAngle(angle);
   }, []);
 
   const interruptPresentation = useCallback(() => {
@@ -190,7 +233,12 @@ export function usePresenter(options: UsePresenterOptions): UsePresenter {
     resumeAudio,
     initialize,
     present,
+    presentWithAudio,
     playMotion,
+    setListening,
+    setThinking,
+    muteAudio,
+    updateCameraAngle,
     interruptPresentation,
     refreshConnectToken,
     subscribe,

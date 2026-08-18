@@ -12,6 +12,11 @@ dist
 dist-ssr
 *.local
 
+# Runtime database + ephemeral uploads
+data/
+uploads/
+.tmp-*
+
 # Environment / secrets — never commit real keys
 .env
 .env.*

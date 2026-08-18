@@ -1,0 +1,15 @@
+node_modules
+dist
+data
+uploads
+.env
+.env.*
+!.env.example
+.git
+.gitignore
+docs
+*.md
+*.png
+*.webp
+*.pdf
+TagTeam Presentation.pdf

@@ -4,6 +4,19 @@
 Japanese bureaucracy phone calls, built on the Perxona Connect Kit (`<sv-presenter>` Web Component)
 and an OpenAI-compatible LLM.
 
+> **Read `docs/architecture.md` first** — it is the authoritative design doc (provider layer,
+> target-specific geo-scoped research, three device modes, roadmap). `docs/phase0-spike.md`
+> records what was verified live against Perxona. `CONTRACT.md` is the stale hackday doc and is
+> being superseded.
+
+## Current status (Phase 1 — Foundation)
+
+Done: presenter layer at the full 0.2.0 surface; canned demo removed; **better-auth + Drizzle +
+SQLite login gate** (the app shows a login screen until authenticated; `/api` routes return 401
+without a session); provider module (`server/providers.mjs`); Dockerfile + docker-compose.
+Next: **Phase 2 — multi-device + scanning** (WebSocket session hub, QR pairing, OpenCV.js
+scan/crop, phone control, three device modes). The WebSocket hub is deliberately not built yet.
+
 ## Stack
 
 - **pnpm only** (`pnpm-lock.yaml` present). Do not mix npm.
@@ -15,19 +28,24 @@ and an OpenAI-compatible LLM.
 ## Environment
 
 - `.env.example` is the only committed env file; copy to `.env` and fill in.
+- **Auth/db:** `BETTER_AUTH_SECRET` (required), optional `DATABASE_PATH` (default
+  `./data/tagteam.db`), `BETTER_AUTH_URL`, `TRUSTED_ORIGINS`.
 - **Server-side (server.mjs):** `PERXONA_API_BASE_URL`, `PERXONA_CONNECT_EMAIL`,
   `PERXONA_CONNECT_PASSWORD`, `PORT`. These hold the one shared Connect identity and never reach
   the browser.
+- **LLM/search (server-side, `server/providers.mjs`):** `LLM_BASE_URL`, `LLM_API_KEY`,
+  `LLM_MODEL`, optional `LLM_PROVIDER=openai|anthropic`; optional `SEARXNG_URL`, `FIRECRAWL_URL`,
+  `FIRECRAWL_API_KEY`, `SEARCH_LANGUAGE` (default `ja-JP`).
 - **Client-side (`VITE_` prefix, exposed to the browser):** `VITE_PRESENTER_URL`,
-  `VITE_LLM_BASE_URL`, `VITE_LLM_API_KEY`, `VITE_LLM_MODEL`. LLM = the foundry a0 router
-  (`https://a0.mango-rockhopper.ts.net/v1`, model `gemma4-mtp`).
+  `VITE_LLM_MODEL`.
 
 ## Architecture
 
-- **No user login.** `server.mjs` (Express) holds the shared Connect identity from env, mints a
-  connect_token for the browser (`GET /api/connect-token`), and proxies the catalog
-  (`GET /api/avatars|scenes|voices`). Vite proxies `/api` → `:8083` in dev; in prod the server
-  serves the built app. Modeled on the perxona-connect-kit `samples/express` server.
+- **User login via better-auth** (`server/auth.mjs`). `server.mjs` (Express) holds the shared
+  Connect identity from env, mints a connect_token for the browser (`GET /api/connect-token`),
+  and proxies the catalog (`GET /api/avatars|scenes|voices`). Vite proxies `/api` → `:8083` in
+  dev; in prod the server serves the built app. Modeled on the perxona-connect-kit
+  `samples/express` server.
 - `<sv-presenter>` runtime loads from the CDN `VITE_PRESENTER_URL`; `@perxona/presenter-types`
   is type-only. Presenter gotchas are in `CONTRACT.md` — read them before writing presenter code.
 - Shared data shapes live in `src/shared/contract.ts` (coordinator-owned, import-only).
@@ -38,9 +56,9 @@ and an OpenAI-compatible LLM.
 - The avatar is ALWAYS on screen (`AvatarStage`, fixed full-screen background) and guides the user
   through setup with speech bubbles (`AvatarGuide`) + spoken Japanese guidance. Default avatar is
   `cc051_meeks` (`src/lib/presets.ts`), launched from SetupScreen once the catalog loads.
-- `resumeAudioPlayback` needs a trusted user gesture: the "Turn sound on" affordance / Start-call
-  click calls `unlockAudio()` (autoplay). Synthetic clicks (e.g. CDP) are NOT trusted gestures.
-- Guide lines are `{ en, jp }` — bubble shows `en`, spoken text is `jp` (matches the JP voices).
+- `resumeAudioPlayback` needs a trusted user gesture: the Get-started / Start-call click calls
+  `unlockAudio()` (autoplay). Synthetic clicks (e.g. CDP) are NOT trusted gestures.
+- Guide lines are `{ en }` — the bubble shows English (matches `GuideLine` in `avatar-context.tsx`).
 
 ## Conventions
 
@@ -53,6 +71,6 @@ and an OpenAI-compatible LLM.
 
 ```bash
 pnpm install
-cp .env.example .env   # fill PERXONA_CONNECT_EMAIL/PASSWORD + VITE_LLM_API_KEY
+cp .env.example .env   # fill BETTER_AUTH_SECRET, PERXONA_CONNECT_EMAIL/PASSWORD, LLM_API_KEY
 pnpm dev               # api on :8083, web on :5173
 ```

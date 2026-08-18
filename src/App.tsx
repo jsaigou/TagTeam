@@ -1,14 +1,18 @@
-import { Leaf } from "lucide-react";
+import { Leaf, Loader2 } from "lucide-react";
 import { AppStoreProvider, useAppStore } from "@/state/app-store";
 import { AvatarProvider } from "@/state/avatar-context";
+import { useAuth } from "@/hooks/use-auth";
+import { authClient } from "@/lib/auth";
+import { LoginScreen } from "@/components/auth/LoginScreen";
 import { AvatarStage } from "@/components/stage/AvatarStage";
 import { AvatarOverlay } from "@/components/stage/AvatarOverlay";
 import { SetupScreen } from "@/components/setup/SetupScreen";
 import { CallScreen } from "@/components/call/CallScreen";
 import { CheatSheetView } from "@/components/cheat-sheet/CheatSheetView";
 
-function Shell() {
+function AppContent() {
   const { state, toSetup, reset } = useAppStore();
+  const { session } = useAuth();
 
   return (
     <div className="relative min-h-svh overflow-hidden bg-background">
@@ -28,6 +32,18 @@ function Shell() {
               <Leaf className="size-5" />
               <span className="text-base font-semibold">TagTeam</span>
             </button>
+            <div className="flex items-center gap-3">
+              <span className="hidden text-xs text-muted-foreground sm:block">
+                {session?.user.email}
+              </span>
+              <button
+                type="button"
+                onClick={() => void authClient.signOut()}
+                className="text-xs font-medium text-muted-foreground hover:text-destructive"
+              >
+                Sign out
+              </button>
+            </div>
           </header>
         )}
 
@@ -49,10 +65,24 @@ function Shell() {
 }
 
 function App() {
+  const { session, isPending } = useAuth();
+
+  /* The app is gated behind a better-auth session. The presenter mounts only
+     after login (it needs a minted connect token, which requires auth). */
+  if (isPending) {
+    return (
+      <div className="flex min-h-svh items-center justify-center text-muted-foreground">
+        <Loader2 className="size-6 animate-spin" />
+      </div>
+    );
+  }
+
+  if (!session) return <LoginScreen />;
+
   return (
     <AppStoreProvider>
       <AvatarProvider>
-        <Shell />
+        <AppContent />
       </AvatarProvider>
     </AppStoreProvider>
   );

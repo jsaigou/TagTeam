@@ -3,6 +3,10 @@ import type { IPresentationWidget } from "@perxona/presenter-types";
 import { getConfig } from "./api";
 
 export type {
+  CameraAngle,
+  PresentationEmotion,
+  PresentationIntensity,
+  PresentOptions,
   PresentationResult,
   PresentationTarget,
 } from "@perxona/presenter-types";

@@ -5,7 +5,6 @@ import { useAppStore, type SetupStep } from "@/state/app-store";
 import { useAvatar } from "@/state/avatar-context";
 import { useCatalog } from "@/hooks/use-catalog";
 import { resolveDefaults } from "@/lib/presets";
-import { DENTIST_DEMO } from "@/fixtures/dentist-demo";
 import { pipeline } from "@/state/pipeline";
 import { DocUpload } from "./DocUpload";
 import { Grounding } from "./Grounding";
@@ -45,7 +44,6 @@ export function SetupScreen() {
     saveAnswers,
     chooseScenario,
     setSim,
-    setCheatSheet,
     setError,
     setBusy,
     toCall,
@@ -98,21 +96,6 @@ export function SetupScreen() {
        doc step line; unlockAudio itself never speaks. */
     void unlockAudio().catch(() => {});
   }, [setSetupOpen, unlockAudio]);
-
-  /* One-click demo: canned dentist-appointment scenario, anime scene. Wait for
-     the presenter to initialize before navigating so Start call can't race it. */
-  const handleDemo = useCallback(async () => {
-    chooseScenario(DENTIST_DEMO.scenario);
-    setSim(DENTIST_DEMO.script, DENTIST_DEMO.glossary);
-    setCheatSheet(DENTIST_DEMO.cheatSheet);
-    try {
-      await session.launch(DENTIST_DEMO.scenario);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to launch the presenter.");
-      return;
-    }
-    toCall();
-  }, [chooseScenario, setSim, setCheatSheet, setError, session, toCall]);
 
   const analyzeDoc = useCallback(
     async (doc: DocInput) => {
@@ -243,14 +226,6 @@ export function SetupScreen() {
         <div className="mt-5">
           {state.setupStep === "doc" && (
             <div className="flex flex-col gap-4">
-              <Button
-                variant="outline"
-                onClick={handleDemo}
-                className="justify-center gap-2 border-accent/50 text-primary hover:bg-accent/20"
-              >
-                <Sparkles className="size-4 text-accent" />
-                Try the demo — book a dentist appointment
-              </Button>
               <DocUpload onAnalyzed={analyzeDoc} busy={analyzing} />
             </div>
           )}

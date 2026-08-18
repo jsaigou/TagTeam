@@ -1,0 +1,232 @@
+# TagTeam — Architecture
+
+Authoritative reference for the production build of TagTeam. Phase 0 (spike) findings live in
+[`phase0-spike.md`](./phase0-spike.md); this document supersedes the older `CONTRACT.md` module
+split where they conflict, and `src/shared/contract.ts` remains the import-only home of the shared
+data shapes.
+
+## 1. Product & principles
+
+**What it is:** an AI voice simulator + live co-pilot that helps non-native residents practice real
+Japanese bureaucracy phone calls against a live Perxona `<sv-presenter>` avatar, grounded in the
+*specific* office they need to reach (mailings + that office's website/rules).
+
+**Guiding principles**
+
+1. **Guided, tightly-scoped LLM work.** A hand-written orchestrator, never an autonomous agent.
+   Every LLM call is a fixed, schema-validated JSON task (see §5). The model never chooses actions.
+2. **Perxona-first.** The Perxona avatar/voice is the default and the hero (sponsor). BYO providers
+   are explicit opt-ins behind interfaces; the app degrades gracefully when only Perxona is set.
+3. **Provider abstraction (BYOK).** Every external capability sits behind an interface + env flag,
+   so a homelab (LLM, whisper, SearXNG, Firecrawl, camofox) is reusable *and* a bare install works.
+4. **Server-authoritative sessions.** Call state, transcript, vocab and help live on the server,
+   so any device combination (desktop / hybrid / phone-only) works and history persists.
+5. **Multi-device by QR.** A phone joins the desktop session by scanning a QR code, acting as
+   camera + microphone + full control surface — or runs the whole app alone.
+6. **Target-specific grounding with geo-scoping.** The scenario is built from the user's documents
+   AND the specific office's located, scraped rules — surfaced for confirmation (never
+   wrong-country info silently).
+7. **Single-container deploy goal.** One Node image, SQLite file on a volume. A compose file with
+   optional sidecars (Postgres, whisper) is acceptable.
+
+## 2. System context
+
+```
+                       ┌──────────────────────────────────────────────┐
+                       │  Node server (one image, Tailscale reachable) │
+                       │  Express · better-auth · Drizzle(SQLite)     │
+                       │  WebSocket session hub                       │
+                       │  ephemeral upload store (auto-delete)        │
+                       │  orchestrator (scoped LLM actions)           │
+                       │  provider layer                              │
+                       └──────┬───────────────┬───────────────┬───────┘
+                              │ WS            │ WS            │
+                 ┌────────────▼───┐  ┌────────▼──────┐  ┌─────▼────────────┐
+                 │ Desktop        │  │ Phone (QR)    │  │ Phone-only       │
+                 │ <sv-presenter> │  │ camera+mic+   │  │ everything       │
+                 │ mic + control  │  │ control       │  │ (full app)       │
+                 └────────────────┘  └───────────────┘  └──────────────────┘
+                              │
+         Homelab (BYOK, optional)         External (BYOK, optional)
+         SearXNG · Firecrawl · camofox    LLM (OpenAI-compat)
+         whisper.cpp · own inference      Connect Chatbot (Gemini)
+         kokoro / qwen TTS                (hosted STT/TTS)
+```
+
+Perxona Connect (`/presentation`, catalog, chatbots, TTS tokens) is reached server-side with the
+shared Connect identity; the browser only ever holds a short-lived `connect_token` for the
+`<sv-presenter>` widget.
+
+## 3. Device modes (one app, N devices)
+
+A **session** has connected **devices**, each with capabilities:
+
+| Capability | Desktop | Phone (companion) | Phone (solo) |
+| --- | --- | --- | --- |
+| Render avatar (`<sv-presenter>`) | ✅ | – | ✅ |
+| Push-to-talk mic → STT | ✅ | ✅ | ✅ |
+| Document camera + scan | ✅ | ✅ | ✅ |
+| Control (hold/resume/tap-help) | ✅ | ✅ | ✅ |
+
+Device roles: `stage` (renders avatar + audio out), `input` (mic/camera), `control`. A device can
+hold several. The server is authoritative for all state; devices are thin views + inputs.
+
+## 4. Data model
+
+All cross-boundary shapes are defined (and will be extended) in `src/shared/contract.ts`.
+
+**Domain additions over the current contract**
+
+```ts
+// Target-specific grounding
+type TargetProfile = {
+  id: string;
+  name: string;            // official name, e.g. 医療法人社団 聖優会 渋谷デンタルクリニック
+  url?: string;            // canonical website
+  address?: string;        // + geoScope derived for search scoping
+  geoScope: { country: "jp"; language: "ja-JP"; city?: string };
+  rules: TargetRule[];     // extracted, each with a citation
+  confidence: number;      // user-confirmed match
+};
+type TargetRule = { id: string; rule: string; source: string; kind: "hours" | "booking" | "required_docs" | "cancellation" | "fees" | "notes" };
+
+// Scenario / call
+type Turn = { id; speaker; jp; en?; vocab: string[]; motion?; emotion?; intensity? };  // + emotion/intensity
+type SimScript = { scenarioTitle: string; target: TargetProfile; turns: Turn[] };      // + target
+type CheatSheet = { goal; keyPhrases; practice; targetRules?: TargetRule[] };          // + target rules
+
+// Adaptive call state (server-owned)
+type CallState = { sessionId; script; glossary; turnIndex; mode: "guided" | "free"; phase: "listening" | "thinking" | "talking" | "user" | "held" | "ended"; transcript: Turn[]; };
+```
+
+**Persistence (Drizzle + SQLite, `better-sqlite3`)**
+
+| Table | Purpose |
+| --- | --- |
+| `user` (better-auth) | App accounts |
+| `session` (better-auth) | App auth sessions |
+| `account` / `verification` (better-auth) | OAuth + email verification |
+| `app_session` | `{ id, userId, status, pairingToken, pairingExpiresAt, createdAt }` — the QR-able unit |
+| `scenario` | `{ id, userId, sessionId, docSummary, target, script, glossary, cheatSheet, createdAt }` — JSON blobs + indexed user/created |
+
+SQLite is the default; Drizzle makes Postgres a config swap. No user documents are persisted
+beyond the short-lived upload store (§8).
+
+## 5. Pipeline — scoped LLM actions
+
+The orchestrator (`src/state/orchestrator.ts`-style, server-side for multi-device) executes a fixed
+set of schema-validated actions. Each returns JSON validated against the contract; failures are
+typed, retried once, then surfaced.
+
+```
+DocInput(s) ─▶ parseDocument (own-LLM, multimodal) ─▶ DocSummary + GroundingQuestions
+answers    ─▶ identifyTarget (doc-prefill + ask + optional URL) ─▶ { name, url?, confidence }
+              └▶ geolocate (mailing address / user confirm / ja-JP) ─▶ geoScope
+mailings + url ─▶ research (SearXNG language=ja-JP) ─▶ scrape (Firecrawl/camofox)
+              └▶ extractTargetRules ─▶ TargetProfile (citations) ─▶ user confirms
+doc + answers + target ─▶ planScenario ─▶ SimScript + Glossary
+call state ─▶ nextTurn ─▶ { jp, en, vocab, emotion, intensity }      (guided or free)
+stuck       ─▶ suggestReply  ·  user utterance ─▶ assessTurn (optional coaching)
+script + glossary ─▶ cheatSheet (goal, phrases, practice, targetRules)
+```
+
+Every step is deterministic orchestration: the model produces exactly one JSON object per prompt,
+validated before use. No tool-calling, no autonomous loops.
+
+## 6. Presenter layer (full 0.2.0 surface)
+
+`src/lib/presenter.ts` / `use-presenter.ts` are upgraded to the verified surface:
+
+- `present(text, { emotion, intensity })` — per-turn facial expressions (verified live).
+- `setListening(true)` / `setThinking(true)` — avatar visibly listens while the user speaks and
+  thinks while the brain generates (verified).
+- `presentWithAudio(wavBuffer, text, opts)` — BYO TTS (kokoro/qwen) provider option (verified).
+- `muteAudio`, `updateCameraAngle(fullbody|halfbody)`.
+- New events: `SPEECH_TOKEN_EXPIRED`, `ASSET_LOADING_PROGRESS`, `AUDIO_PLAYBACK_STATE`.
+- Camera defaults: `updateCameraFOV({ distance: 1, vertical: 0, horizontal: 4.5 })` as today.
+
+**Real-conversation loop (Phase 3):**
+push-to-talk → `setListening(true)` → `/api/stt` (whisper.cpp/hosted) → `setListening(false)`,
+`setThinking(true)` → `nextTurn` → `setThinking(false)` → `present(reply, { emotion, intensity })`.
+
+## 7. Providers
+
+Server-side interfaces, each with an env-flag default and an alternative:
+
+| Interface | Default | Alternative |
+| --- | --- | --- |
+| `LlmProvider.chat()` | OpenAI-compatible BYOK (`LLM_BASE_URL`) | – |
+| `ChatbotProvider.nextTurn()` | Connect Chatbot (`/chatbots/:id/chat`) | own-LLM via `LlmProvider` (fallback) |
+| `SttProvider.transcribe()` | whisper.cpp subprocess | hosted OpenAI-compatible `audio/transcriptions` |
+| `AvatarSpeechProvider` | Perxona `<sv-presenter>` | `presentWithAudio` (kokoro/qwen) |
+| `SearchProvider.search()` | SearXNG (`language=ja-JP`) | none (feature disabled) |
+| `ScrapeProvider.scrape()` | Firecrawl | camofox (BYO) |
+
+Env example: `LLM_PROVIDER=openai|anthropic|connect`, `STT_PROVIDER=whisper-cpp|hosted`,
+`TTS_PROVIDER=perxona|byo`.
+
+## 8. Security & privacy
+
+- **PII.** Uploaded document photos go to an ephemeral store: random `uploadId`, 10-min TTL,
+  deleted on desktop ack or TTL. Never written to the DB, never logged. TLS in transit.
+- **Connect tokens.** Minted server-side from the single env identity; short-lived; the
+  `CONNECT_TOKEN_EXPIRED` event rotates them via `refreshConnectToken`. Never logged.
+- **Auth.** better-auth (email/password + optional OAuth), rate-limited login, session cookies.
+- **API hardening.** Rate limiting on `/api/connect-token`, `/api/llm`, `/api/stt`,
+  `/api/search`, `/api/chatbots*`; body-size limits; validation on every input.
+- **Search/LLM are server-side only** — the browser never holds the LLM/STT keys, and Connect
+  tools cannot reach private IPs (SSRF protection), so research stays on the server.
+- **Wrong-country guard.** Searches are scoped `language=ja-JP` + location terms, and the located
+  target + extracted rules are always shown for user confirmation before a scenario is built.
+
+## 9. WebSocket protocol (session hub)
+
+```
+join      { sessionId, pairingToken, capabilities }      → device role assigned
+state     { callState }                                  → broadcast on every change
+turn      { turn, speakingText }                         → broadcast (drives transcript + vocab)
+control   { hold | resume | tapHelp(entryId) }           → any device
+audio     { audio } → stt → nextTurn                     → orchestrator → state/turn
+upload    { uploadId, filename }                         → pushed to the stage device
+ack       { uploadId }                                   → server deletes the ephemeral file
+```
+
+Reconnect: devices rejoin by `sessionId` + (for companions) the pairing token; the stage device
+re-initializes the presenter with the persisted scenario.
+
+## 10. Deployment
+
+- **One image** (`Dockerfile`): Node 22+ runtime, built `dist/`, SQLite file on `/data` volume,
+  `better-auth` secret + provider keys via env. `pnpm start` serves app + API.
+- **Optional compose** adds Postgres (swap Drizzle driver) and/or a whisper.cpp sidecar when the
+  embedded subprocess is not wanted.
+- **Networking**: reachable via Tailscale (e.g. `tagteam.mango-rockhopper.ts.net`); the QR encodes
+  the reachable URL + `sessionId` + short-lived pairing token.
+- Env contract stays in `.env.example` (server keys only in env, never the browser).
+
+## 11. Roadmap
+
+| Phase | Scope | Status |
+| --- | --- | --- |
+| 0 — Research + spike | Perxona capabilities, runtime wiring, geo-search | ✅ done — `docs/phase0-spike.md` |
+| 1 — Foundation | Architecture doc (this); presenter full surface; provider layer; remove canned demo; better-auth + Drizzle/SQLite (login gate + UI); containerize | 🟡 mostly done — see below |
+| 2 — Multi-device + scanning | QR pairing, OpenCV.js edge-detect/crop, multi-page upload, phone control, 3 modes (WebSocket session hub) | ⏳ |
+| 3 — Real conversation | `/api/stt` (whisper.cpp), push-to-talk, `nextTurn` adaptive brain, listening/thinking | ⏳ |
+| 4 — Coaching + showcase | emotion/intensity wiring, motion catalog browser, roles, difficulty/speed, target rules in cheat sheet, Perxona branding | ⏳ |
+
+**Phase 1 completed:** presenter layer at full 0.2.0 surface (`setListening/setThinking`,
+`present(text,{emotion,intensity})`, `presentWithAudio`, `muteAudio`, `updateCameraAngle`,
+`SPEECH_TOKEN_EXPIRED` event); `emotion`/`intensity` threaded through `Turn` and the script player;
+canned dentist demo removed from the UI; better-auth + Drizzle + SQLite with a login/sign-up gate and
+auth-protected `/api` routes; provider config module (`server/providers.mjs`); Dockerfile +
+docker-compose + `.dockerignore`; SearXNG search geo-scoped `language=ja-JP`.
+
+**Phase 1 deferred:** the WebSocket session hub ships with Phase 2 (it has no consumers until the
+QR multi-device flow exists).
+
+## 12. Open questions
+
+- Per-org vs shared Connect identity for the event — confirm with Perxona.
+- `presentWithAudio` codec/format guarantees on real hardware (16 kHz WAV accepted headless).
+- Chatbot chat latency under conversation cadence (30 calls/min limit).
+- Whether OpenCV.js ships best as a vendored WASM or a CDN dependency (bundle size vs offline).

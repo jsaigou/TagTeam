@@ -2,7 +2,11 @@ import type React from "react";
 import { useCallback, useState } from "react";
 
 import { getConnectToken } from "@/lib/api";
-import type { PresentationResult } from "@/lib/presenter";
+import type {
+  CameraAngle,
+  PresentOptions,
+  PresentationResult,
+} from "@/lib/presenter";
 import {
   usePresenter,
   type PresenterEventName,
@@ -29,11 +33,25 @@ export interface AvatarSession {
   isSpeaking: boolean;
   speakError: Error | null;
   /** Low-level presenter passthroughs (used by the script player). */
-  present: (content: string) => Promise<PresentationResult | undefined>;
+  present: (
+    content: string,
+    options?: PresentOptions,
+  ) => Promise<PresentationResult | undefined>;
+  /** Play caller-provided audio (BYO TTS) on the avatar with `content` as the transcript. */
+  presentWithAudio: (
+    audio: ArrayBuffer,
+    content: string,
+    options?: PresentOptions,
+  ) => Promise<PresentationResult | undefined>;
   /** Play a single motion clip (e.g. eager attention gestures). */
   playMotion: (motionId: string) => Promise<PresentationResult | undefined>;
   resumeAudio: () => Promise<void>;
   interrupt: () => void;
+  /** Avatar state controls (real-conversation loop). */
+  setListening: (isListening: boolean) => void;
+  setThinking: (isThinking: boolean) => void;
+  muteAudio: (muted: boolean) => void;
+  updateCameraAngle: (angle: CameraAngle) => void;
   subscribe: (event: PresenterEventName, handler: PresenterEventHandler) => () => void;
 }
 
@@ -88,7 +106,14 @@ export function useAvatarSession(
   );
 
   const present = useCallback(
-    async (content: string) => presenter.present(content),
+    async (content: string, options?: PresentOptions) =>
+      presenter.present(content, options),
+    [presenter],
+  );
+
+  const presentWithAudio = useCallback(
+    async (audio: ArrayBuffer, content: string, options?: PresentOptions) =>
+      presenter.presentWithAudio(audio, content, options),
     [presenter],
   );
 
@@ -127,6 +152,26 @@ export function useAvatarSession(
     [presenter],
   );
 
+  const setListening = useCallback(
+    (isListening: boolean) => presenter.setListening(isListening),
+    [presenter],
+  );
+
+  const setThinking = useCallback(
+    (isThinking: boolean) => presenter.setThinking(isThinking),
+    [presenter],
+  );
+
+  const muteAudio = useCallback(
+    (muted: boolean) => presenter.muteAudio(muted),
+    [presenter],
+  );
+
+  const updateCameraAngle = useCallback(
+    (angle: CameraAngle) => presenter.updateCameraAngle(angle),
+    [presenter],
+  );
+
   const interrupt = useCallback(() => {
     presenter.interruptPresentation();
   }, [presenter]);
@@ -149,8 +194,13 @@ export function useAvatarSession(
     isSpeaking,
     speakError,
     present,
+    presentWithAudio,
     playMotion,
     resumeAudio,
+    setListening,
+    setThinking,
+    muteAudio,
+    updateCameraAngle,
     interrupt,
     subscribe,
   };

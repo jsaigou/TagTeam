@@ -10,7 +10,7 @@ import type {
   TapHelp,
   Turn,
 } from "@/shared/contract";
-import type { PresentationResult } from "@/lib/presenter";
+import type { PresentationResult, PresentOptions } from "@/lib/presenter";
 import type { AvatarSession } from "./use-avatar-session";
 
 export interface ScriptPlayerDeps {
@@ -126,6 +126,12 @@ export function createScriptPlayer(deps: ScriptPlayerDeps): PlayerInternals {
     return turn.motion ? `${turn.motion} ${turn.jp}`.trim() : turn.jp;
   }
 
+  function buildPresentOptions(turn: Turn): PresentOptions | undefined {
+    return turn.emotion || turn.intensity
+      ? { emotion: turn.emotion, intensity: turn.intensity }
+      : undefined;
+  }
+
   function buildHoldHelp(turn: Turn | null): HoldHelp {
     if (!turn) return FALLBACK_HOLD_HELP;
     const glosses = turn.vocab
@@ -160,11 +166,13 @@ export function createScriptPlayer(deps: ScriptPlayerDeps): PlayerInternals {
 
     setState("talking");
     inSpeech = true;
-    void speakTurn(buildContent(turn));
+    void speakTurn(buildContent(turn), buildPresentOptions(turn));
   }
 
-  async function speakTurn(content: string) {
-    const result: PresentationResult | undefined = await deps.present(content);
+  async function speakTurn(content: string, options?: PresentOptions) {
+    const result: PresentationResult | undefined = options
+      ? await deps.present(content, options)
+      : await deps.present(content);
     if (!running) return;
     // PRESENTATION_INTERRUPTED ("303") is an intentional abort from resume()/
     // interrupt() — the caller keeps control of the run, so do NOT treat it as
