@@ -1,14 +1,17 @@
 import { Leaf, Loader2 } from "lucide-react";
 import { AppStoreProvider, useAppStore } from "@/state/app-store";
+import { SessionProvider } from "@/state/session-context";
 import { AvatarProvider } from "@/state/avatar-context";
 import { useAuth } from "@/hooks/use-auth";
 import { authClient } from "@/lib/auth";
+import { isPhoneJoinUrl } from "@/lib/session-utils";
 import { LoginScreen } from "@/components/auth/LoginScreen";
 import { AvatarStage } from "@/components/stage/AvatarStage";
 import { AvatarOverlay } from "@/components/stage/AvatarOverlay";
 import { SetupScreen } from "@/components/setup/SetupScreen";
 import { CallScreen } from "@/components/call/CallScreen";
 import { CheatSheetView } from "@/components/cheat-sheet/CheatSheetView";
+import { PhoneApp } from "@/components/phone/PhoneApp";
 
 function AppContent() {
   const { state, toSetup, reset } = useAppStore();
@@ -79,11 +82,19 @@ function App() {
 
   if (!session) return <LoginScreen />;
 
+  const phoneMode = isPhoneJoinUrl(window.location.pathname, window.location.hash);
+
   return (
     <AppStoreProvider>
-      <AvatarProvider>
-        <AppContent />
-      </AvatarProvider>
+      <SessionProvider>
+        {phoneMode ? (
+          <PhoneApp />
+        ) : (
+          <AvatarProvider>
+            <AppContent />
+          </AvatarProvider>
+        )}
+      </SessionProvider>
     </AppStoreProvider>
   );
 }

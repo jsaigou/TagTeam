@@ -130,7 +130,7 @@ Browser (React)  ──/api/connect-token──▶  server.mjs  ──login─�
        │  /api/avatars · /api/scenes · /api/voices   (token minted per visitor)
        │                                     │
        │  /api/search ──▶  SearXNG (search) + Firecrawl (scrape)   ◀── yours
-       │
+       │                                     │
        └── <sv-presenter> renders the avatar directly against Connect with the minted token
 ```
 
@@ -138,6 +138,39 @@ Browser (React)  ──/api/connect-token──▶  server.mjs  ──login─�
   tokens via `GET /api/connect-token`.
 - The LLM is proxied through `POST /api/llm` (server-side `LLM_*` env) — the browser never holds
   the API key.
+
+## 5a. Phone companion (Phase 2)
+
+A second device (phone) can join the desktop session as a **camera + control surface**:
+
+1. On the desktop, open **Set up your call** → the **Phone companion** panel shows a QR code
+   (and a 6-character pairing code) for the current session.
+2. On the phone, scan the QR with the phone's camera app (it opens the join URL) — or open the
+   app and type the code manually.
+3. The phone joins as a companion: it can **scan document pages** (pushed to the desktop's
+   document bundle) and send **Hold / Resume / Tap-help** during the call.
+
+How it works:
+
+- A WebSocket session hub runs on the server (`ws://<host>/api/ws`, `server/hub.mjs`). The
+  desktop is the `stage` device (owns the avatar + script player); phones join as `input` +
+  `control`. The stage is exclusive — a second device requesting `stage` is downgraded.
+- Pairing: `POST /api/sessions` mints a session + expiring pairing code (15 min); `join` is
+  validated against it. Rotate with **New code** in the panel.
+- Uploaded pages go to an **ephemeral in-memory store** (10-min TTL, `POST /api/uploads`), are
+  relayed to the desktop over the hub, and are **deleted when the desktop acks** them. Nothing
+  is written to the database.
+- The hub broadcasts an `AppSnapshot` (screen, setup step, script title, player state, active
+  turn) so the phone mirrors the desktop live. Mic input on the phone lands with Phase 3.
+
+Dev notes:
+
+- In local dev the join URL uses whatever host you reach the app on. A physical phone on your
+  LAN needs a LAN-reachable address (e.g. `http://192.168.x.x:5173`, or a Tailscale hostname) —
+  `localhost` will not reach your phone.
+- OpenCV.js (document edge-detect + crop) loads lazily from `VITE_OPENCV_URL` (default
+  docs.opencv.org) on first scan; set it to a vendored copy for offline use. If it can't load,
+  scans fall back to the un-cropped frame.
 
 ## 6. Troubleshooting
 
@@ -149,3 +182,5 @@ Browser (React)  ──/api/connect-token──▶  server.mjs  ──login─�
 | SearXNG returns errors | Confirm JSON output is enabled on the instance; try self-hosting |
 | Firecrawl scrape fails | Confirm `FIRECRAWL_URL` + `FIRECRAWL_API_KEY`; self-hosted instances need Redis/Postgres/Playwright up |
 | LLM calls fail | Check `LLM_API_KEY`/`LLM_BASE_URL`; the model must support `response_format: json_object` |
+| Phone shows "invalid or expired" pairing code | The 15-min code expired or the desktop rotated it — generate a **New code** and re-scan |
+| Phone companion panel stays "Connecting…" | The browser must reach `/api/ws` — check the Vite proxy (`/api/ws` → ws://localhost:8083) or Tailscale route |

@@ -86,11 +86,19 @@ export type ChatMessage = {
   content: string | ChatContentPart[];
 };
 
-/** Build the multimodal user message content for a document photo. */
+/** Build the multimodal user message content for one document photo. */
 export function buildImageUserContent(text: string, doc: ImageDoc): ChatContentPart[] {
+  return buildImagesUserContent(text, [doc]);
+}
+
+/** Build the multimodal user message content for one or more document pages. */
+export function buildImagesUserContent(text: string, images: ImageDoc[]): ChatContentPart[] {
   return [
     { type: "text", text },
-    { type: "image_url", image_url: { url: doc.dataUrl } },
+    ...images.map((image) => ({
+      type: "image_url" as const,
+      image_url: { url: image.dataUrl },
+    })),
   ];
 }
 

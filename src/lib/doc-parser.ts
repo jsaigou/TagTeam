@@ -3,9 +3,9 @@
  * into a structured {@link DocSummary} whose `questions` establish the phone
  * call objective as English GroundingQuestions.
  */
-import type { GroundingQuestion, ImageDoc } from "../shared/contract";
+import type { GroundingQuestion, ImageDoc, ImagesDoc } from "../shared/contract";
 import {
-  buildImageUserContent,
+  buildImagesUserContent,
   chatJson,
   isGroundingQuestionArray,
   isNonEmptyString,
@@ -44,13 +44,14 @@ export const isDocSummary = (value: unknown): value is DocSummary =>
   );
 
 /**
- * Send the document photo to the multimodal model and return a structured
- * summary. Defaults to a generous timeout for image analysis.
+ * Send one or more document photos to the multimodal model and return a
+ * structured summary. Defaults to a generous timeout for image analysis.
  */
 export async function parseDocument(
-  doc: ImageDoc,
+  doc: ImageDoc | ImagesDoc,
   options: ParseDocumentOptions = {},
 ): Promise<DocSummary> {
+  const images: ImageDoc[] = doc.kind === "images" ? doc.images : [doc];
   const messages: ChatMessage[] = [
     {
       role: "system",
@@ -58,7 +59,7 @@ export async function parseDocument(
     },
     {
       role: "user",
-      content: buildImageUserContent("この書類の写真を解析してください。", doc),
+      content: buildImagesUserContent("この書類の写真を解析してください。", images),
     },
   ];
   return chatJson(messages, isDocSummary, "DocSummary", {

@@ -209,8 +209,8 @@ re-initializes the presenter with the persisted scenario.
 | Phase | Scope | Status |
 | --- | --- | --- |
 | 0 — Research + spike | Perxona capabilities, runtime wiring, geo-search | ✅ done — `docs/phase0-spike.md` |
-| 1 — Foundation | Architecture doc (this); presenter full surface; provider layer; remove canned demo; better-auth + Drizzle/SQLite (login gate + UI); containerize | 🟡 mostly done — see below |
-| 2 — Multi-device + scanning | QR pairing, OpenCV.js edge-detect/crop, multi-page upload, phone control, 3 modes (WebSocket session hub) | ⏳ |
+| 1 — Foundation | Architecture doc (this); presenter full surface; provider layer; remove canned demo; better-auth + Drizzle/SQLite (login gate + UI); containerize | ✅ done |
+| 2 — Multi-device + scanning | QR pairing, OpenCV.js edge-detect/crop, multi-page upload, phone control, 3 modes (WebSocket session hub) | ✅ mostly done — see below |
 | 3 — Real conversation | `/api/stt` (whisper.cpp), push-to-talk, `nextTurn` adaptive brain, listening/thinking | ⏳ |
 | 4 — Coaching + showcase | emotion/intensity wiring, motion catalog browser, roles, difficulty/speed, target rules in cheat sheet, Perxona branding | ⏳ |
 
@@ -221,8 +221,21 @@ canned dentist demo removed from the UI; better-auth + Drizzle + SQLite with a l
 auth-protected `/api` routes; provider config module (`server/providers.mjs`); Dockerfile +
 docker-compose + `.dockerignore`; SearXNG search geo-scoped `language=ja-JP`.
 
-**Phase 1 deferred:** the WebSocket session hub ships with Phase 2 (it has no consumers until the
-QR multi-device flow exists).
+**Phase 2 completed (this round):** the WebSocket session hub (`server/hub.mjs`, attached at
+`/api/ws`) with rooms per `app_session`, role assignment (stage is exclusive), reconnect-friendly
+`join`/`state`/`control`/`upload`/`ack` protocol, and an in-memory ephemeral upload store (10-min
+TTL, deleted on ack); session REST (`POST /api/sessions`, `/current`, `/:id/rotate-pairing`,
+uploads) backed by the existing `app_session` table; a desktop QR pairing panel (join URL + 6-char
+code); a phone companion route (`/phone`) with manual-code fallback, live `AppSnapshot` mirror,
+Hold/Resume control, and page scanning; OpenCV.js document edge-detect + perspective crop
+(`src/lib/scan.ts`, lazy-loaded from `VITE_OPENCV_URL`); multi-page document bundles
+(`DocInput.kind: "images"`) through the parse pipeline. All three device modes now exist: desktop
+(stage), phone companion (input+control), phone solo (the app itself on a phone).
+
+**Phase 2 deferred:** the `audio → stt → nextTurn` message and companion mic input ship with
+Phase 3 (no STT yet). Companion tap-help UI is driven by the protocol but has no phone-side
+vocab picker yet — desktop vocab chips still show Tap-help. In-app camera QR *scanning* was
+skipped in favor of the native camera app + manual code.
 
 ## 12. Open questions
 
@@ -230,3 +243,5 @@ QR multi-device flow exists).
 - `presentWithAudio` codec/format guarantees on real hardware (16 kHz WAV accepted headless).
 - Chatbot chat latency under conversation cadence (30 calls/min limit).
 - Whether OpenCV.js ships best as a vendored WASM or a CDN dependency (bundle size vs offline).
+  *Phase 2: lazy CDN load with `VITE_OPENCV_URL` override + raw-frame fallback; revisit vendoring
+  for fully-offline deployments.*

@@ -1,9 +1,18 @@
 import { useCallback, useRef, useState, type DragEvent } from "react";
-import { ImagePlus, PencilLine, UploadCloud } from "lucide-react";
-import type { DocInput } from "@/shared/contract";
+import {
+  ImagePlus,
+  Loader2,
+  PencilLine,
+  ScanLine,
+  Trash2,
+  UploadCloud,
+} from "lucide-react";
+import type { DocInput, ImageDoc } from "@/shared/contract";
+import { useSession } from "@/state/session-context";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { ScanSheet } from "./ScanSheet";
 
 type DocUploadProps = {
   onAnalyzed: (doc: DocInput) => void;
@@ -12,54 +21,80 @@ type DocUploadProps = {
 
 type Mode = "image" | "text";
 
+function toImageDoc(dataUrl: string, mimeType: string): ImageDoc {
+  return { kind: "image", dataUrl, mimeType };
+}
+
 export function DocUpload({ onAnalyzed, busy }: DocUploadProps) {
   const [mode, setMode] = useState<Mode>("image");
-  const [doc, setDoc] = useState<DocInput | null>(null);
+  const [pages, setPages] = useState<ImageDoc[]>([]);
   const [description, setDescription] = useState("");
   const [dragging, setDragging] = useState(false);
+  const [scanOpen, setScanOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const { pendingUploads, ackPendingUpload } = useSession();
 
-  const readFile = useCallback((file: File) => {
-    if (!file.type.startsWith("image/")) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const image: DocInput = {
-        kind: "image",
-        dataUrl: String(reader.result),
-        mimeType: file.type,
+  const readFiles = useCallback((files: FileList | File[]) => {
+    const images = [...files].filter((f) => f.type.startsWith("image/"));
+    if (images.length === 0) return;
+    for (const file of images) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        setPages((prev) => [
+          ...prev,
+          toImageDoc(String(reader.result), file.type),
+        ]);
       };
-      setDoc(image);
-    };
-    reader.readAsDataURL(file);
+      reader.readAsDataURL(file);
+    }
+  }, []);
+
+  const addScannedPage = useCallback((page: ImageDoc) => {
+    setPages((prev) => [...prev, page]);
   }, []);
 
   const onDrop = useCallback(
     (e: DragEvent) => {
       e.preventDefault();
       setDragging(false);
-      const file = e.dataTransfer.files?.[0];
-      if (file) readFile(file);
+      if (e.dataTransfer.files?.length) readFiles(e.dataTransfer.files);
     },
-    [readFile],
+    [readFiles],
+  );
+
+  const removePage = useCallback((index: number) => {
+    setPages((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
+  const addCompanionPage = useCallback(
+    (upload: (typeof pendingUploads)[number]) => {
+      setPages((prev) => [...prev, toImageDoc(upload.dataUrl, upload.mimeType)]);
+      ackPendingUpload(upload.uploadId);
+    },
+    [ackPendingUpload],
   );
 
   const analyze = () => {
     if (mode === "text") {
       const text = description.trim();
       if (text) onAnalyzed({ kind: "text", text });
-    } else if (doc) {
-      onAnalyzed(doc);
+      return;
+    }
+    if (pages.length === 1) {
+      onAnalyzed(pages[0]);
+    } else if (pages.length > 1) {
+      onAnalyzed({ kind: "images", images: pages });
     }
   };
 
   const switchMode = (next: Mode) => {
     setMode(next);
     if (next === "image") setDescription("");
-    else setDoc(null);
+    else setPages([]);
   };
 
   const canAnalyze =
-    mode === "text" ? description.trim().length > 0 : Boolean(doc);
+    mode === "text" ? description.trim().length > 0 : pages.length > 0;
 
   return (
     <div className="flex flex-col gap-4">
@@ -75,7 +110,7 @@ export function DocUpload({ onAnalyzed, busy }: DocUploadProps) {
           )}
         >
           <ImagePlus className="size-4" />
-          Upload a photo
+          Photos
         </button>
         <button
           type="button"
@@ -104,62 +139,120 @@ export function DocUpload({ onAnalyzed, busy }: DocUploadProps) {
             {busy ? "Reading…" : "Analyze"}
           </Button>
         </div>
-      ) : doc ? (
+      ) : (
         <div className="flex flex-col gap-4">
-          <div className="relative mx-auto w-full overflow-hidden rounded-xl border bg-card shadow-sm">
-            <img
-              src={doc.kind === "image" ? doc.dataUrl : ""}
-              alt="Uploaded document preview"
-              className="max-h-60 w-full object-contain"
-            />
-          </div>
+          {pages.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {pages.map((page, i) => (
+                <div key={i} className="group relative">
+                  <img
+                    src={page.dataUrl}
+                    alt={`Page ${i + 1}`}
+                    className="h-24 w-[4.5rem] rounded-lg border object-cover shadow-sm"
+                  />
+                  <button
+                    type="button"
+                    aria-label="Remove page"
+                    onClick={() => removePage(i)}
+                    className="absolute -right-1.5 -top-1.5 rounded-full bg-destructive p-1 text-white opacity-0 transition-opacity group-hover:opacity-100"
+                  >
+                    <Trash2 className="size-3" />
+                  </button>
+                  <span className="absolute bottom-1 left-1 rounded bg-black/60 px-1 text-[10px] text-white">
+                    {i + 1}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Companion-pushed pages (from the phone) */}
+          {pendingUploads.length > 0 && (
+            <div className="flex flex-col gap-2 rounded-lg border border-primary/30 bg-primary/5 p-2">
+              <p className="text-xs font-medium text-primary">
+                From your phone ({pendingUploads.length})
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {pendingUploads.map((upload) => (
+                  <div key={upload.uploadId} className="relative">
+                    <img
+                      src={upload.dataUrl}
+                      alt={upload.filename}
+                      className="h-20 w-14 rounded-lg border object-cover"
+                    />
+                    <button
+                      type="button"
+                      aria-label="Add page from phone"
+                      onClick={() => addCompanionPage(upload)}
+                      className="absolute -bottom-1.5 -right-1.5 rounded-full bg-primary p-1 text-primary-foreground"
+                    >
+                      <ImagePlus className="size-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="flex gap-2">
             <Button
               variant="outline"
-              onClick={() => {
-                setDoc(null);
-                inputRef.current?.click();
-              }}
+              className="flex-1"
+              onClick={() => inputRef.current?.click()}
             >
-              <ImagePlus />
-              Choose another
+              <UploadCloud />
+              Upload photos
             </Button>
-            <Button onClick={analyze} disabled={busy}>
-              {busy ? "Reading document…" : "Analyze document"}
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={() => setScanOpen(true)}
+            >
+              <ScanLine />
+              Scan with camera
             </Button>
           </div>
-        </div>
-      ) : (
-        <div
-          role="button"
-          tabIndex={0}
-          onClick={() => inputRef.current?.click()}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") inputRef.current?.click();
-          }}
-          onDragOver={(e) => {
-            e.preventDefault();
-            setDragging(true);
-          }}
-          onDragLeave={() => setDragging(false)}
-          onDrop={onDrop}
-          className={cn(
-            "flex min-h-44 w-full cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed bg-card p-8 text-center transition-colors",
-            dragging ? "border-ring bg-accent/20" : "border-border",
+
+          {pages.length === 0 && (
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => inputRef.current?.click()}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") inputRef.current?.click();
+              }}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setDragging(true);
+              }}
+              onDragLeave={() => setDragging(false)}
+              onDrop={onDrop}
+              className={cn(
+                "flex min-h-36 w-full cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed bg-card p-6 text-center transition-colors",
+                dragging ? "border-ring bg-accent/20" : "border-border",
+              )}
+            >
+              <div className="rounded-full bg-secondary p-3">
+                <UploadCloud className="size-6 text-primary" />
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Drop photos here — multiple pages are fine
+              </p>
+            </div>
           )}
-        >
-          <div className="rounded-full bg-secondary p-4">
-            <UploadCloud className="size-8 text-primary" />
-          </div>
-          <div>
-            <p className="font-medium">Drop a photo of your document here</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              e.g. a notice from the ward office, renewal letter, or any letter you need to act on
-            </p>
-          </div>
-          <Button type="button" variant="outline">
-            Browse files
-          </Button>
+
+          {pages.length > 0 && (
+            <Button onClick={analyze} disabled={busy} size="lg">
+              {busy ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" />
+                  Reading {pages.length} page{pages.length === 1 ? "" : "s"}…
+                </>
+              ) : (
+                `Analyze ${pages.length} page${pages.length === 1 ? "" : "s"}`
+              )}
+            </Button>
+          )}
         </div>
       )}
 
@@ -167,12 +260,14 @@ export function DocUpload({ onAnalyzed, busy }: DocUploadProps) {
         ref={inputRef}
         type="file"
         accept="image/*"
+        multiple
         className="hidden"
         onChange={(e) => {
-          const file = e.target.files?.[0];
-          if (file) readFile(file);
+          if (e.target.files?.length) readFiles(e.target.files);
         }}
       />
+
+      <ScanSheet open={scanOpen} onOpenChange={setScanOpen} onAdd={addScannedPage} />
     </div>
   );
 }

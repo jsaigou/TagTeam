@@ -10,6 +10,7 @@ import { DocUpload } from "./DocUpload";
 import { Grounding } from "./Grounding";
 import { ScenarioPicker } from "./ScenarioPicker";
 import { ReferenceSearch } from "./ReferenceSearch";
+import { SessionBar } from "@/components/session/SessionBar";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -185,7 +186,7 @@ export function SetupScreen() {
   /* Setup pop-up — compact panel, at most ~25% of the screen. */
   return (
     <div className="flex min-h-svh items-center justify-end px-4 py-6 pr-4 md:pr-8">
-      <div className="w-1/4 min-w-[320px] rounded-2xl border bg-card/90 p-5 shadow-xl backdrop-blur-md sm:p-6">
+      <div className="w-[420px] max-w-[calc(100vw-2rem)] rounded-2xl border bg-card/90 p-5 shadow-xl backdrop-blur-md sm:p-6">
         <div className="flex flex-col gap-1.5">
           <h2 className="text-xl font-semibold text-primary">Set up your call</h2>
           <p className="text-sm text-muted-foreground">
@@ -260,6 +261,10 @@ export function SetupScreen() {
               {state.error}
             </p>
           )}
+        </div>
+
+        <div className="mt-5 border-t pt-4">
+          <SessionBar />
         </div>
       </div>
     </div>

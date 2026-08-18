@@ -9,13 +9,17 @@ and an OpenAI-compatible LLM.
 > records what was verified live against Perxona. `CONTRACT.md` is the stale hackday doc and is
 > being superseded.
 
-## Current status (Phase 1 — Foundation)
+## Current status (Phase 1 + 2)
 
 Done: presenter layer at the full 0.2.0 surface; canned demo removed; **better-auth + Drizzle +
-SQLite login gate** (the app shows a login screen until authenticated; `/api` routes return 401
-without a session); provider module (`server/providers.mjs`); Dockerfile + docker-compose.
-Next: **Phase 2 — multi-device + scanning** (WebSocket session hub, QR pairing, OpenCV.js
-scan/crop, phone control, three device modes). The WebSocket hub is deliberately not built yet.
+SQLite login gate**; provider module (`server/providers.mjs`); Dockerfile + docker-compose;
+**Phase 2 — multi-device + scanning**: WebSocket session hub (`server/hub.mjs`, `/api/ws`) +
+`app_session`/upload REST, desktop QR pairing panel, phone companion route (`/phone`) with
+Hold/Resume + page scanning, OpenCV.js edge-detect/crop (`src/lib/scan.ts`), multi-page document
+bundles (`DocInput.kind: "images"`).
+Next: **Phase 3 — real conversation** (`/api/stt` whisper.cpp, push-to-talk, `nextTurn` adaptive
+brain, `audio` hub message, companion mic). The `audio` WS message is deliberately not implemented
+yet. Companion tap-help has no phone-side vocab picker yet.
 
 ## Stack
 
@@ -37,7 +41,7 @@ scan/crop, phone control, three device modes). The WebSocket hub is deliberately
   `LLM_MODEL`, optional `LLM_PROVIDER=openai|anthropic`; optional `SEARXNG_URL`, `FIRECRAWL_URL`,
   `FIRECRAWL_API_KEY`, `SEARCH_LANGUAGE` (default `ja-JP`).
 - **Client-side (`VITE_` prefix, exposed to the browser):** `VITE_PRESENTER_URL`,
-  `VITE_LLM_MODEL`.
+  `VITE_LLM_MODEL`, optional `VITE_OPENCV_URL` (document scan engine; default docs.opencv.org).
 
 ## Architecture
 
@@ -46,6 +50,11 @@ scan/crop, phone control, three device modes). The WebSocket hub is deliberately
   and proxies the catalog (`GET /api/avatars|scenes|voices`). Vite proxies `/api` → `:8083` in
   dev; in prod the server serves the built app. Modeled on the perxona-connect-kit
   `samples/express` server.
+- **Multi-device sessions** (`server/hub.mjs` + `src/state/session-context.tsx`): the desktop is
+  the `stage` device; phones join `/phone#s=<id>&p=<code>` as `input`+`control`. Session REST
+  (`POST /api/sessions`, uploads) + WS hub at `/api/ws` (Vite proxy upgrades it with `ws:true`).
+  Shared protocol types are in `src/shared/contract.ts`; pure join/status helpers in
+  `src/lib/session-utils.ts`. Uploaded pages are ephemeral (10-min TTL) and deleted on ack.
 - `<sv-presenter>` runtime loads from the CDN `VITE_PRESENTER_URL`; `@perxona/presenter-types`
   is type-only. Presenter gotchas are in `CONTRACT.md` — read them before writing presenter code.
 - Shared data shapes live in `src/shared/contract.ts` (coordinator-owned, import-only).

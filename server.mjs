@@ -1,11 +1,20 @@
 import express from "express";
+import http from "node:http";
+import crypto from "node:crypto";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { eq, desc } from "drizzle-orm";
 
 import { auth } from "./server/auth.mjs";
 import { toNodeHandler, fromNodeHeaders } from "better-auth/node";
 import { config, llmChat } from "./server/providers.mjs";
+import { db, schema } from "./server/db.mjs";
+import {
+  attachHub,
+  generatePairingCode,
+  PAIRING_TTL_MS,
+} from "./server/hub.mjs";
 
 // ── Config ──────────────────────────────────────────────────
 
@@ -343,9 +352,179 @@ if (existsSync(DIST_DIR)) {
   });
 }
 
-app.listen(PORT, () => {
+// ── Session hub (Phase 2) ──────────────────────────────────────────────────
+// QR-able app sessions + ephemeral upload store. The pairing code is the
+// bearer for the WS join; the phone can type it if it cannot scan.
+
+function buildOrigin(req) {
+  const origin = req.headers.origin;
+  if (typeof origin === "string" && origin) return origin.replace(/\/+$/, "");
+  return `${req.protocol}://${req.headers.host}`;
+}
+
+function toSessionSummary(row, req) {
+  const origin = buildOrigin(req);
+  return {
+    id: row.id,
+    status: row.status,
+    pairingToken: row.pairingToken,
+    pairingExpiresAt:
+      row.pairingExpiresAt != null
+        ? new Date(row.pairingExpiresAt).toISOString()
+        : null,
+    joinUrl: `${origin}/phone#s=${encodeURIComponent(row.id)}&p=${encodeURIComponent(row.pairingToken ?? "")}`,
+    wsUrl: `${origin.replace(/^http/, "ws")}/api/ws`,
+    deviceCount: hub.getDeviceCount(row.id),
+  };
+}
+
+// Create an app session + fresh pairing code for the logged-in user.
+app.post(
+  "/api/sessions",
+  requireAuth,
+  route(async (req, res) => {
+    const pairingExpiresAt = new Date(Date.now() + PAIRING_TTL_MS);
+    const [row] = await db
+      .insert(schema.appSession)
+      .values({
+        id: crypto.randomUUID(),
+        userId: req.user.id,
+        status: "active",
+        pairingToken: generatePairingCode(),
+        pairingExpiresAt,
+        createdAt: new Date(),
+      })
+      .returning();
+    res.json(toSessionSummary(row, req));
+  }),
+);
+
+// The user's most recent active session (reconnect path for the desktop).
+app.get(
+  "/api/sessions/current",
+  requireAuth,
+  route(async (req, res) => {
+    const [row] = await db
+      .select()
+      .from(schema.appSession)
+      .where(eq(schema.appSession.userId, req.user.id))
+      .orderBy(desc(schema.appSession.createdAt))
+      .limit(1);
+    if (!row || row.status !== "active") {
+      res.status(404).json({ error: "No active session" });
+      return;
+    }
+    res.json(toSessionSummary(row, req));
+  }),
+);
+
+async function ownedSession(req, res) {
+  const [row] = await db
+    .select()
+    .from(schema.appSession)
+    .where(eq(schema.appSession.id, req.params.id))
+    .limit(1);
+  if (!row || row.userId !== req.user.id) {
+    res.status(404).json({ error: "Session not found" });
+    return null;
+  }
+  return row;
+}
+
+app.get(
+  "/api/sessions/:id",
+  requireAuth,
+  route(async (req, res) => {
+    const row = await ownedSession(req, res);
+    if (!row) return;
+    res.json(toSessionSummary(row, req));
+  }),
+);
+
+// Rotate the pairing code (e.g. it was leaked, or the previous one expired).
+app.post(
+  "/api/sessions/:id/rotate-pairing",
+  requireAuth,
+  route(async (req, res) => {
+    const row = await ownedSession(req, res);
+    if (!row) return;
+    const [updated] = await db
+      .update(schema.appSession)
+      .set({
+        pairingToken: generatePairingCode(),
+        pairingExpiresAt: new Date(Date.now() + PAIRING_TTL_MS),
+      })
+      .where(eq(schema.appSession.id, row.id))
+      .returning();
+    res.json(toSessionSummary(updated, req));
+  }),
+);
+
+// Ephemeral page upload (base64 JSON — no multipart dependency). The bytes
+// live in the in-memory upload store for 10 minutes and are deleted on ack.
+app.post(
+  "/api/uploads",
+  requireAuth,
+  express.json({ limit: "12mb" }),
+  route(async (req, res) => {
+    const { filename, content_base64, mime_type } = req.body ?? {};
+    if (!filename || !content_base64) {
+      res.status(400).json({ error: "'filename' and 'content_base64' are required." });
+      return;
+    }
+    if (filename.includes("/") || filename.includes("\\")) {
+      res.status(400).json({ error: "Invalid filename." });
+      return;
+    }
+    const buffer = Buffer.from(content_base64, "base64");
+    if (buffer.length === 0) {
+      res.status(400).json({ error: "Empty file." });
+      return;
+    }
+    const record = hub.uploadStore.create({
+      filename,
+      mimeType: typeof mime_type === "string" ? mime_type : "image/jpeg",
+      buffer,
+      sessionId: typeof req.body.sessionId === "string" ? req.body.sessionId : undefined,
+    });
+    res.json(record);
+  }),
+);
+
+app.get(
+  "/api/uploads/:uploadId",
+  requireAuth,
+  route(async (req, res) => {
+    const record = hub.uploadStore.get(req.params.uploadId);
+    if (!record) {
+      res.status(404).json({ error: "Upload not found or expired" });
+      return;
+    }
+    res.set({
+      "Content-Type": record.mimeType,
+      "Content-Length": record.buffer.length,
+      "Cache-Control": "no-store",
+    });
+    res.end(record.buffer);
+  }),
+);
+
+app.delete(
+  "/api/uploads/:uploadId",
+  requireAuth,
+  route(async (req, res) => {
+    hub.uploadStore.remove(req.params.uploadId);
+    res.status(204).end();
+  }),
+);
+
+const server = http.createServer(app);
+const hub = attachHub(server, { db, schema });
+
+server.listen(PORT, () => {
   console.log(`\nTagTeam`);
   console.log(`  URL  : http://localhost:${PORT}`);
+  console.log(`  Hub  : ws://localhost:${PORT}/api/ws`);
   connectApi.checkUpstream().then((status) => {
     console.log(`  API  : ${status}  ${PERXONA_API_BASE_URL}`);
   });

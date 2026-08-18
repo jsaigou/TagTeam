@@ -3,12 +3,14 @@ import { ChevronRight, PhoneCall, Sparkles } from "lucide-react";
 import type { HoldHelp, PlayerState, TapHelp, Turn } from "@/shared/contract";
 import { useAppStore } from "@/state/app-store";
 import { useAvatar } from "@/state/avatar-context";
+import { useSession } from "@/state/session-context";
 import { useScriptPlayer } from "@/hooks/use-script-player";
 import { pipeline } from "@/state/pipeline";
 import { DEFAULT_AVATAR_ID, DEFAULT_SCENE_ID, DEFAULT_VOICE_ID } from "@/lib/presets";
 import { Transcript } from "./Transcript";
 import { VocabOverlay } from "./VocabOverlay";
 import { HelpLayer } from "./HelpLayer";
+import { DeviceBadge } from "@/components/session/SessionBar";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
@@ -33,11 +35,12 @@ export function CallScreen() {
     [session.present, session.interrupt, session.subscribe],
   );
   const { player } = useScriptPlayer(playerDeps);
+  const { setPlayerState, setActiveTurn, onControl } = useSession();
 
   const [turns, setTurns] = useState<Turn[]>([]);
   const [activeTurnId, setActiveTurnId] = useState<string | null>(null);
   const [speakingText, setSpeakingText] = useState("");
-  const [playerState, setPlayerState] = useState<PlayerState>("idle");
+  const [playerState, setLocalPlayerState] = useState<PlayerState>("idle");
   const [holdHelp, setHoldHelp] = useState<HoldHelp | null>(null);
   const [tapHelp, setTapHelp] = useState<TapHelp | null>(null);
   const [started, setStarted] = useState(false);
@@ -53,14 +56,20 @@ export function CallScreen() {
         setTurns((prev) => [...prev, turn]);
         setActiveTurnId(turn.id);
         setHoldHelp(null);
+        setActiveTurn(turn);
       },
-      onState: (s) => setPlayerState(s),
+      onState: (s) => {
+        setLocalPlayerState(s);
+        setPlayerState(s);
+      },
     });
     return () => {
       player.setEvents({});
       player.interrupt();
+      setActiveTurn(null);
+      setPlayerState(undefined);
     };
-  }, [player]);
+  }, [player, setActiveTurn, setPlayerState]);
 
   const activeTurn = turns.find((t) => t.id === activeTurnId) ?? null;
   const isSpeaking = playerState === "talking";
@@ -107,6 +116,15 @@ export function CallScreen() {
     },
     [player],
   );
+
+  /* Companion phones send hold/resume/tap-help over the hub — run them here. */
+  useEffect(() => {
+    return onControl((msg) => {
+      if (msg.action === "hold") void handleHold();
+      else if (msg.action === "resume") handleResume();
+      else if (msg.action === "tapHelp" && msg.entryId) handleTapHelp(msg.entryId);
+    });
+  }, [onControl, handleHold, handleResume, handleTapHelp]);
 
   const handleFinish = useCallback(async () => {
     if (!script) return;
@@ -160,9 +178,12 @@ export function CallScreen() {
           <Sparkles className="size-4 text-accent" />
           <span className="text-sm font-medium">{script?.scenarioTitle ?? "Call"}</span>
         </div>
-        <Button variant="ghost" size="sm" onClick={reset}>
-          End & restart
-        </Button>
+        <div className="flex items-center gap-3">
+          <DeviceBadge />
+          <Button variant="ghost" size="sm" onClick={reset}>
+            End & restart
+          </Button>
+        </div>
       </header>
 
       {state.error && (

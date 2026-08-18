@@ -9,13 +9,18 @@
  *   -> ScriptPlayer (per-turn present) -> CheatSheet
  */
 
-/** Document input for the MVP: a photo, or a free-text description of the issue. */
+/** Document input for the MVP: a photo, a set of scanned pages, or a
+ *  free-text description of the issue. */
 export type DocInput =
   | { kind: "image"; dataUrl: string; mimeType: string }
+  | { kind: "images"; images: ImageDoc[] }
   | { kind: "text"; text: string };
 
-/** The photo variant of {@link DocInput}. */
+/** The single-photo variant of {@link DocInput}. */
 export type ImageDoc = Extract<DocInput, { kind: "image" }>;
+
+/** Multi-page variant of {@link DocInput} (scanned document bundle). */
+export type ImagesDoc = Extract<DocInput, { kind: "images" }>;
 
 /** A single English grounding question the AI asks to establish call objective. */
 export type GroundingQuestion = {
@@ -151,3 +156,82 @@ export interface ScriptPlayerHandle {
   setEvents(events: ScriptPlayerEvents): void;
   getState(): PlayerState;
 }
+
+/* -- Phase 2: multi-device sessions (WebSocket hub + QR pairing) ----------- */
+
+/** What a device can do. A device may hold several capabilities. */
+export type DeviceCapability = "stage" | "input" | "control";
+
+/** One connected (or last-known) device in a session. */
+export type DeviceInfo = {
+  deviceId: string;
+  capabilities: DeviceCapability[];
+  connected: boolean;
+};
+
+/** Coarse app state, broadcast to companion devices. */
+export type AppStatus = "setup" | "ready" | "running" | "held" | "ended";
+
+/**
+ * Server-authoritative snapshot of the app, broadcast to companion devices on
+ * every meaningful change (screen, setup step, player state, active turn).
+ * Companion phones render this + send {@link ControlAction}s back.
+ */
+export type AppSnapshot = {
+  sessionId: string;
+  status: AppStatus;
+  screen: string;
+  setupStep?: string;
+  summary?: string;
+  scriptTitle?: string;
+  playerState?: PlayerState;
+  activeTurn?: Turn;
+};
+
+/** Control surface actions a companion device can trigger on the stage. */
+export type ControlAction = "hold" | "resume" | "tapHelp";
+
+/** Client → server WebSocket messages (mirrors docs/architecture.md §9). */
+export type WsClientMessage =
+  | {
+      type: "join";
+      /** Optional when only the 6-char pairing code is known (manual entry). */
+      sessionId?: string;
+      pairingToken: string;
+      capabilities: DeviceCapability[];
+    }
+  | { type: "state"; snapshot: AppSnapshot }
+  | { type: "control"; action: ControlAction; entryId?: string }
+  | { type: "upload"; uploadId: string; filename: string }
+  | { type: "ack"; uploadId: string }
+  | { type: "ping" };
+
+/** Server → client WebSocket messages. */
+export type WsServerMessage =
+  | {
+      type: "joined";
+      deviceId: string;
+      roles: DeviceCapability[];
+      snapshot: AppSnapshot | null;
+    }
+  | { type: "devices"; devices: DeviceInfo[] }
+  | { type: "state"; snapshot: AppSnapshot }
+  | { type: "control"; action: ControlAction; entryId?: string }
+  | { type: "upload"; uploadId: string; filename: string }
+  | { type: "ack"; uploadId: string }
+  | { type: "error"; code: string; message: string };
+
+/** REST shape for a created/looked-up app session (QR-able). */
+export type SessionSummary = {
+  id: string;
+  status: string;
+  pairingToken: string;
+  /** ISO timestamp — after this the pairing code no longer joins. */
+  pairingExpiresAt: string;
+  /** Absolute URL a phone opens to join this session (QR payload). */
+  joinUrl: string;
+  /** WebSocket URL for this session's hub. */
+  wsUrl: string;
+  /** Number of currently-connected devices (excluding this one). */
+  deviceCount: number;
+};
