@@ -1,12 +1,21 @@
-# TagTeam — one `docker compose up`. The DB persists on the ./data volume.
+# TagTeam — single-container stack, docktail shape (Tailscale Services via
+# labels). The app is reached at https://tagteam.mango-rockhopper.ts.net; no
+# host ports are published. The SQLite DB persists on the ./data volume.
 # Copy .env.example to .env and fill in the values (env_file injects them).
 services:
   tagteam:
-    build: .
+    build:
+      context: .
+      # .env is dockerignored + git-ignored, so bake the client bundle's
+      # VITE_* vars from the stack .env at build time (see Dockerfile).
+      args:
+        VITE_PRESENTER_URL: ${VITE_PRESENTER_URL:-}
+        VITE_LLM_MODEL: ${VITE_LLM_MODEL:-gpt-4o-mini}
+        VITE_OPENCV_URL: ${VITE_OPENCV_URL:-}
+        VITE_TTS_PROVIDER: ${VITE_TTS_PROVIDER:-perxona}
     image: tagteam:latest
+    container_name: tagteam-api
     restart: unless-stopped
-    ports:
-      - "8083:8083"
     env_file:
       - .env
     environment:
@@ -14,3 +23,17 @@ services:
       DATABASE_PATH: /app/data/tagteam.db
     volumes:
       - ./data:/app/data
+    networks:
+      - tagteam-internal
+    labels:
+      - "docktail.service.enable=true"
+      - "docktail.service.name=tagteam"
+      - "docktail.service.port=8083"
+      - "docktail.service.service-port=443"
+      - "docktail.service.service-protocol=https"
+      - "docktail.service.description=TagTeam — AI voice simulator & live co-pilot for Japanese bureaucracy calls"
+
+networks:
+  tagteam-internal:
+    name: tagteam-internal # explicit name -- Compose's project-prefix default breaks docktail's external: true reference
+    driver: bridge

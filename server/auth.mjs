@@ -27,8 +27,13 @@ export const auth = betterAuth({
     expiresIn: 60 * 60 * 24 * 7, // 7 days
     updateAge: 60 * 60 * 24, // refresh sliding expiration daily
   },
-  trustedOrigins: (process.env.TRUSTED_ORIGINS || "")
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean),
+  trustedOrigins: [
+    // Vite dev server (pnpm dev) proxies /api to this server, so the browser's
+    // Origin header is http://localhost:5173 — better-auth would reject it.
+    "http://localhost:5173",
+    ...(process.env.TRUSTED_ORIGINS || "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
+  ],
 });

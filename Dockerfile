@@ -5,6 +5,17 @@
 FROM node:22-slim AS build
 WORKDIR /app
 RUN npm install -g pnpm@11
+# VITE_* vars are baked into the client bundle at build time. `.env` is
+# dockerignored + git-ignored, so the deployed image gets them via build args
+# (compose interpolates them from the stack .env on Core).
+ARG VITE_PRESENTER_URL
+ARG VITE_LLM_MODEL
+ARG VITE_OPENCV_URL
+ARG VITE_TTS_PROVIDER
+ENV VITE_PRESENTER_URL=$VITE_PRESENTER_URL \
+    VITE_LLM_MODEL=$VITE_LLM_MODEL \
+    VITE_OPENCV_URL=$VITE_OPENCV_URL \
+    VITE_TTS_PROVIDER=$VITE_TTS_PROVIDER
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 COPY . .
