@@ -306,6 +306,16 @@ calm male voice. The scenario step seeds avatar/scene/voice from the selected ro
 back to the curated defaults when an id is missing from the catalog) and re-applies the pack when
 the role changes, so persona, face, room and voice stay aligned.
 
+**Phase 5 — scenario persistence (this round):** the `scenario` table gains `summary` /
+`reference` / `answers` / `settings` / `selection` columns (idempotent `ALTER TABLE` for existing
+DBs). REST: `POST/GET/PUT/DELETE /api/scenarios` (`server/scenarios.mjs`, user-scoped). The stage
+saves a scenario at call start (script + glossary + coaching settings + grounding + avatar
+selection) and attaches the cheat sheet when the call finishes. The setup screen renders a
+`PastCalls` list (`src/components/setup/PastCalls.tsx`); tapping one restores the full call state
+into the app store, relaunches the avatar with the stored selection (or the role's pack) and jumps
+straight to the call — or the cheat sheet when one exists. Scenarios are JSON blobs scoped by
+`userId`; ephemeral upload ids and Connect tokens are never stored.
+
 ## 12. Open questions
 
 - Per-org vs shared Connect identity for the event — confirm with Perxona.

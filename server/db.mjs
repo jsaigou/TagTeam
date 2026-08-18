@@ -86,7 +86,12 @@ CREATE TABLE IF NOT EXISTS "scenario" (
   "user_id" text NOT NULL REFERENCES "user"("id") ON DELETE cascade,
   "session_id" text REFERENCES "app_session"("id"),
   "doc_summary" text,
+  "summary" text,
+  "reference" text,
   "target" text,
+  "answers" text,
+  "settings" text,
+  "selection" text,
   "script" text,
   "glossary" text,
   "cheat_sheet" text,
@@ -97,6 +102,21 @@ CREATE INDEX IF NOT EXISTS "scenario_session_idx" ON "scenario" ("session_id");
 `;
 
 sqlite.exec(DDL);
+
+// Phase 5c — new columns on the scenario table for existing databases.
+for (const column of [
+  ["summary", "text"],
+  ["reference", "text"],
+  ["answers", "text"],
+  ["settings", "text"],
+  ["selection", "text"],
+]) {
+  try {
+    sqlite.exec(`ALTER TABLE "scenario" ADD COLUMN ${column[0]} ${column[1]};`);
+  } catch {
+    /* column already exists — fine */
+  }
+}
 
 export const db = drizzle(sqlite, { schema });
 export { schema, sqlite };

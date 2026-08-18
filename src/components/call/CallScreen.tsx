@@ -7,6 +7,7 @@ import { useSession } from "@/state/session-context";
 import { useScriptPlayer } from "@/hooks/use-script-player";
 import { usePushToTalk } from "@/hooks/use-push-to-talk";
 import { setCallContext } from "@/lib/session-api";
+import { createScenario, updateScenario } from "@/lib/scenario-api";
 import { pipeline } from "@/state/pipeline";
 import { DEFAULT_AVATAR_ID, DEFAULT_SCENE_ID, DEFAULT_VOICE_ID, PRACTICE_AVATAR_ID } from "@/lib/presets";
 import { Transcript } from "./Transcript";
@@ -26,6 +27,7 @@ export function CallScreen() {
     setBusy,
     setError,
     reset,
+    setScenarioId,
   } = useAppStore();
   const { session: avatar, unlockAudio, speakGuide } = useAvatar();
   const script = state.script;
@@ -126,6 +128,21 @@ export function CallScreen() {
         setConversationError("Live conversation is offline — the script will guide the call.");
       });
     }
+    /* Persist the scenario (Phase 5c) so the user can restore this call later. */
+    if (!state.scenarioId && state.scenario) {
+      createScenario({
+        sessionId: session?.id,
+        summary: state.summary,
+        reference: state.reference,
+        answers: state.answers,
+        settings: state.settings,
+        selection: state.scenario,
+        script,
+        glossary,
+      })
+        .then(({ id }) => setScenarioId(id))
+        .catch(() => {});
+    }
   }, [
     script,
     glossary,
@@ -139,6 +156,9 @@ export function CallScreen() {
     state.answers,
     state.reference,
     state.settings,
+    state.scenario,
+    state.scenarioId,
+    setScenarioId,
   ]);
 
   const handleHold = useCallback(async () => {
@@ -260,6 +280,10 @@ export function CallScreen() {
       try {
         const sheet = await pipeline.makeCheatSheet(script, glossary, state.answers, state.reference);
         setCheatSheet(sheet);
+        /* Attach the cheat sheet to the persisted scenario (Phase 5c). */
+        if (state.scenarioId) {
+          void updateScenario(state.scenarioId, { cheatSheet: sheet }).catch(() => {});
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to build cheat sheet");
         setBusy(false);
@@ -287,6 +311,7 @@ export function CallScreen() {
     state.answers,
     state.cheatSheet,
     state.reference,
+    state.scenarioId,
     setBusy,
     setCheatSheet,
     setError,

@@ -11,7 +11,7 @@ import type {
 } from "@/shared/contract";
 import type { ApiError } from "./api";
 
-async function jsonRequest<T>(path: string, init?: RequestInit): Promise<T> {
+export async function jsonRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
     ...init,
     headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },

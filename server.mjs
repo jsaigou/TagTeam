@@ -10,6 +10,13 @@ import { auth } from "./server/auth.mjs";
 import { toNodeHandler, fromNodeHeaders } from "better-auth/node";
 import { config, llmChat, transcribeAudio } from "./server/providers.mjs";
 import { createCallOrchestrator } from "./server/orchestrator.mjs";
+import {
+  createScenario,
+  deleteScenario,
+  getScenario,
+  listScenarios,
+  updateScenario,
+} from "./server/scenarios.mjs";
 import { db, schema } from "./server/db.mjs";
 import {
   attachHub,
@@ -480,6 +487,75 @@ app.post(
       return;
     }
     orchestrator.setContext(row.id, { script, glossary, summary, answers, reference, settings });
+    res.json({ ok: true });
+  }),
+);
+
+// ── Scenario persistence (Phase 5c) ────────────────────────────────────────
+// Full call state (grounding + settings + script + glossary + cheat sheet)
+// saved per user so a past call can be restored from the setup screen.
+app.get(
+  "/api/scenarios",
+  requireAuth,
+  rateLimit({ windowMs: 60_000, max: 30 }),
+  route(async (req, res) => {
+    res.json({ items: await listScenarios(req.user.id) });
+  }),
+);
+
+app.post(
+  "/api/scenarios",
+  requireAuth,
+  rateLimit({ windowMs: 60_000, max: 10 }),
+  express.json({ limit: "2mb" }),
+  route(async (req, res) => {
+    const { script, glossary } = req.body ?? {};
+    if (!script || !Array.isArray(script.turns) || !Array.isArray(glossary)) {
+      res.status(400).json({ error: "'script' and 'glossary' are required." });
+      return;
+    }
+    const { id } = await createScenario(req.user.id, req.body);
+    res.status(201).json({ id });
+  }),
+);
+
+app.get(
+  "/api/scenarios/:id",
+  requireAuth,
+  route(async (req, res) => {
+    const scenario = await getScenario(req.user.id, req.params.id);
+    if (!scenario) {
+      res.status(404).json({ error: "Scenario not found" });
+      return;
+    }
+    res.json(scenario);
+  }),
+);
+
+app.put(
+  "/api/scenarios/:id",
+  requireAuth,
+  rateLimit({ windowMs: 60_000, max: 20 }),
+  express.json({ limit: "2mb" }),
+  route(async (req, res) => {
+    const updated = await updateScenario(req.user.id, req.params.id, req.body ?? {});
+    if (!updated) {
+      res.status(404).json({ error: "Scenario not found" });
+      return;
+    }
+    res.json(updated);
+  }),
+);
+
+app.delete(
+  "/api/scenarios/:id",
+  requireAuth,
+  route(async (req, res) => {
+    const deleted = await deleteScenario(req.user.id, req.params.id);
+    if (!deleted) {
+      res.status(404).json({ error: "Scenario not found" });
+      return;
+    }
     res.json({ ok: true });
   }),
 );

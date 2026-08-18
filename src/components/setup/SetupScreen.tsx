@@ -1,15 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, Sparkles } from "lucide-react";
-import type { DocInput, GroundingAnswer } from "@/shared/contract";
+import type { DocInput, GroundingAnswer, RoleId } from "@/shared/contract";
 import { useAppStore, type SetupStep } from "@/state/app-store";
 import { useAvatar } from "@/state/avatar-context";
 import { useCatalog } from "@/hooks/use-catalog";
 import { resolveDefaults } from "@/lib/presets";
+import { DEFAULT_VOICE_ID } from "@/lib/presets";
+import { CALL_ROLES } from "@/lib/coaching";
+import { getScenario } from "@/lib/scenario-api";
 import { pipeline } from "@/state/pipeline";
 import { DocUpload } from "./DocUpload";
 import { Grounding } from "./Grounding";
 import { ScenarioPicker } from "./ScenarioPicker";
 import { ReferenceSearch } from "./ReferenceSearch";
+import { PastCalls } from "./PastCalls";
 import { SessionBar } from "@/components/session/SessionBar";
 import { PerxonaBadge } from "@/components/brand/PerxonaBadge";
 import { Button } from "@/components/ui/button";
@@ -37,6 +41,13 @@ const GUIDES: Record<SetupStep, { en: string }> = {
   },
 };
 
+/** Resolve a stored role back to its curated avatar/scene/voice selection. */
+function packToSelection(role: RoleId): { avatarId: string; sceneId: string; voiceId: string } | null {
+  const pack = CALL_ROLES[role].pack;
+  if (!pack?.avatarId || !pack.sceneId) return null;
+  return { avatarId: pack.avatarId, sceneId: pack.sceneId, voiceId: pack.voiceId ?? DEFAULT_VOICE_ID };
+}
+
 export function SetupScreen() {
   const {
     state,
@@ -47,9 +58,11 @@ export function SetupScreen() {
     chooseScenario,
     setSettings,
     setSim,
+    restoreScenario,
     setError,
     setBusy,
     toCall,
+    toCheatSheet,
   } = useAppStore();
   const { setupOpen } = state;
   const catalog = useCatalog();
@@ -159,6 +172,60 @@ export function SetupScreen() {
       state.settings,
       setError,
       session,
+    ],
+  );
+
+  /* Phase 5c — restore a saved call: fetch it, populate the store, relaunch the
+     avatar with the stored selection (or the role's pack) and jump straight in. */
+  const handleRestore = useCallback(
+    async (id: string) => {
+      setBusy(true);
+      try {
+        const stored = await getScenario(id);
+        if (!stored || !stored.script) {
+          setError("That call could not be loaded.");
+          return;
+        }
+        const selection =
+          stored.selection ??
+          (stored.settings
+            ? packToSelection(stored.settings.role)
+            : null);
+        if (!selection) {
+          setError("That call is missing its avatar setup.");
+          return;
+        }
+        restoreScenario({
+          id: stored.id,
+          summary: stored.summary,
+          answers: stored.answers,
+          reference: stored.reference,
+          settings: stored.settings ?? state.settings,
+          selection,
+          script: stored.script,
+          glossary: stored.glossary,
+          cheatSheet: stored.cheatSheet,
+        });
+        await session.launch(selection);
+        if (stored.cheatSheet) {
+          toCheatSheet();
+        } else {
+          toCall();
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Could not restore the call.");
+      } finally {
+        setBusy(false);
+      }
+    },
+    [
+      setBusy,
+      setError,
+      restoreScenario,
+      state.settings,
+      session,
+      toCheatSheet,
+      toCall,
     ],
   );
 
@@ -274,6 +341,8 @@ export function SetupScreen() {
         <div className="mt-5 border-t pt-4">
           <SessionBar />
         </div>
+
+        <PastCalls onRestore={(id) => void handleRestore(id)} busy={state.busy} />
       </div>
     </div>
   );

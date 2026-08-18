@@ -25,6 +25,19 @@ export type ScenarioSelection = {
   voiceId: string;
 };
 
+/** Bulk payload to restore a saved scenario (Phase 5c) into the app state. */
+export type ScenarioRestore = {
+  id: string;
+  summary: string | null;
+  answers: GroundingAnswer[];
+  reference: string | null;
+  settings: CallSettings;
+  selection: ScenarioSelection;
+  script: SimScript;
+  glossary: GlossaryEntry[];
+  cheatSheet: CheatSheet | null;
+};
+
 type AppState = {
   screen: Screen;
   setupStep: SetupStep;
@@ -41,6 +54,8 @@ type AppState = {
   scenario: ScenarioSelection | null;
   /** Phase 4 — coaching preferences for the call (role/difficulty/pace). */
   settings: CallSettings;
+  /** Phase 5c — id of the persisted scenario for this call, once saved. */
+  scenarioId: string | null;
   /** Web-researched reference digest about the office/agency for the call. */
   reference: string | null;
   busy: boolean;
@@ -56,6 +71,8 @@ type Action =
   | { type: "ANSWERS_SAVED"; answers: GroundingAnswer[] }
   | { type: "SCENARIO_CHOSEN"; scenario: ScenarioSelection }
   | { type: "SETTINGS_CHANGED"; settings: CallSettings }
+  | { type: "SCENARIO_SAVED"; id: string }
+  | { type: "SCENARIO_RESTORED"; payload: ScenarioRestore }
   | { type: "SIM_READY"; script: SimScript; glossary: GlossaryEntry[] }
   | { type: "CHEAT_SHEET_READY"; cheatSheet: CheatSheet }
   | { type: "REFERENCE_READY"; digest: string }
@@ -77,6 +94,7 @@ const initialState: AppState = {
   cheatSheet: null,
   scenario: null,
   settings: DEFAULT_CALL_SETTINGS,
+  scenarioId: null,
   reference: null,
   busy: false,
   error: null,
@@ -106,6 +124,22 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, scenario: action.scenario };
     case "SETTINGS_CHANGED":
       return { ...state, settings: action.settings };
+    case "SCENARIO_SAVED":
+      return { ...state, scenarioId: action.id };
+    case "SCENARIO_RESTORED":
+      return {
+        ...state,
+        scenarioId: action.payload.id,
+        summary: action.payload.summary,
+        answers: action.payload.answers,
+        reference: action.payload.reference,
+        settings: action.payload.settings,
+        scenario: action.payload.selection,
+        script: action.payload.script,
+        glossary: action.payload.glossary,
+        cheatSheet: action.payload.cheatSheet,
+        setupStep: action.payload.cheatSheet ? "scenario" : state.setupStep,
+      };
     case "SIM_READY":
       return { ...state, script: action.script, glossary: action.glossary, busy: false };
     case "CHEAT_SHEET_READY":
@@ -136,6 +170,8 @@ type Store = {
   saveAnswers: (answers: GroundingAnswer[]) => void;
   chooseScenario: (scenario: ScenarioSelection) => void;
   setSettings: (settings: CallSettings) => void;
+  setScenarioId: (id: string) => void;
+  restoreScenario: (payload: ScenarioRestore) => void;
   setSim: (script: SimScript, glossary: GlossaryEntry[]) => void;
   setCheatSheet: (cheatSheet: CheatSheet) => void;
   setReference: (digest: string) => void;
@@ -163,6 +199,8 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       saveAnswers: (answers) => dispatch({ type: "ANSWERS_SAVED", answers }),
       chooseScenario: (scenario) => dispatch({ type: "SCENARIO_CHOSEN", scenario }),
       setSettings: (settings) => dispatch({ type: "SETTINGS_CHANGED", settings }),
+      setScenarioId: (id) => dispatch({ type: "SCENARIO_SAVED", id }),
+      restoreScenario: (payload) => dispatch({ type: "SCENARIO_RESTORED", payload }),
       setSim: (script, glossary) => dispatch({ type: "SIM_READY", script, glossary }),
       setCheatSheet: (cheatSheet) => dispatch({ type: "CHEAT_SHEET_READY", cheatSheet }),
       setReference: (digest) => dispatch({ type: "REFERENCE_READY", digest }),
