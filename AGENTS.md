@@ -9,7 +9,7 @@ and an OpenAI-compatible LLM.
 > records what was verified live against Perxona. `CONTRACT.md` is the stale hackday doc and is
 > being superseded.
 
-## Current status (Phase 1 + 2)
+## Current status (Phase 1 + 2 + 3)
 
 Done: presenter layer at the full 0.2.0 surface; canned demo removed; **better-auth + Drizzle +
 SQLite login gate**; provider module (`server/providers.mjs`); Dockerfile + docker-compose;
@@ -17,9 +17,15 @@ SQLite login gate**; provider module (`server/providers.mjs`); Dockerfile + dock
 `app_session`/upload REST, desktop QR pairing panel, phone companion route (`/phone`) with
 Hold/Resume + page scanning, OpenCV.js edge-detect/crop (`src/lib/scan.ts`), multi-page document
 bundles (`DocInput.kind: "images"`).
-Next: **Phase 3 — real conversation** (`/api/stt` whisper.cpp, push-to-talk, `nextTurn` adaptive
-brain, `audio` hub message, companion mic). The `audio` WS message is deliberately not implemented
-yet. Companion tap-help has no phone-side vocab picker yet.
+**Phase 3 — real conversation**: whisper.cpp STT provider + `/api/stt`; server orchestrator
+(`server/orchestrator.mjs`) holding per-session scenario context + transcript; adaptive `nextTurn`
+brain (`server/next-turn.mjs`); push-to-talk (PCM→16kHz WAV, `src/lib/audio-utils.ts` +
+`src/hooks/use-push-to-talk.ts`) on desktop + phone companion; `audio`/`turn`/`phase` hub messages;
+`setListening`/`setThinking` during the loop; `/api/audio` + `POST /api/sessions/:id/call-context`.
+Next: **Phase 4 — coaching + showcase** (emotion/intensity polish, motion catalog browser, roles,
+difficulty/speed, target rules in cheat sheet). Companion tap-help still has no phone-side vocab
+picker yet (desktop vocab chips show Tap-help). In-app camera QR *scanning* remains native-app +
+manual code.
 
 ## Stack
 
@@ -40,6 +46,10 @@ yet. Companion tap-help has no phone-side vocab picker yet.
 - **LLM/search (server-side, `server/providers.mjs`):** `LLM_BASE_URL`, `LLM_API_KEY`,
   `LLM_MODEL`, optional `LLM_PROVIDER=openai|anthropic`; optional `SEARXNG_URL`, `FIRECRAWL_URL`,
   `FIRECRAWL_API_KEY`, `SEARCH_LANGUAGE` (default `ja-JP`).
+- **STT (server-side, Phase 3):** `STT_PROVIDER=whisper-cpp|hosted` (default `whisper-cpp`),
+  `WHISPER_BIN` (default `whisper-cli`), `WHISPER_MODEL` (default `ggml-base.bin`, resolved under
+  `models/` or `data/models/` — whisper.cpp does NOT auto-download; see SETUP.md §5b), optional
+  `STT_LANGUAGE` (default `ja`), and for `hosted`: `STT_BASE_URL`, `STT_API_KEY`, `STT_MODEL`.
 - **Client-side (`VITE_` prefix, exposed to the browser):** `VITE_PRESENTER_URL`,
   `VITE_LLM_MODEL`, optional `VITE_OPENCV_URL` (document scan engine; default docs.opencv.org).
 
@@ -55,6 +65,14 @@ yet. Companion tap-help has no phone-side vocab picker yet.
   (`POST /api/sessions`, uploads) + WS hub at `/api/ws` (Vite proxy upgrades it with `ws:true`).
   Shared protocol types are in `src/shared/contract.ts`; pure join/status helpers in
   `src/lib/session-utils.ts`. Uploaded pages are ephemeral (10-min TTL) and deleted on ack.
+- **Real conversation (Phase 3)** — the **server orchestrator** (`server/orchestrator.mjs`) owns the
+  per-session call context (`POST /api/sessions/:id/call-context` seeds script+glossary at call
+  start) and the running transcript. Push-to-talk audio (16 kHz mono WAV, `src/lib/audio-utils.ts`
+  + `src/hooks/use-push-to-talk.ts`) is POSTed to `/api/audio`, announced over the hub as
+  `{ type: "audio", audioId }`, and the hub runs `audio → stt (whisper.cpp) → nextTurn
+  (server/next-turn.mjs, own-LLM) → broadcast turn/phase`. The stage presents broadcast bureaucrat
+  turns with `setListening`/`setThinking` around the loop; the phone companion mic uses the same
+  `audio` path. If STT/LLM are unconfigured the call falls back to scripted mode (Skip & continue).
 - `<sv-presenter>` runtime loads from the CDN `VITE_PRESENTER_URL`; `@perxona/presenter-types`
   is type-only. Presenter gotchas are in `CONTRACT.md` — read them before writing presenter code.
 - Shared data shapes live in `src/shared/contract.ts` (coordinator-owned, import-only).

@@ -186,10 +186,18 @@ export type AppSnapshot = {
   scriptTitle?: string;
   playerState?: PlayerState;
   activeTurn?: Turn;
+  /** Phase 3 — real-conversation brain state (thinking while the reply is generated). */
+  callPhase?: CallPhase;
 };
 
 /** Control surface actions a companion device can trigger on the stage. */
 export type ControlAction = "hold" | "resume" | "tapHelp";
+
+/**
+ * Phase 3 — real-conversation brain state, broadcast so every device (incl. the
+ * stage's avatar) can mirror "listening" / "thinking". `idle` = not processing.
+ */
+export type CallPhase = "idle" | "thinking";
 
 /** Client → server WebSocket messages (mirrors docs/architecture.md §9). */
 export type WsClientMessage =
@@ -204,6 +212,16 @@ export type WsClientMessage =
   | { type: "control"; action: ControlAction; entryId?: string }
   | { type: "upload"; uploadId: string; filename: string }
   | { type: "ack"; uploadId: string }
+  | {
+      /**
+       * Phase 3 — push-to-talk audio. The mic bytes were POSTed to `/api/audio`
+       * (ephemeral store) first; `audioId` is the store reference. The hub runs
+       * STT → nextTurn and broadcasts the resulting turns back.
+       */
+      type: "audio";
+      audioId: string;
+      mimeType?: string;
+    }
   | { type: "ping" };
 
 /** Server → client WebSocket messages. */
@@ -219,6 +237,18 @@ export type WsServerMessage =
   | { type: "control"; action: ControlAction; entryId?: string }
   | { type: "upload"; uploadId: string; filename: string }
   | { type: "ack"; uploadId: string }
+  | {
+      /**
+       * Phase 3 — a new conversation turn from the orchestrator. Broadcast for
+       * every turn (the user's transcribed utterance AND the bureaucrat reply);
+       * the stage presents the bureaucrat turns, all devices render the transcript.
+       */
+      type: "turn";
+      turn: Turn;
+      /** True when the brain signals the call should wrap up. */
+      end?: boolean;
+    }
+  | { type: "phase"; phase: CallPhase }
   | { type: "error"; code: string; message: string };
 
 /** REST shape for a created/looked-up app session (QR-able). */

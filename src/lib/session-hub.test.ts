@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { WebSocket } from "ws";
@@ -50,13 +50,13 @@ afterEach(async () => {
 });
 
 /** Start a hub backed by an in-memory DB pre-seeded with the given rows. */
-async function startHub(rows: object[] = []) {
+async function startHub(rows: object[] = [], orchestrator?: unknown) {
   const db = makeDb();
   for (const row of rows) {
     await db.insert(schema.appSession).values(row as never).run();
   }
   const server = http.createServer();
-  const hub = attachHub(server, { db, schema });
+  const hub = attachHub(server, { db, schema, orchestrator });
   await new Promise<void>((resolve) => server.listen(0, () => resolve()));
   servers.push(server);
   const { port } = server.address() as AddressInfo;
@@ -259,5 +259,59 @@ describe("session hub", () => {
       check();
     });
     expect(error.code).toBe("NOT_JOINED");
+  });
+
+  it("runs audio through the orchestrator and broadcasts phase + turns", async () => {
+    const fakeOrchestrator = {
+      handleAudio: vi.fn(async () => ({
+        userTurn: { id: "u1", speaker: "user", jp: "すみません。", vocab: [] },
+        replyTurn: { id: "r1", speaker: "bureaucrat", jp: "はい、承知しました。", vocab: [] },
+        end: false,
+      })),
+      clear: vi.fn(),
+    };
+    const { hub, url } = await startHub([activeSessionRow()], fakeOrchestrator);
+    const phone = connect(url, joinPhone);
+    await phone.opened;
+    await waitFor(phone, (m) => m?.type === "joined");
+
+    const audio = hub.uploadStore.create({
+      filename: "audio-1.wav",
+      mimeType: "audio/wav",
+      buffer: Buffer.from("wavdata"),
+      sessionId: "session-1",
+    });
+    phone.ws.send(JSON.stringify({ type: "audio", audioId: audio.uploadId, mimeType: "audio/wav" }));
+
+    const thinking = await waitFor(phone, (m) => m?.type === "phase" && m.phase === "thinking");
+    expect(thinking.phase).toBe("thinking");
+    const userTurn = await waitFor(
+      phone,
+      (m) => m?.type === "turn" && (m.turn as { speaker?: string })?.speaker === "user",
+    );
+    expect(userTurn.turn).toMatchObject({ jp: "すみません。" });
+    const reply = await waitFor(
+      phone,
+      (m) => m?.type === "turn" && (m.turn as { speaker?: string })?.speaker === "bureaucrat",
+    );
+    expect(reply.turn).toMatchObject({ jp: "はい、承知しました。" });
+    const idle = await waitFor(phone, (m) => m?.type === "phase" && m.phase === "idle");
+    expect(idle.phase).toBe("idle");
+
+    expect(fakeOrchestrator.handleAudio).toHaveBeenCalledWith("session-1", expect.objectContaining({ buffer: expect.any(Buffer) }));
+    expect(hub.uploadStore.get(audio.uploadId)).toBeNull();
+  });
+
+  it("errors when the audio record is missing", async () => {
+    const { url } = await startHub([activeSessionRow()], {
+      handleAudio: vi.fn(),
+      clear: vi.fn(),
+    });
+    const phone = connect(url, joinPhone);
+    await phone.opened;
+    await waitFor(phone, (m) => m?.type === "joined");
+    phone.ws.send(JSON.stringify({ type: "audio", audioId: "nope" }));
+    const error = await waitFor(phone, (m) => m?.type === "error");
+    expect(error.code).toBe("AUDIO_EXPIRED");
   });
 });

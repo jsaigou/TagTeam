@@ -146,8 +146,10 @@ validated before use. No tool-calling, no autonomous loops.
 - Camera defaults: `updateCameraFOV({ distance: 1, vertical: 0, horizontal: 4.5 })` as today.
 
 **Real-conversation loop (Phase 3):**
-push-to-talk → `setListening(true)` → `/api/stt` (whisper.cpp/hosted) → `setListening(false)`,
-`setThinking(true)` → `nextTurn` → `setThinking(false)` → `present(reply, { emotion, intensity })`.
+hold-to-talk (16 kHz mono WAV) → `setListening(true)` while recording → `POST /api/audio` +
+WS `audio` message → server STT (whisper.cpp/hosted) → `nextTurn` (server orchestrator) →
+`setThinking(true)` while generating → `present(reply, { emotion, intensity })`. Desktop and phone
+companion share this one path (see §9).
 
 ## 7. Providers
 
@@ -184,15 +186,25 @@ Env example: `LLM_PROVIDER=openai|anthropic|connect`, `STT_PROVIDER=whisper-cpp|
 ```
 join      { sessionId, pairingToken, capabilities }      → device role assigned
 state     { callState }                                  → broadcast on every change
-turn      { turn, speakingText }                         → broadcast (drives transcript + vocab)
+turn      { turn, end? }                                 → orchestrator conversation turns
+phase     { thinking | idle }                            → brain state (avatar mirroring)
 control   { hold | resume | tapHelp(entryId) }           → any device
-audio     { audio } → stt → nextTurn                     → orchestrator → state/turn
+audio     { audioId } → stt → nextTurn                  → orchestrator → turn/phase
 upload    { uploadId, filename }                         → pushed to the stage device
 ack       { uploadId }                                   → server deletes the ephemeral file
 ```
 
+Phase 3 detail: a device captures push-to-talk WAV (16 kHz mono), POSTs it to `/api/audio` (the
+same ephemeral store as scanned pages), then announces the store reference over the hub. The server
+orchestrator (`server/orchestrator.mjs`) runs STT (whisper.cpp, `server/providers.mjs`) + `nextTurn`
+(`server/next-turn.mjs`) against the per-session context seeded by
+`POST /api/sessions/:id/call-context`, and broadcasts the transcribed user turn + the generated
+bureaucrat reply as `turn` messages with `phase: thinking` around the pipeline. The stage presents
+bureaucrat turns (avatar `setThinking` while generating); companions render the same `turn`s.
+
 Reconnect: devices rejoin by `sessionId` + (for companions) the pairing token; the stage device
-re-initializes the presenter with the persisted scenario.
+re-initializes the presenter with the persisted scenario. The orchestrator's context + transcript
+are keyed by session, independent of WS connections, and cleared when the room empties.
 
 ## 10. Deployment
 
@@ -211,7 +223,7 @@ re-initializes the presenter with the persisted scenario.
 | 0 — Research + spike | Perxona capabilities, runtime wiring, geo-search | ✅ done — `docs/phase0-spike.md` |
 | 1 — Foundation | Architecture doc (this); presenter full surface; provider layer; remove canned demo; better-auth + Drizzle/SQLite (login gate + UI); containerize | ✅ done |
 | 2 — Multi-device + scanning | QR pairing, OpenCV.js edge-detect/crop, multi-page upload, phone control, 3 modes (WebSocket session hub) | ✅ mostly done — see below |
-| 3 — Real conversation | `/api/stt` (whisper.cpp), push-to-talk, `nextTurn` adaptive brain, listening/thinking | ⏳ |
+| 3 — Real conversation | `/api/stt` (whisper.cpp), push-to-talk, `nextTurn` adaptive brain, listening/thinking | ✅ done — see below |
 | 4 — Coaching + showcase | emotion/intensity wiring, motion catalog browser, roles, difficulty/speed, target rules in cheat sheet, Perxona branding | ⏳ |
 
 **Phase 1 completed:** presenter layer at full 0.2.0 surface (`setListening/setThinking`,
@@ -232,10 +244,25 @@ Hold/Resume control, and page scanning; OpenCV.js document edge-detect + perspec
 (`DocInput.kind: "images"`) through the parse pipeline. All three device modes now exist: desktop
 (stage), phone companion (input+control), phone solo (the app itself on a phone).
 
-**Phase 2 deferred:** the `audio → stt → nextTurn` message and companion mic input ship with
-Phase 3 (no STT yet). Companion tap-help UI is driven by the protocol but has no phone-side
-vocab picker yet — desktop vocab chips still show Tap-help. In-app camera QR *scanning* was
-skipped in favor of the native camera app + manual code.
+**Phase 2 deferred:** the `audio → stt → nextTurn` message and companion mic shipped with
+Phase 3. Companion tap-help UI is driven by the protocol but has no phone-side vocab picker yet —
+desktop vocab chips still show Tap-help. In-app camera QR *scanning* was skipped in favor of the
+native camera app + manual code.
+
+**Phase 3 completed (this round):** the STT provider (`server/providers.mjs` — whisper.cpp
+subprocess by default, hosted OpenAI-compatible via `STT_PROVIDER=hosted`) + `POST /api/stt`;
+push-to-talk (raw PCM → 16 kHz mono WAV, `src/lib/audio-utils.ts` + `src/hooks/use-push-to-talk.ts`)
+on desktop and the phone companion; the server orchestrator (`server/orchestrator.mjs`) owning
+per-session scenario context + running transcript (seeded via `POST /api/sessions/:id/call-context`);
+the adaptive `nextTurn` brain (`server/next-turn.mjs`, own-LLM with one retry, emotion/intensity/
+vocab validation, `done` end signal); the `audio` hub message (bytes via the ephemeral store +
+`POST /api/audio`, then WS `{ type: "audio", audioId }`) driving `audio → stt → nextTurn → turn`;
+`turn` + `phase` broadcasts that keep the avatar's `setListening`/`setThinking` and the phone's
+transcript in sync. Verified live end-to-end: whisper → STT → nextTurn → avatar reply with
+accumulated context.
+
+**Phase 3 deferred:** Connect Chatbot as a `nextTurn` backend (own-LLM is the default; the chatbot
+`ChatbotProvider` interface from §7 remains unimplemented). Coaching/emotion polish lands in Phase 4.
 
 ## 12. Open questions
 

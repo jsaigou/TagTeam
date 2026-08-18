@@ -25,6 +25,7 @@ import {
   fetchUploadDataUrl,
   getCurrentSession,
   rotatePairing as rotatePairingApi,
+  uploadAudio,
   uploadPage,
 } from "@/lib/session-api";
 import {
@@ -47,6 +48,8 @@ export type PendingUpload = {
 };
 
 export type ControlListener = (message: Extract<WsServerMessage, { type: "control" }>) => void;
+export type TurnListener = (message: Extract<WsServerMessage, { type: "turn" }>) => void;
+export type PhaseListener = (message: Extract<WsServerMessage, { type: "phase" }>) => void;
 
 type SessionContextValue = {
   /** The created/reused app session (desktop). Null until ensured. */
@@ -72,12 +75,18 @@ type SessionContextValue = {
   setActiveTurn: (turn: Turn | null) => void;
   /** Register a handler for `control` messages (stage receives from companions). */
   onControl: (listener: ControlListener) => () => void;
+  /** Phase 3 — register a handler for orchestrator `turn` broadcasts. */
+  onTurn: (listener: TurnListener) => () => void;
+  /** Phase 3 — register a handler for `phase` broadcasts (thinking/idle). */
+  onPhase: (listener: PhaseListener) => () => void;
   /** Stage: consume a companion-pushed page and tell the companion it's done. */
   ackPendingUpload: (uploadId: string) => void;
   /** Companion: upload a scanned page and announce it to the stage. */
   uploadFromCompanion: (page: ImageDoc) => Promise<string>;
   /** Companion: send a control action (hold / resume / tapHelp). */
   sendControl: (action: ControlAction, entryId?: string) => void;
+  /** Phase 3 — upload push-to-talk audio and push it to the orchestrator. */
+  sendPushToTalk: (audio: { audioBase64: string; mimeType?: string }) => Promise<void>;
   /** Desktop: rotate the pairing code (QR + manual entry). */
   rotatePairing: () => Promise<void>;
 };
@@ -122,6 +131,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const ensurePromiseRef = useRef<Promise<SessionSummary | null> | null>(null);
   const rolesRef = useRef<DeviceCapability[]>([]);
   const controlListenersRef = useRef<Set<ControlListener>>(new Set());
+  const turnListenersRef = useRef<Set<TurnListener>>(new Set());
+  const phaseListenersRef = useRef<Set<PhaseListener>>(new Set());
   const playerStateRef = useRef<PlayerState | undefined>(undefined);
   const activeTurnRef = useRef<Turn | null>(null);
 
@@ -196,6 +207,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           break;
         case "control":
           for (const listener of controlListenersRef.current) listener(msg);
+          break;
+        case "turn":
+          for (const listener of turnListenersRef.current) listener(msg);
+          break;
+        case "phase":
+          for (const listener of phaseListenersRef.current) listener(msg);
           break;
         case "upload":
           void handleIncomingUpload(msg.uploadId, msg.filename);
@@ -314,6 +331,25 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     return () => controlListenersRef.current.delete(listener);
   }, []);
 
+  const onTurn = useCallback((listener: TurnListener) => {
+    turnListenersRef.current.add(listener);
+    return () => turnListenersRef.current.delete(listener);
+  }, []);
+
+  const onPhase = useCallback((listener: PhaseListener) => {
+    phaseListenersRef.current.add(listener);
+    return () => phaseListenersRef.current.delete(listener);
+  }, []);
+
+  const sendPushToTalk = useCallback(async (audio: { audioBase64: string; mimeType?: string }) => {
+    const { uploadId } = await uploadAudio(audio);
+    hubRef.current?.send({
+      type: "audio",
+      audioId: uploadId,
+      mimeType: audio.mimeType ?? "audio/wav",
+    });
+  }, []);
+
   const setPlayerState = useCallback(
     (state: PlayerState | undefined) => {
       playerStateRef.current = state;
@@ -355,9 +391,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       setPlayerState,
       setActiveTurn,
       onControl,
+      onTurn,
+      onPhase,
       ackPendingUpload,
       uploadFromCompanion,
       sendControl,
+      sendPushToTalk,
       rotatePairing,
     }),
     [
@@ -374,9 +413,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       setPlayerState,
       setActiveTurn,
       onControl,
+      onTurn,
+      onPhase,
       ackPendingUpload,
       uploadFromCompanion,
       sendControl,
+      sendPushToTalk,
       rotatePairing,
     ],
   );

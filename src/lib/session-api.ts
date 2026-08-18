@@ -2,7 +2,7 @@
  * REST client for the Phase 2 session + ephemeral upload APIs (server.mjs).
  * All endpoints require a better-auth session cookie (same-origin).
  */
-import type { SessionSummary } from "@/shared/contract";
+import type { GlossaryEntry, GroundingAnswer, SessionSummary, SimScript } from "@/shared/contract";
 import type { ApiError } from "./api";
 
 async function jsonRequest<T>(path: string, init?: RequestInit): Promise<T> {
@@ -76,6 +76,61 @@ export async function fetchUploadDataUrl(uploadId: string): Promise<string> {
 /** Discard an uploaded page without acking it (safety cleanup). */
 export const deleteUpload = (uploadId: string) =>
   fetch(`/api/uploads/${uploadId}`, { method: "DELETE" });
+
+/** Upload push-to-talk audio (base64 WAV) to the ephemeral store. Returns the
+ *  store reference the device then announces over the WS hub (`audio` message). */
+export async function uploadAudio(
+  audio: { audioBase64: string; mimeType?: string },
+): Promise<UploadResult> {
+  return jsonRequest<UploadResult>("/api/audio", {
+    method: "POST",
+    body: JSON.stringify({
+      audio_base64: audio.audioBase64,
+      mime_type: audio.mimeType ?? "audio/wav",
+    }),
+  });
+}
+
+/** Transcribe a base64 WAV directly (REST surface of the STT provider). */
+export async function transcribeAudio(audio: {
+  audioBase64: string;
+  mimeType?: string;
+  language?: string;
+}): Promise<{ text: string }> {
+  return jsonRequest<{ text: string }>("/api/stt", {
+    method: "POST",
+    body: JSON.stringify({
+      audio_base64: audio.audioBase64,
+      mime_type: audio.mimeType ?? "audio/wav",
+      ...(audio.language ? { language: audio.language } : {}),
+    }),
+  });
+}
+
+/** Stage-only: seed the server orchestrator with the scenario before the call. */
+export async function setCallContext(
+  sessionId: string,
+  context: {
+    script: SimScript;
+    glossary: GlossaryEntry[];
+    summary?: string | null;
+    answers?: GroundingAnswer[];
+    reference?: string | null;
+  },
+): Promise<{ ok: boolean }> {
+  return jsonRequest<{ ok: boolean }>(`/api/sessions/${sessionId}/call-context`, {
+    method: "POST",
+    body: JSON.stringify({
+      script: context.script,
+      glossary: context.glossary,
+      ...(context.summary ? { summary: context.summary } : {}),
+      ...(Array.isArray(context.answers) && context.answers.length > 0
+        ? { answers: context.answers }
+        : {}),
+      ...(context.reference ? { reference: context.reference } : {}),
+    }),
+  });
+}
 
 export function dataUrlToBase64(dataUrl: string): string {
   const comma = dataUrl.indexOf(",");

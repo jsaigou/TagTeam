@@ -32,6 +32,8 @@ Fill in the required values:
 | `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` | The OpenAI-compatible LLM used for document grounding, script generation, and cheat sheets — **server-side**, proxied via `/api/llm` so the key never reaches the browser |
 | `VITE_LLM_MODEL` | (optional) Model id sent by the client to the `/api/llm` proxy; overrides `LLM_MODEL` |
 | `VITE_PRESENTER_URL` | (optional) `<sv-presenter>` engine CDN; defaults to the asia channel |
+| `WHISPER_BIN` / `WHISPER_MODEL` | (Phase 3, optional) whisper.cpp CLI + model for push-to-talk; see [§5b](#5b-push-to-talk--real-conversation-phase-3) |
+| `STT_PROVIDER` / `STT_BASE_URL` / `STT_API_KEY` / `STT_MODEL` | (Phase 3, optional) hosted STT alternative to whisper.cpp |
 | `SEARXNG_URL` / `FIRECRAWL_URL` / `FIRECRAWL_API_KEY` | (optional) your search + scrape endpoints — see [§4](#4-connect-your-own-search) |
 
 `.env` is git-ignored — never commit it.
@@ -161,7 +163,8 @@ How it works:
   relayed to the desktop over the hub, and are **deleted when the desktop acks** them. Nothing
   is written to the database.
 - The hub broadcasts an `AppSnapshot` (screen, setup step, script title, player state, active
-  turn) so the phone mirrors the desktop live. Mic input on the phone lands with Phase 3.
+  turn) so the phone mirrors the desktop live. In Phase 3 the phone can also **speak into the
+  call** (hold-to-talk → server brain → the desktop plays the office's reply).
 
 Dev notes:
 
@@ -171,6 +174,46 @@ Dev notes:
 - OpenCV.js (document edge-detect + crop) loads lazily from `VITE_OPENCV_URL` (default
   docs.opencv.org) on first scan; set it to a vendored copy for offline use. If it can't load,
   scans fall back to the un-cropped frame.
+
+## 5b. Push-to-talk & real conversation (Phase 3)
+
+At each user turn you can **hold to speak** instead of reading the scripted line. The mic audio is
+transcribed to Japanese (whisper.cpp), the server's adaptive `nextTurn` brain generates the office's
+reply, and the avatar speaks it back. This works from the desktop and from the phone companion.
+
+Speech-to-text needs one backend (server-side, never in the browser):
+
+**Option A — whisper.cpp (default):** `brew install whisper-cpp` puts `whisper-cli` on PATH, then
+download the multilingual model once (whisper.cpp does **not** auto-download):
+
+```bash
+mkdir -p data/models
+curl -L -o data/models/ggml-base.bin https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin
+```
+
+`data/` is git-ignored, so the model stays local. `WHISPER_BIN` defaults to `whisper-cli`;
+`WHISPER_MODEL` resolves `ggml-base.bin` under `models/` or `data/models/`. Use a bigger model
+(`ggml-small.bin`, `ggml-medium.bin`) for better Japanese accuracy on a capable machine.
+
+**Option B — hosted OpenAI-compatible transcription:**
+
+```
+STT_PROVIDER=hosted
+STT_BASE_URL=https://api.openai.com/v1
+STT_API_KEY=sk-...
+STT_MODEL=whisper-1
+```
+
+How the conversation works:
+
+- The browser records **raw PCM** (no MediaRecorder/webm — whisper.cpp reads WAV natively), downsamples
+  to 16 kHz mono and WAV-encodes it (`src/lib/audio-utils.ts`).
+- The WAV is POSTed to `/api/audio` (the same ephemeral 10-min store as scanned pages), then announced
+  over the hub as an `audio` message. The server runs `audio → stt → nextTurn → turn` and broadcasts
+  the transcribed user line + the generated reply to every device (`server/orchestrator.mjs`).
+- The avatar shows `setListening` while you hold the button and `setThinking` while the brain works.
+- No STT configured? The call still runs in **scripted mode** — the "Skip & continue" button advances
+  the script instead of waiting for speech.
 
 ## 6. Troubleshooting
 
@@ -182,5 +225,9 @@ Dev notes:
 | SearXNG returns errors | Confirm JSON output is enabled on the instance; try self-hosting |
 | Firecrawl scrape fails | Confirm `FIRECRAWL_URL` + `FIRECRAWL_API_KEY`; self-hosted instances need Redis/Postgres/Playwright up |
 | LLM calls fail | Check `LLM_API_KEY`/`LLM_BASE_URL`; the model must support `response_format: json_object` |
+| "Hold to speak" says microphone denied | Allow mic access in the browser (the request only fires while holding) |
+| Push-to-talk upload fails | Check the server is reachable (`/api/audio`); the 8 MB ephemeral-store cap is plenty for 16 kHz WAV |
+| STT error from whisper.cpp | `WHISPER_BIN` not on PATH or `WHISPER_MODEL` missing — download it into `data/models/` (see §5b) |
+| "The office is still replying" | The brain is mid-generation; wait a moment before holding again |
 | Phone shows "invalid or expired" pairing code | The 15-min code expired or the desktop rotated it — generate a **New code** and re-scan |
 | Phone companion panel stays "Connecting…" | The browser must reach `/api/ws` — check the Vite proxy (`/api/ws` → ws://localhost:8083) or Tailscale route |

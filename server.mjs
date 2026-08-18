@@ -8,7 +8,8 @@ import { eq, desc } from "drizzle-orm";
 
 import { auth } from "./server/auth.mjs";
 import { toNodeHandler, fromNodeHeaders } from "better-auth/node";
-import { config, llmChat } from "./server/providers.mjs";
+import { config, llmChat, transcribeAudio } from "./server/providers.mjs";
+import { createCallOrchestrator } from "./server/orchestrator.mjs";
 import { db, schema } from "./server/db.mjs";
 import {
   attachHub,
@@ -344,6 +345,113 @@ app.post(
   }),
 );
 
+// ── Rate limiting (API hardening, architecture §8) ─────────────────────────
+
+/** Minimal fixed-window in-memory rate limiter keyed by user (or IP). */
+function rateLimit({ windowMs, max }) {
+  const hits = new Map();
+  setInterval(() => {
+    const now = Date.now();
+    for (const [key, entry] of hits) {
+      if (entry.resetAt <= now) hits.delete(key);
+    }
+  }, windowMs).unref?.();
+  return (req, res, next) => {
+    const key = req.user?.id ?? req.ip ?? "anonymous";
+    const now = Date.now();
+    const entry = hits.get(key);
+    if (!entry || entry.resetAt <= now) {
+      hits.set(key, { count: 1, resetAt: now + windowMs });
+      next();
+      return;
+    }
+    entry.count += 1;
+    if (entry.count > max) {
+      res.status(429).json({ error: "Too many requests — please wait a moment and try again." });
+      return;
+    }
+    next();
+  };
+}
+
+// ── Speech-to-text (Phase 3) ───────────────────────────────────────────────
+
+// The browser captures 16 kHz mono WAV (see src/lib/push-to-talk.ts) and POSTs
+// it here as base64 JSON — the STT key/binary stay server-side. whisper.cpp is
+// the default backend; STT_PROVIDER=hosted switches to an OpenAI-compatible
+// `/audio/transcriptions` endpoint.
+app.post(
+  "/api/stt",
+  requireAuth,
+  rateLimit({ windowMs: 60_000, max: 20 }),
+  express.json({ limit: "15mb" }),
+  route(async (req, res) => {
+    const { audio_base64, mime_type, language } = req.body ?? {};
+    if (typeof audio_base64 !== "string" || !audio_base64) {
+      res.status(400).json({ error: "'audio_base64' is required." });
+      return;
+    }
+    const buffer = Buffer.from(audio_base64, "base64");
+    if (buffer.length === 0) {
+      res.status(400).json({ error: "Empty audio." });
+      return;
+    }
+    const result = await transcribeAudio(buffer, {
+      mimeType: typeof mime_type === "string" ? mime_type : "audio/wav",
+      language: typeof language === "string" ? language : undefined,
+    });
+    res.json(result);
+  }),
+);
+
+// Push-to-talk bytes go through the same ephemeral store as scanned pages: POST
+// once, then announce the store reference over the WS hub (`audio` message).
+app.post(
+  "/api/audio",
+  requireAuth,
+  rateLimit({ windowMs: 60_000, max: 30 }),
+  express.json({ limit: "15mb" }),
+  route(async (req, res) => {
+    const { audio_base64, mime_type, sessionId } = req.body ?? {};
+    if (typeof audio_base64 !== "string" || !audio_base64) {
+      res.status(400).json({ error: "'audio_base64' is required." });
+      return;
+    }
+    const buffer = Buffer.from(audio_base64, "base64");
+    if (buffer.length === 0) {
+      res.status(400).json({ error: "Empty audio." });
+      return;
+    }
+    const record = hub.uploadStore.create({
+      filename: `audio-${Date.now()}.wav`,
+      mimeType: typeof mime_type === "string" ? mime_type : "audio/wav",
+      buffer,
+      sessionId: typeof sessionId === "string" ? sessionId : undefined,
+    });
+    res.json(record);
+  }),
+);
+
+// The stage seeds the scenario context once at call start; the orchestrator
+// then runs `audio → stt → nextTurn` for any device in the session.
+app.post(
+  "/api/sessions/:id/call-context",
+  requireAuth,
+  rateLimit({ windowMs: 60_000, max: 10 }),
+  express.json({ limit: "2mb" }),
+  route(async (req, res) => {
+    const row = await ownedSession(req, res);
+    if (!row) return;
+    const { script, glossary, summary, answers, reference } = req.body ?? {};
+    if (!script || !Array.isArray(script.turns) || !Array.isArray(glossary)) {
+      res.status(400).json({ error: "'script' and 'glossary' are required." });
+      return;
+    }
+    orchestrator.setContext(row.id, { script, glossary, summary, answers, reference });
+    res.json({ ok: true });
+  }),
+);
+
 // Static frontend (production build). Dev uses Vite with a /api proxy.
 if (existsSync(DIST_DIR)) {
   app.use(express.static(DIST_DIR));
@@ -519,7 +627,8 @@ app.delete(
 );
 
 const server = http.createServer(app);
-const hub = attachHub(server, { db, schema });
+const orchestrator = createCallOrchestrator({ transcribeAudio, llmChat });
+const hub = attachHub(server, { db, schema, orchestrator });
 
 server.listen(PORT, () => {
   console.log(`\nTagTeam`);

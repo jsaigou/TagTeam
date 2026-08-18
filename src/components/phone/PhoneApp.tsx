@@ -1,14 +1,16 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Check,
   Loader2,
+  Mic,
   Pause,
   Play,
   ScanLine,
   Smartphone,
 } from "lucide-react";
-import type { ImageDoc } from "@/shared/contract";
+import type { ImageDoc, Turn } from "@/shared/contract";
 import { useSession } from "@/state/session-context";
+import { usePushToTalk } from "@/hooks/use-push-to-talk";
 import { parsePhoneHash } from "@/lib/session-utils";
 import { ScanSheet } from "@/components/setup/ScanSheet";
 import { Button } from "@/components/ui/button";
@@ -33,17 +35,31 @@ export function PhoneApp() {
     sentUploadIds,
     uploadFromCompanion,
     sendControl,
+    sendPushToTalk,
+    onPhase,
+    onTurn,
   } = useSession();
+  const ptt = usePushToTalk();
   const [code, setCode] = useState("");
   const [scanOpen, setScanOpen] = useState(false);
   const [pages, setPages] = useState<SentPage[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [thinking, setThinking] = useState(false);
+  const [liveTurns, setLiveTurns] = useState<Turn[]>([]);
+  const [voiceError, setVoiceError] = useState<string | null>(null);
 
   const hasCode = useMemo(
     () => parsePhoneHash(window.location.hash) !== null,
     // Re-evaluate when the hash changes (manual entry sets it).
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [window.location.hash],
+  );
+
+  /* Phase 3 — mirror the orchestrator's brain state and live transcript. */
+  useEffect(() => onPhase((m) => setThinking(m.phase === "thinking")), [onPhase]);
+  useEffect(
+    () => onTurn((m) => setLiveTurns((prev) => [...prev.slice(-9), m.turn])),
+    [onTurn],
   );
 
   const enterCode = () => {
@@ -64,6 +80,23 @@ export function PhoneApp() {
     },
     [uploadFromCompanion],
   );
+
+  const handlePTTDown = useCallback(async () => {
+    if (ptt.state === "recording") return;
+    setVoiceError(null);
+    await ptt.start();
+  }, [ptt]);
+
+  const handlePTTUp = useCallback(async () => {
+    if (ptt.state !== "recording") return;
+    const audio = await ptt.stop();
+    if (!audio) return;
+    try {
+      await sendPushToTalk(audio);
+    } catch (err) {
+      setVoiceError(err instanceof Error ? err.message : "Could not send your voice.");
+    }
+  }, [ptt, sendPushToTalk]);
 
   const connected = hubStatus === "open";
   const isHeld = snapshot?.status === "held";
@@ -179,6 +212,53 @@ export function PhoneApp() {
             </Button>
           </div>
 
+          {/* Phase 3 — companion mic: hold to speak, the server brain replies */}
+          <div className="flex flex-col gap-2 rounded-xl border bg-card p-4">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium">Speak</p>
+              {(thinking || ptt.state === "recording") && (
+                <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <span
+                    className={cn(
+                      "size-1.5 animate-pulse rounded-full",
+                      ptt.state === "recording" ? "bg-destructive" : "bg-accent",
+                    )}
+                  />
+                  {ptt.state === "recording" ? "Listening…" : thinking ? "Office is thinking…" : ""}
+                </span>
+              )}
+            </div>
+            <button
+              type="button"
+              onPointerDown={() => void handlePTTDown()}
+              onPointerUp={() => void handlePTTUp()}
+              onPointerLeave={() => void handlePTTUp()}
+              onPointerCancel={() => void handlePTTUp()}
+              disabled={!ptt.supported || !running}
+              className={cn(
+                "flex select-none touch-none items-center justify-center gap-2 rounded-lg border border-accent/40 bg-accent/15 px-4 py-3 text-sm font-semibold text-accent transition-colors hover:bg-accent/25 active:bg-accent/30",
+                (!ptt.supported || !running) && "cursor-not-allowed opacity-50",
+              )}
+            >
+              <Mic className="size-4" />
+              {ptt.state === "recording" ? "Release to send" : "Hold to speak"}
+            </button>
+            {voiceError && <p className="text-xs text-destructive">{voiceError}</p>}
+            {liveTurns.length > 0 && (
+              <div className="flex flex-col gap-1.5 border-t pt-2">
+                {liveTurns.map((t) => (
+                  <div key={t.id} className="flex flex-col">
+                    <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                      {t.speaker === "user" ? "You" : "Office"}
+                    </p>
+                    <p className="text-sm text-foreground">{t.jp}</p>
+                    {t.en && <p className="text-xs text-muted-foreground">{t.en}</p>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           {/* Document scanning */}
           <div className="flex flex-col gap-2 rounded-xl border bg-card p-4">
             <div className="flex items-center justify-between">
@@ -221,7 +301,7 @@ export function PhoneApp() {
           </div>
 
           <p className="text-center text-[11px] text-muted-foreground">
-            Mic input arrives in Phase 3 — for now the phone is camera + control.
+            Speak into the call with the hold button — the desktop plays the office's reply.
           </p>
         </>
       )}

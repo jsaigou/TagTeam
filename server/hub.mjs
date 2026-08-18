@@ -112,7 +112,7 @@ export function createUploadStore({
  * Attach the WS hub to an http.Server. Returns the hub handle
  * `{ uploadStore, getDeviceCount, rooms }`.
  */
-export function attachHub(server, { db, schema, uploadStore }) {
+export function attachHub(server, { db, schema, uploadStore, orchestrator }) {
   const store = uploadStore ?? createUploadStore();
   store.start();
 
@@ -250,12 +250,53 @@ export function attachHub(server, { db, schema, uploadStore }) {
         broadcast(sessionId, { type: "ack", uploadId: msg.uploadId });
         break;
       }
+      // Phase 3 — push-to-talk audio: STT + adaptive nextTurn server-side, then
+      // broadcast the transcribed user turn and the bureaucrat reply.
+      case "audio":
+        void handleAudio(sessionId, msg);
+        break;
       case "ping":
         send(ws, { type: "pong" });
         break;
       default:
         break;
     }
+  }
+
+  /** Runs the orchestrator on push-to-talk audio and broadcasts the outcome. */
+  async function handleAudio(sessionId, msg) {
+    if (typeof msg.audioId !== "string" || !msg.audioId) return;
+    if (!orchestrator) {
+      sendError(wsFor(sessionId), "STT_UNAVAILABLE", "Real conversation is not enabled on this server.");
+      return;
+    }
+    const record = store.get(msg.audioId);
+    if (!record) {
+      sendError(wsFor(sessionId), "AUDIO_EXPIRED", "The audio expired before it could be processed — please try again.");
+      return;
+    }
+    store.remove(msg.audioId);
+    broadcast(sessionId, { type: "phase", phase: "thinking" });
+    try {
+      const { userTurn, replyTurn, end } = await orchestrator.handleAudio(sessionId, {
+        buffer: record.buffer,
+        mimeType: typeof msg.mimeType === "string" ? msg.mimeType : record.mimeType,
+      });
+      broadcast(sessionId, { type: "turn", turn: userTurn });
+      broadcast(sessionId, { type: "turn", turn: replyTurn, ...(end ? { end: true } : {}) });
+    } catch (err) {
+      console.error("[hub] audio pipeline failed:", err?.message ?? err);
+      const code = err?.status === 409 ? "BUSY" : err?.status === 422 ? "NOT_HEARD" : "STT_FAILED";
+      broadcast(sessionId, { type: "error", code, message: err?.message ?? "Could not process audio." });
+    } finally {
+      broadcast(sessionId, { type: "phase", phase: "idle" });
+    }
+  }
+
+  /** The live WS of any device in a room (for targeted error replies). */
+  function wsFor(sessionId) {
+    const room = rooms.get(sessionId);
+    return [...(room?.values() ?? [])][0]?.ws;
   }
 
   wss.on("connection", (ws) => {
@@ -289,6 +330,7 @@ export function attachHub(server, { db, schema, uploadStore }) {
       if (room.size === 0) {
         rooms.delete(sessionId);
         snapshots.delete(sessionId);
+        orchestrator?.clear(sessionId);
       }
     });
 
