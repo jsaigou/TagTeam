@@ -11,8 +11,9 @@ import {
 import type { ImageDoc, Turn } from "@/shared/contract";
 import { useSession } from "@/state/session-context";
 import { usePushToTalk } from "@/hooks/use-push-to-talk";
-import { parsePhoneHash } from "@/lib/session-utils";
+import { joinHashFromQr, parsePhoneHash } from "@/lib/session-utils";
 import { ScanSheet } from "@/components/setup/ScanSheet";
+import { CameraScanner } from "@/components/phone/CameraScanner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -41,6 +42,7 @@ export function PhoneApp() {
   } = useSession();
   const ptt = usePushToTalk();
   const [code, setCode] = useState("");
+  const [qrScanOpen, setQrScanOpen] = useState(false);
   const [scanOpen, setScanOpen] = useState(false);
   const [pages, setPages] = useState<SentPage[]>([]);
   const [submitting, setSubmitting] = useState(false);
@@ -67,6 +69,15 @@ export function PhoneApp() {
     if (trimmed.length < 6) return;
     window.location.hash = `#p=${encodeURIComponent(trimmed)}`;
   };
+
+  /* A scanned QR (the desktop's full joinUrl) or a bare 6-char code becomes
+     the join hash — adopt it so the session context joins. */
+  const handleQrDetected = useCallback((payload: string) => {
+    const hash = joinHashFromQr(payload);
+    if (!hash) return;
+    window.location.hash = hash;
+    setQrScanOpen(false);
+  }, []);
 
   const addPage = useCallback(
     async (page: ImageDoc) => {
@@ -124,20 +135,33 @@ export function PhoneApp() {
             Scan the QR shown on the desktop, or type the 6-character code from
             the "Phone companion" panel.
           </p>
-          <div className="flex gap-2">
-            <Input
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              placeholder="e.g. K3M9QX"
-              className="font-mono uppercase tracking-widest"
-              onKeyDown={(e) => {
-                if (e.key === "Enter") enterCode();
-              }}
+          {qrScanOpen ? (
+            <CameraScanner
+              onDetected={handleQrDetected}
+              onCancel={() => setQrScanOpen(false)}
             />
-            <Button onClick={enterCode} disabled={code.trim().length < 6}>
-              Join
-            </Button>
-          </div>
+          ) : (
+            <>
+              <div className="flex gap-2">
+                <Input
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  placeholder="e.g. K3M9QX"
+                  className="font-mono uppercase tracking-widest"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") enterCode();
+                  }}
+                />
+                <Button onClick={enterCode} disabled={code.trim().length < 6}>
+                  Join
+                </Button>
+              </div>
+              <Button variant="outline" onClick={() => setQrScanOpen(true)}>
+                <ScanLine />
+                Scan QR with camera
+              </Button>
+            </>
+          )}
           {hubError && <p className="text-xs text-destructive">{hubError}</p>}
         </div>
       )}

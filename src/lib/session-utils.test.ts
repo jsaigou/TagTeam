@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   deriveAppStatus,
   isPhoneJoinUrl,
+  joinHashFromQr,
   parsePhoneHash,
   wsUrlFromOrigin,
 } from "./session-utils";
@@ -51,6 +52,25 @@ describe("isPhoneJoinUrl", () => {
   it("rejects non-phone paths without a code", () => {
     expect(isPhoneJoinUrl("/", "")).toBe(false);
     expect(isPhoneJoinUrl("/call", "#s=1")).toBe(false);
+  });
+});
+
+describe("joinHashFromQr", () => {
+  it("extracts the join hash from a full joinUrl (the desktop QR payload)", () => {
+    expect(joinHashFromQr("https://tagteam.example.ts.net/phone#s=abc&p=K3M9QX")).toBe(
+      "#s=abc&p=K3M9QX",
+    );
+  });
+  it("passes through a bare fragment", () => {
+    expect(joinHashFromQr("#p=K3M9QX")).toBe("#p=K3M9QX");
+  });
+  it("treats a bare 6-char code as a pairing code", () => {
+    expect(joinHashFromQr("K3M9QX")).toBe("#p=K3M9QX");
+    expect(joinHashFromQr("k3m9qx")).toBe("#p=K3M9QX");
+  });
+  it("returns null for unjoinable payloads", () => {
+    expect(joinHashFromQr("")).toBeNull();
+    expect(joinHashFromQr("hello world")).toBeNull();
   });
 });
 

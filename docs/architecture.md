@@ -291,6 +291,13 @@ as a `Know before you call` section (with source citations + kind badges). **Per
 `roles`/`difficulty`/`pace` settings are session-level, not yet persisted per scenario row;
 `presentWithAudio` codec guarantees still unverified on real hardware.
 
+**Phase 5 — real camera QR scanning (this round):** the phone companion now scans the desktop
+pairing QR in-app (`CameraScanner`): `getUserMedia` → hidden canvas → jsQR (lazy-loaded, so the
+main bundle stays lean; jsqr ships in its own 47 KB-gzip chunk). The decoded payload (the full
+`joinUrl` or a bare 6-char code) is normalized by `joinHashFromQr` in `src/lib/session-utils.ts`
+and adopted as the join hash. Camera permission/not-found/not-readable errors surface inline. The
+native-camera-app route still works as before.
+
 ## 12. Open questions
 
 - Per-org vs shared Connect identity for the event — confirm with Perxona.

@@ -34,6 +34,22 @@ export function isPhoneJoinUrl(pathname: string, hash: string): boolean {
   return parsePhoneHash(hash) !== null;
 }
 
+/**
+ * Normalize a scanned QR payload into a join URL fragment the phone can adopt.
+ * The desktop QR encodes a full `joinUrl` (e.g.
+ * `https://host/phone#s=<id>&p=<code>`); a bare 6-char pairing code is also
+ * accepted. Returns `null` when nothing joinable is present.
+ */
+export function joinHashFromQr(payload: string): string | null {
+  const text = payload.trim();
+  if (!text) return null;
+  const fragment = text.includes("#") ? text.slice(text.indexOf("#")) : text;
+  if (parsePhoneHash(fragment)) return fragment;
+  const code = text.toUpperCase().replace(/[^A-Z2-9]/g, "");
+  if (code.length === 6) return `#p=${code}`;
+  return null;
+}
+
 /** Map the app's screen + player state onto the broadcast {@link AppStatus}. */
 export function deriveAppStatus(
   screen: string,
