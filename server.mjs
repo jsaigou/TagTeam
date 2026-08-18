@@ -10,6 +10,7 @@ import { auth } from "./server/auth.mjs";
 import { toNodeHandler, fromNodeHeaders } from "better-auth/node";
 import { config, llmChat, transcribeAudio } from "./server/providers.mjs";
 import { createCallOrchestrator } from "./server/orchestrator.mjs";
+import { NEXT_TURN_SCHEMA_TEXT } from "./server/next-turn.mjs";
 import {
   createScenario,
   deleteScenario,
@@ -112,6 +113,27 @@ const connectApi = {
         ...rest,
       })),
     };
+  },
+
+  /** One stateless Connect Chatbot turn (Phase 5d — nextTurn backend). The
+   *  persona lives in the chatbot's custom_instructions; the caller's full
+   *  context is sent as a single user message. Returns the reply text. */
+  async chatbotChat(token, chatbotId, content) {
+    const res = await callUpstream(
+      `/api/v1/connect/chatbots/${encodeURIComponent(chatbotId)}/chat`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          messages: [{ role: "user", parts: [{ type: "text", text: content }] }],
+        }),
+      },
+      token,
+    );
+    const payload = await upstreamJson(res, "chatbot chat");
+    if (payload.status === "failed" || typeof payload.reply_text !== "string") {
+      throw Object.assign(new Error("The chatbot did not produce a reply."), { status: 502 });
+    }
+    return payload.reply_text;
   },
 
   async scenes(token) {
@@ -735,7 +757,47 @@ app.delete(
 );
 
 const server = http.createServer(app);
-const orchestrator = createCallOrchestrator({ transcribeAudio, llmChat });
+
+// ── nextTurn brain backend (Phase 5d) ──────────────────────────────────────
+// Own-LLM by default; `NEXTTURN_PROVIDER=connect-chatbot` swaps the live
+// brain for a Connect Chatbot. The chatbot's custom_instructions hold the
+// persona; every per-call message (scenario context, coaching directives,
+// transcript) is sent as one user message, with the nextTurn JSON schema
+// appended so the reply parses like the own-LLM path.
+const nextTurnChat =
+  config.chatbot.nextTurnProvider === "connect-chatbot"
+    ? async (messages, opts = {}) => {
+        if (!config.chatbot.chatbotId) {
+          throw Object.assign(
+            new Error(
+              "Connect Chatbot nextTurn is selected but CHATBOT_ID is unset — create a chatbot and set CHATBOT_ID in .env (see SETUP.md).",
+            ),
+            { status: 501 },
+          );
+        }
+        const systemText = messages
+          .filter((m) => m.role === "system")
+          .map((m) => m.content)
+          .join("\n");
+        const userText = messages
+          .filter((m) => m.role === "user")
+          .map((m) => m.content)
+          .join("\n");
+        const content = [
+          systemText,
+          userText,
+          opts.responseFormat ? `【出力】\n次のJSONスキーマに完全に従ったJSONオブジェクトのみを返してください。\n${NEXT_TURN_SCHEMA_TEXT}` : "",
+        ]
+          .filter(Boolean)
+          .join("\n\n");
+        const reply = await authedCall((token) =>
+          connectApi.chatbotChat(token, config.chatbot.chatbotId, content),
+        );
+        return { choices: [{ message: { role: "assistant", content: reply } }] };
+      }
+    : llmChat;
+
+const orchestrator = createCallOrchestrator({ transcribeAudio, llmChat: nextTurnChat });
 const hub = attachHub(server, { db, schema, orchestrator });
 
 server.listen(PORT, () => {

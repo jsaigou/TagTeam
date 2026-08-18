@@ -161,7 +161,7 @@ Server-side interfaces, each with an env-flag default and an alternative:
 | Interface | Default | Alternative |
 | --- | --- | --- |
 | `LlmProvider.chat()` | OpenAI-compatible BYOK (`LLM_BASE_URL`) | – |
-| `ChatbotProvider.nextTurn()` | Connect Chatbot (`/chatbots/:id/chat`) | own-LLM via `LlmProvider` (fallback) |
+| `nextTurn` backend | own-LLM via `LlmProvider` (default) | Connect Chatbot (`NEXTTURN_PROVIDER=connect-chatbot`, `/chatbots/:id/chat`) |
 | `SttProvider.transcribe()` | whisper.cpp subprocess | hosted OpenAI-compatible `audio/transcriptions` |
 | `AvatarSpeechProvider` | Perxona `<sv-presenter>` | `presentWithAudio` (kokoro/qwen) |
 | `SearchProvider.search()` | SearXNG (`language=ja-JP`) | none (feature disabled) |
@@ -264,9 +264,15 @@ vocab validation, `done` end signal); the `audio` hub message (bytes via the eph
 transcript in sync. Verified live end-to-end: whisper → STT → nextTurn → avatar reply with
 accumulated context.
 
-**Phase 3 deferred:** Connect Chatbot as a `nextTurn` backend (own-LLM is the default; the chatbot
-`ChatbotProvider` interface from §7 remains unimplemented). Coaching/emotion polish landed in
-Phase 4.
+**Phase 3 deferred:** ~~Connect Chatbot as a `nextTurn` backend~~ (landed in Phase 5d, see below).
+
+**Phase 5 — Connect Chatbot as the live brain (this round):** the adaptive `nextTurn` backend is now
+swappable via `NEXTTURN_PROVIDER`. Default `own-llm` (unchanged). `connect-chatbot` routes every
+nextTurn call through a Connect Chatbot (`/chatbots/:id/chat`, stateless, Connect message format):
+the chatbot's `custom_instructions` carry the persona (created once — see SETUP.md §5c), each call's
+scenario context + coaching directives + transcript are sent as one user message, and the nextTurn
+JSON schema is appended so the reply parses through the same validated-turn pipeline. Own-LLM stays
+the fallback/default; the chatbot is the sponsor showcase path (30 calls/min limit).
 
 **Phase 4 completed (this round):** coaching settings (roles / difficulty / pace) in the scenario
 step — `Who answers the phone` (Reception / Claims desk / Accounts), `Difficulty`

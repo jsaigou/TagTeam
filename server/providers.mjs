@@ -17,6 +17,13 @@ export const config = {
     apiKey: process.env.LLM_API_KEY || "",
     model: process.env.LLM_MODEL || "gpt-4o-mini",
   },
+  chatbot: {
+    // nextTurn brain backend: "own-llm" (default) | "connect-chatbot" (Phase 5d).
+    // The chatbot's custom_instructions hold the persona; the per-call
+    // scenario/coaching context is sent as the message content.
+    nextTurnProvider: (process.env.NEXTTURN_PROVIDER || "own-llm").toLowerCase(),
+    chatbotId: process.env.CHATBOT_ID || "",
+  },
   stt: {
     provider: (process.env.STT_PROVIDER || "whisper-cpp").toLowerCase(), // whisper-cpp | hosted
     whisperBin: process.env.WHISPER_BIN || "whisper-cli",

@@ -32,8 +32,9 @@ Perxona branding badge. See `docs/architecture.md` §11 for the writeup.
 Next: **Phase 5** (real camera QR scanning ✓ — `CameraScanner` + jsQR on the phone companion;
 per-role avatar packs ✓ — curated avatar/scene/voice per role in `coaching.json`; persistence ✓ —
 scenarios saved at call start + cheat-sheet attach, restored via `PastCalls` on the setup screen;
-remaining candidate: Connect Chatbot as `nextTurn` backend). Companion tap-help still has no
-phone-side vocab picker yet (desktop vocab chips show Tap-help).
+Connect Chatbot as `nextTurn` backend ✓ — `NEXTTURN_PROVIDER=connect-chatbot` + `CHATBOT_ID`, see
+SETUP.md §5c). Companion tap-help still has no phone-side vocab picker yet (desktop vocab chips show
+Tap-help).
 
 ## Stack
 

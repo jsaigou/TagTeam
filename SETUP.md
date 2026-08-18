@@ -215,6 +215,35 @@ How the conversation works:
 - No STT configured? The call still runs in **scripted mode** — the "Skip & continue" button advances
   the script instead of waiting for speech.
 
+## 5c. Connect Chatbot as the live brain (Phase 5d)
+
+The adaptive `nextTurn` brain defaults to your own LLM (`NEXTTURN_PROVIDER=own-llm`). To showcase the
+Perxona Connect Chatbot instead:
+
+1. Create a chatbot (once) against the Connect API. The chatbot's **custom_instructions** are its
+   persona — a good starting point is the bureaucrat prompt below; you can also paste your own role /
+   difficulty / pace directives since per-call coaching is sent with each message anyway:
+
+   ```bash
+   curl -X POST https://console.perxona.ai/asia/api/v1/connect/chatbots \
+     -H "Authorization: Bearer <connect-token>" -H "Content-Type: application/json" \
+     -d '{"name":"TagTeam bureaucrat","custom_instructions":"あなたは日本の市役所の電話対応の担当者（bureaucrat）です。丁寧語・尊敬語・謙譲語を正しく使い、一文を短めに保ってください。用件が果たせた段階で done=true を返してください。"}'
+   ```
+
+   (Log in for a token the same way the app does: `POST /api/v1/connect/auth/login` with the
+   `PERXONA_CONNECT_EMAIL` / `PERXONA_CONNECT_PASSWORD` credentials.)
+
+2. Put the returned chatbot id in the environment:
+
+   ```
+   NEXTTURN_PROVIDER=connect-chatbot
+   CHATBOT_ID=01...            # the id from the create response
+   ```
+
+The server sends each call's scenario context, coaching directives and transcript as one user
+message and appends the nextTurn JSON schema, so the chatbot's reply still feeds the same
+validated-turn pipeline (own-LLM remains the default and the fallback). Rate limit: 30 calls/min.
+
 ## 6. Troubleshooting
 
 | Symptom | Fix |
