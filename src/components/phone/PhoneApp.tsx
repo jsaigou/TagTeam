@@ -8,7 +8,7 @@ import {
   ScanLine,
   Smartphone,
 } from "lucide-react";
-import type { ImageDoc, Turn } from "@/shared/contract";
+import type { GlossaryEntry, ImageDoc, Turn } from "@/shared/contract";
 import { useSession } from "@/state/session-context";
 import { usePushToTalk } from "@/hooks/use-push-to-talk";
 import { joinHashFromQr, parsePhoneHash } from "@/lib/session-utils";
@@ -49,6 +49,7 @@ export function PhoneApp() {
   const [thinking, setThinking] = useState(false);
   const [liveTurns, setLiveTurns] = useState<Turn[]>([]);
   const [voiceError, setVoiceError] = useState<string | null>(null);
+  const [selectedVocab, setSelectedVocab] = useState<GlossaryEntry | null>(null);
 
   const hasCode = useMemo(
     () => parsePhoneHash(window.location.hash) !== null,
@@ -108,6 +109,21 @@ export function PhoneApp() {
       setVoiceError(err instanceof Error ? err.message : "Could not send your voice.");
     }
   }, [ptt, sendPushToTalk]);
+
+  /* Phase 5e — phone-side vocab picker: tap a word to hear/see its help. The
+     tap also drives the stage's Tap-help (the avatar speaks the note). */
+  const handleVocabTap = useCallback(
+    (entry: GlossaryEntry) => {
+      setSelectedVocab(entry);
+      sendControl("tapHelp", entry.id);
+    },
+    [sendControl],
+  );
+
+  /* Reset the open vocab hint when the active turn moves on. */
+  useEffect(() => {
+    setSelectedVocab(null);
+  }, [snapshot?.activeTurn?.id]);
 
   const connected = hubStatus === "open";
   const isHeld = snapshot?.status === "held";
@@ -211,6 +227,40 @@ export function PhoneApp() {
               <p className="text-sm text-foreground">{activeTurn.jp}</p>
               {activeTurn.en && (
                 <p className="text-xs text-muted-foreground">{activeTurn.en}</p>
+              )}
+              {!userTurn && snapshot?.activeVocab && snapshot.activeVocab.length > 0 && (
+                <div className="mt-1 flex flex-col gap-1.5 border-t pt-2">
+                  <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                    Tap a word for help
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {snapshot.activeVocab.map((entry) => (
+                      <button
+                        key={entry.id}
+                        type="button"
+                        onClick={() => handleVocabTap(entry)}
+                        className={cn(
+                          "flex items-baseline gap-1.5 rounded-full border px-3 py-1 text-sm transition-colors",
+                          selectedVocab?.id === entry.id
+                            ? "border-accent bg-accent/25"
+                            : "border-border bg-background hover:bg-accent/20",
+                        )}
+                      >
+                        <span className="font-medium">{entry.kanji}</span>
+                        <span className="text-xs text-muted-foreground">{entry.furigana}</span>
+                      </button>
+                    ))}
+                  </div>
+                  {selectedVocab && (
+                    <div className="rounded-lg border border-accent/30 bg-accent/10 px-3 py-2">
+                      <p className="text-sm font-medium">{selectedVocab.kanji}</p>
+                      <p className="text-xs text-muted-foreground">{selectedVocab.en}</p>
+                      {selectedVocab.note && (
+                        <p className="mt-1 text-xs text-foreground">{selectedVocab.note}</p>
+                      )}
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           )}

@@ -146,12 +146,16 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       scriptTitle: store.state.script?.scenarioTitle,
       playerState: store.state.screen === "call" ? playerStateRef.current : undefined,
       activeTurn: activeTurnRef.current ?? undefined,
+      activeVocab: activeTurnRef.current
+        ? store.state.glossary.filter((g) => activeTurnRef.current!.vocab.includes(g.id))
+        : undefined,
     }),
     [
       store.state.screen,
       store.state.setupStep,
       store.state.summary,
       store.state.script,
+      store.state.glossary,
     ],
   );
 

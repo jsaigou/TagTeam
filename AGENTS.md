@@ -33,8 +33,8 @@ Next: **Phase 5** (real camera QR scanning ✓ — `CameraScanner` + jsQR on the
 per-role avatar packs ✓ — curated avatar/scene/voice per role in `coaching.json`; persistence ✓ —
 scenarios saved at call start + cheat-sheet attach, restored via `PastCalls` on the setup screen;
 Connect Chatbot as `nextTurn` backend ✓ — `NEXTTURN_PROVIDER=connect-chatbot` + `CHATBOT_ID`, see
-SETUP.md §5c). Companion tap-help still has no phone-side vocab picker yet (desktop vocab chips show
-Tap-help).
+SETUP.md §5c; phone-side vocab picker ✓ — `AppSnapshot.activeVocab` drives companion Tap-help
+chips). Phase 5 candidate list is now exhausted.
 
 ## Stack
 

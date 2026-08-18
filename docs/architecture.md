@@ -274,6 +274,13 @@ scenario context + coaching directives + transcript are sent as one user message
 JSON schema is appended so the reply parses through the same validated-turn pipeline. Own-LLM stays
 the fallback/default; the chatbot is the sponsor showcase path (30 calls/min limit).
 
+**Phase 5 — phone-side vocab picker (this round):** `AppSnapshot` gains `activeVocab`
+(`GlossaryEntry[]` for the active turn), so the phone companion renders Tap-help chips for the
+bureaucrat's current turn without holding the full glossary. Tapping a chip shows the word's
+definition/note inline on the phone AND drives the existing `tapHelp` control message so the stage's
+avatar speaks the same hint — companion and stage stay in sync. The desktop `VocabOverlay` tap-help
+is unchanged.
+
 **Phase 4 completed (this round):** coaching settings (roles / difficulty / pace) in the scenario
 step — `Who answers the phone` (Reception / Claims desk / Accounts), `Difficulty`
 (Beginner/Intermediate/Advanced) and `Pace` (Slow/Normal/Fast). The persona data lives in

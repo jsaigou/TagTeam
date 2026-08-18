@@ -224,6 +224,9 @@ export type AppSnapshot = {
   activeTurn?: Turn;
   /** Phase 3 — real-conversation brain state (thinking while the reply is generated). */
   callPhase?: CallPhase;
+  /** Phase 5e — glossary entries for `activeTurn`, so companion devices can
+   *  render vocab chips + tap-help without holding the full glossary. */
+  activeVocab?: GlossaryEntry[];
 };
 
 /** Control surface actions a companion device can trigger on the stage. */
