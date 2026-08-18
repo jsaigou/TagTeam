@@ -12,6 +12,8 @@
  * may deviate from the intended script).
  */
 
+import { buildCoachingGuidance, isCallSettings } from "./coaching.mjs";
+
 export const NEXT_TURN_SCHEMA_TEXT = `{
   "type": "object",
   "properties": {
@@ -94,6 +96,8 @@ export function buildNextTurnMessages(ctx, transcript) {
     .map((g) => `- ${g.id}: ${g.kanji}（${g.furigana}）= ${g.en}`)
     .join("\n");
 
+  const coaching = isCallSettings(ctx.settings) ? buildCoachingGuidance(ctx.settings) : "";
+
   const system = `あなたは日本の市役所の電話対応の担当者（bureaucrat）です。利用者（外国人住民）との電話を、一ターンずつ継続します。
 
 ${scenarioLines}
@@ -106,6 +110,9 @@ ${scenarioLines}
 - 本人確認が必要ならお名前・ご住所・生年月日を伺い、担当課への転送・受付時間の案内など、現実的な流れを続けてください。
 - 用件が果たせた段階で done=true にしてください（会話を終えられる合図）。
 - 各ターンの vocab には glossary に存在する id のみを指定してください。
+- 各ターンに emotion と intensity を指定してください（台詞の感情トーンと強さ）。
+
+${coaching}
 
 【出力】
 JSONオブジェクトのみを返してください（コードブロックや説明は不要）。`;

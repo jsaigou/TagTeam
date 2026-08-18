@@ -84,6 +84,17 @@ export const SIM_SCHEMA: JsonSchema = {
             items: { type: "string" },
             description: "この台詞の重要語彙の glossary id。必ず glossary に存在すること",
           },
+          motion: { type: "string", description: "任意の Perxona モーション記法（例: [MOTION id:1]）" },
+          emotion: {
+            type: "string",
+            enum: ["joy", "excitement", "admiration", "caring", "gratitude", "sadness", "disappointment", "annoyance", "embarrassment", "curiosity", "surprise", "realization", "confusion"],
+            description: "bureaucrat の台詞の感情トーン（任意、bureaucrat のターンで指定）",
+          },
+          intensity: {
+            type: "string",
+            enum: ["low", "neutral", "high"],
+            description: "感情の強さ（任意）",
+          },
         },
       },
     },
@@ -132,6 +143,25 @@ export const CHEAT_SHEET_SCHEMA: JsonSchema = {
       type: "array",
       items: { type: "string" },
       description: "次回のために練習すべき項目（英語の短い指示）。3〜5件",
+    },
+    targetRules: {
+      type: "array",
+      description: "本物の電話の前に知っておくべき窓口のルール（任意）。検索で得た参考情報に基づき、引用付きで0〜5件",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["id", "rule", "source", "kind"],
+        properties: {
+          id: { type: "string", description: "例: r1, r2 ..." },
+          rule: { type: "string", description: "ルールの内容（日本語）" },
+          source: { type: "string", description: "引用元（発行元・サイト名・台本内の根拠）" },
+          kind: {
+            type: "string",
+            enum: ["hours", "booking", "required_docs", "cancellation", "fees", "notes"],
+            description: "ルールの種類",
+          },
+        },
+      },
     },
   },
   required: ["goal", "keyPhrases", "practice"],

@@ -3,6 +3,7 @@ import { Check, Copy, Printer, RotateCcw } from "lucide-react";
 import type { CheatSheet } from "@/shared/contract";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { PerxonaBadge } from "@/components/brand/PerxonaBadge";
 
 type CheatSheetViewProps = {
   sheet: CheatSheet;
@@ -21,6 +22,13 @@ function buildPlainText(sheet: CheatSheet): string {
     "Practice",
     ...sheet.practice.map((p) => `• ${p}`),
   ];
+  if (sheet.targetRules && sheet.targetRules.length > 0) {
+    lines.push(
+      "",
+      "Office rules",
+      ...sheet.targetRules.map((r) => `• [${r.kind}] ${r.rule}  (source: ${r.source})`),
+    );
+  }
   return lines.join("\n");
 }
 
@@ -89,6 +97,29 @@ export function CheatSheetView({ sheet, onRestart }: CheatSheetViewProps) {
           </ul>
         </section>
       )}
+
+      {sheet.targetRules && sheet.targetRules.length > 0 && (
+        <section className="flex flex-col gap-3">
+          <h2 className="text-lg font-semibold text-primary">Know before you call</h2>
+          <div className="grid gap-3">
+            {sheet.targetRules.map((rule) => (
+              <div key={rule.id} className="flex flex-col gap-1 rounded-xl border bg-card p-4">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-semibold">{rule.rule}</p>
+                  <span className="shrink-0 rounded-full border border-accent/40 px-2 py-px text-[10px] font-medium uppercase tracking-wide text-accent">
+                    {rule.kind.replace("_", " ")}
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground">Source: {rule.source}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <footer className="no-print flex items-center justify-end">
+        <PerxonaBadge />
+      </footer>
     </div>
   );
 }

@@ -251,6 +251,20 @@ export const CHEAT_SHEET_FIXTURE: CheatSheet = {
     "Rehearse politely asking for a reissue (再発行).",
     "Review the medical expense total and co-payment amounts on the notice.",
   ],
+  targetRules: [
+    {
+      id: "r1",
+      rule: "窓口は月曜〜金曜の8:30〜17:15。国民健康保険課への電話は午前中が比較的つながりやすい。",
+      source: "川崎市ウェブサイト（抜粋）",
+      kind: "hours",
+    },
+    {
+      id: "r2",
+      rule: "再発行の申請には本人確認書類（在留カード等）と被保険者番号が必要。",
+      source: "台本の案内より",
+      kind: "required_docs",
+    },
+  ],
 };
 
 export const CHEAT_SHEET_JSON = JSON.stringify(CHEAT_SHEET_FIXTURE);

@@ -121,6 +121,42 @@ export type CheatSheet = {
   goal: string;
   keyPhrases: CheatSheetPhrase[];
   practice: string[];
+  /** Office rules the caller should know before the real call (optional). */
+  targetRules?: TargetRule[];
+};
+
+/**
+ * One extracted rule about the target office (hours, booking, required docs…),
+ * each with a citation so the learner can verify it. Phase 4 — target-specific
+ * grounding surfaced in the cheat sheet.
+ */
+export type TargetRule = {
+  id: string;
+  rule: string;
+  source: string;
+  kind: "hours" | "booking" | "required_docs" | "cancellation" | "fees" | "notes";
+};
+
+/* -- Phase 4: coaching settings (roles, difficulty, pace) ------------------ */
+
+/** The office role the practice avatar plays (feeds the LLM persona). */
+export type RoleId = "reception" | "claims" | "account";
+
+/** Practice difficulty — drives how the bureaucrat speaks (keigo/vocab). */
+export type CallDifficulty = "beginner" | "intermediate" | "advanced";
+
+/** Conversation pace — drives turn length + rhythm of the bureaucrat lines. */
+export type CallPace = "slow" | "normal" | "fast";
+
+/**
+ * Coaching preferences for a call, chosen in the scenario step and threaded
+ * into BOTH script generation (client) and the adaptive nextTurn brain (server).
+ * The persona data behind these lives in `src/shared/coaching.json`.
+ */
+export type CallSettings = {
+  role: RoleId;
+  difficulty: CallDifficulty;
+  pace: CallPace;
 };
 
 /** -- Script player (owned by connect-core, consumed by UI) ---------------- */

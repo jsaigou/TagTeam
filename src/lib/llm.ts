@@ -14,6 +14,7 @@ import type {
   GroundingQuestion,
   ImageDoc,
   SimScript,
+  TargetRule,
   Turn,
 } from "../shared/contract";
 
@@ -332,6 +333,14 @@ export const isTurn = (value: unknown): value is Turn =>
       en: isOptional(isString),
       vocab: isStringArray,
       motion: isOptional(isString),
+      emotion: isOptional(
+        isOneOf([
+          "joy", "excitement", "admiration", "caring", "gratitude", "sadness",
+          "disappointment", "annoyance", "embarrassment", "curiosity", "surprise",
+          "realization", "confusion",
+        ] as const),
+      ),
+      intensity: isOptional(isOneOf(["low", "neutral", "high"] as const)),
     },
     ["id", "speaker", "jp", "vocab"],
   );
@@ -380,6 +389,20 @@ export const isCheatSheetPhrase = (value: unknown): value is CheatSheetPhrase =>
     ["jp", "furigana", "en", "when"],
   );
 
+export const isTargetRule = (value: unknown): value is TargetRule =>
+  validateShape<TargetRule>(
+    value,
+    {
+      id: isNonEmptyString,
+      rule: isNonEmptyString,
+      source: isNonEmptyString,
+      kind: isOneOf([
+        "hours", "booking", "required_docs", "cancellation", "fees", "notes",
+      ] as const),
+    },
+    ["id", "rule", "source", "kind"],
+  );
+
 export const isCheatSheet = (value: unknown): value is CheatSheet =>
   validateShape<CheatSheet>(
     value,
@@ -387,6 +410,7 @@ export const isCheatSheet = (value: unknown): value is CheatSheet =>
       goal: isNonEmptyString,
       keyPhrases: isArrayOf(isCheatSheetPhrase),
       practice: isStringArray,
+      targetRules: isOptional(isArrayOf(isTargetRule)),
     },
     ["goal", "keyPhrases", "practice"],
   );

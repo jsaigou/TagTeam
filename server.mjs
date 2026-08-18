@@ -91,6 +91,22 @@ const connectApi = {
     };
   },
 
+  async motions(token, avatarId) {
+    const res = await callUpstream(
+      `/api/v1/connect/assets/avatars/${encodeURIComponent(avatarId)}/motions?size=100`,
+      {},
+      token,
+    );
+    const page = await upstreamJson(res, "motions");
+    return {
+      ...page,
+      items: (page.items ?? []).map(({ motion_id, ...rest }) => ({
+        id: motion_id,
+        ...rest,
+      })),
+    };
+  },
+
   async scenes(token) {
     const res = await callUpstream("/api/v1/connect/assets/scenes", {}, token);
     const page = await upstreamJson(res, "scenes");
@@ -229,6 +245,22 @@ app.get(
   requireAuth,
   route(async (_req, res) => {
     res.json(await authedCall((token) => connectApi.avatars(token)));
+  }),
+);
+
+// Motion catalog for one avatar (Phase 4 motion browser). Motions are
+// per-avatar — never reuse guide motions on practice avatars.
+app.get(
+  "/api/avatars/:avatarId/motions",
+  requireAuth,
+  rateLimit({ windowMs: 60_000, max: 30 }),
+  route(async (req, res) => {
+    const { avatarId } = req.params;
+    if (typeof avatarId !== "string" || !avatarId) {
+      res.status(400).json({ error: "Missing avatar id." });
+      return;
+    }
+    res.json(await authedCall((token) => connectApi.motions(token, avatarId)));
   }),
 );
 
@@ -442,12 +474,12 @@ app.post(
   route(async (req, res) => {
     const row = await ownedSession(req, res);
     if (!row) return;
-    const { script, glossary, summary, answers, reference } = req.body ?? {};
+    const { script, glossary, summary, answers, reference, settings } = req.body ?? {};
     if (!script || !Array.isArray(script.turns) || !Array.isArray(glossary)) {
       res.status(400).json({ error: "'script' and 'glossary' are required." });
       return;
     }
-    orchestrator.setContext(row.id, { script, glossary, summary, answers, reference });
+    orchestrator.setContext(row.id, { script, glossary, summary, answers, reference, settings });
     res.json({ ok: true });
   }),
 );

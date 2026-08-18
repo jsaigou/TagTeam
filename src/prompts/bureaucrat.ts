@@ -10,16 +10,19 @@ export const SIM_SCHEMA_TEXT = JSON.stringify(SIM_SCHEMA, null, 2);
 /**
  * Build the bureaucrat persona system prompt.
  *
- * @param presetGuidance  Japanese sentence describing the requested register /
- *                        warmth of the bureaucrat (see VOICE_PRESETS in sim-engine).
+ * @param guidance  Japanese sentences describing the requested register /
+ *                  warmth of the bureaucrat (see VOICE_PRESETS in sim-engine)
+ *                  plus the Phase 4 coaching directives (role / difficulty /
+ *                  pace — see buildCoachingGuidance).
  */
-export function bureaucratSystemPrompt(presetGuidance: string): string {
+export function bureaucratSystemPrompt(guidance: string): string {
   return `あなたは日本の市役所の電話対応に精通したシナリオライターです。外国人居住者が役所に電話する場面のロールプレイ台本を、本物の日本語で作成します。
 
 【bureaucrat の台詞】
 - 実際の市役所の電話対応として自然で本物の日本語にしてください。丁寧語・尊敬語・謙譲語を正しく使い、教科書的すぎず、実在の窓口職員が話す速さ・リズムを意識してください。
 - 多用してよい定型表現: 「お電話ありがとうございます」「〜でございます」「〜いたします」「〜させていただきます」「恐れ入りますが」「少々お待ちくださいませ」「よろしいでしょうか」「承知いたしました」「かしこまりました」「お尋ねいたします」「失礼いたします」など。
 - 話し言葉として自然な範囲で、つなぎ言葉（「はい」「それでは」「ええと」「あのう」）を控えめに使い、一文を短めに保ってください。長い文は電話では不自然です。
+- bureaucrat の各ターンには emotion と intensity を指定してください（台詞の感情トーンと強さ）。
 
 【user の台詞】
 - 日本語学習者が実際に言える、自然で簡単めの丁寧語（です・ます調）にしてください。長すぎず、電話で読める長さにしてください。
@@ -30,8 +33,8 @@ export function bureaucratSystemPrompt(presetGuidance: string): string {
 - すべての台詞に英語訳（en）を付けてください。
 - 各ターンの vocab には、その台詞で重要な語彙の glossary id を指定してください。vocab の id は必ず glossary に存在させてください。
 
-【敬語レベル・雰囲気】
-${presetGuidance}
+【役割・難易度・ペース・雰囲気】
+${guidance}
 
 【出力】
 指定されたJSONスキーマ（turns と glossary）に完全に従ったJSONオブジェクトを返してください。glossary は台本全体の重要語彙を過不足なく含めてください。回答はJSONオブジェクトのみを返してください。`;

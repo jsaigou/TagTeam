@@ -3,7 +3,12 @@
  * answers (and a voice/register preset), produces a realistic 6-10 turn
  * municipal-office phone call plus its glossary.
  */
-import type { GlossaryEntry, GroundingAnswer, SimScript } from "../shared/contract";
+import type {
+  CallSettings,
+  GlossaryEntry,
+  GroundingAnswer,
+  SimScript,
+} from "../shared/contract";
 import {
   chatJson,
   isSimulationRaw,
@@ -13,6 +18,7 @@ import {
 import type { DocSummary } from "./doc-parser";
 import { reconcileSimulation } from "./glossary";
 import { SIM_SCHEMA_TEXT, bureaucratSystemPrompt } from "../prompts/bureaucrat";
+import { buildCoachingGuidance } from "./coaching";
 
 export type VoicePresetId = "formal" | "standard" | "friendly";
 
@@ -50,6 +56,8 @@ export type GenerateSimulationOptions = {
   preset?: VoicePresetId;
   /** Optional web-researched reference digest about the office/agency. */
   reference?: string;
+  /** Phase 4 — coaching settings (role / difficulty / pace) for the persona. */
+  settings?: CallSettings;
   config?: ChatOptions["config"];
   timeoutMs?: number;
 };
@@ -93,10 +101,13 @@ export async function generateSimulation(
   options: GenerateSimulationOptions = {},
 ): Promise<SimulationResult> {
   const preset = VOICE_PRESETS[options.preset ?? DEFAULT_VOICE_PRESET];
+  const coaching = options.settings ? buildCoachingGuidance(options.settings) : "";
+  // preset.guidance already carries its own 【雰囲気】 header.
+  const guidance = [coaching, preset.guidance].filter(Boolean).join("\n");
   const messages: ChatMessage[] = [
     {
       role: "system",
-      content: `${bureaucratSystemPrompt(preset.guidance)}\n\n【JSONスキーマ】\n${SIM_SCHEMA_TEXT}`,
+      content: `${bureaucratSystemPrompt(guidance)}\n\n【JSONスキーマ】\n${SIM_SCHEMA_TEXT}`,
     },
     { role: "user", content: buildSimulationContext(docSummary, answers, options.reference) },
   ];

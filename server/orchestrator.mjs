@@ -13,6 +13,7 @@
  * the session room empties (hub) or via TTL.
  */
 import crypto from "node:crypto";
+import { isCallSettings } from "./coaching.mjs";
 import { buildNextTurnMessages, isNextTurnResult } from "./next-turn.mjs";
 
 /** Tolerate ```json ... ``` fences some models wrap their JSON in. */
@@ -69,6 +70,7 @@ export function createCallOrchestrator({ transcribeAudio, llmChat }) {
       summary: typeof context?.summary === "string" ? context.summary : undefined,
       answers: Array.isArray(context?.answers) ? context.answers : undefined,
       reference: typeof context?.reference === "string" ? context.reference : undefined,
+      settings: isCallSettings(context?.settings) ? context.settings : undefined,
     };
     const first = s.context.script?.turns?.[0];
     s.transcript = first && first.speaker === "bureaucrat" ? [first] : [];

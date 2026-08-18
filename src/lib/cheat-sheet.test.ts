@@ -48,6 +48,17 @@ describe("buildCheatSheetContext", () => {
     expect(text).toContain("q1: I want to claim a medical expense tax deduction");
   });
 
+  it("includes the reference digest for target-rule extraction", () => {
+    const text = buildCheatSheetContext({
+      script: SIM_FIXTURE.script,
+      glossary: SIM_FIXTURE.glossary,
+      answers: ANSWERS,
+      reference: "川崎市 健康保険課 窓口 8:30-17:15",
+    });
+    expect(text).toContain("【検索した参考情報（窓口の実態）】");
+    expect(text).toContain("8:30-17:15");
+  });
+
   it("handles empty inputs", () => {
     const text = buildCheatSheetContext({
       script: { scenarioTitle: "", turns: [] },
@@ -76,6 +87,8 @@ describe("generateCheatSheet", () => {
     expect(sheet).toEqual(CHEAT_SHEET_FIXTURE);
     expect(sheet.keyPhrases.length).toBeGreaterThanOrEqual(3);
     expect(sheet.practice.length).toBeGreaterThanOrEqual(3);
+    expect(sheet.targetRules?.length).toBeGreaterThan(0);
+    expect(sheet.targetRules?.[0].source).toBeTruthy();
 
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("/api/llm");

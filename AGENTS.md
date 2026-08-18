@@ -9,7 +9,7 @@ and an OpenAI-compatible LLM.
 > records what was verified live against Perxona. `CONTRACT.md` is the stale hackday doc and is
 > being superseded.
 
-## Current status (Phase 1 + 2 + 3)
+## Current status (Phase 1 + 2 + 3 + 4)
 
 Done: presenter layer at the full 0.2.0 surface; canned demo removed; **better-auth + Drizzle +
 SQLite login gate**; provider module (`server/providers.mjs`); Dockerfile + docker-compose;
@@ -22,10 +22,16 @@ bundles (`DocInput.kind: "images"`).
 brain (`server/next-turn.mjs`); push-to-talk (PCM→16kHz WAV, `src/lib/audio-utils.ts` +
 `src/hooks/use-push-to-talk.ts`) on desktop + phone companion; `audio`/`turn`/`phase` hub messages;
 `setListening`/`setThinking` during the loop; `/api/audio` + `POST /api/sessions/:id/call-context`.
-Next: **Phase 4 — coaching + showcase** (emotion/intensity polish, motion catalog browser, roles,
-difficulty/speed, target rules in cheat sheet). Companion tap-help still has no phone-side vocab
-picker yet (desktop vocab chips show Tap-help). In-app camera QR *scanning* remains native-app +
-manual code.
+**Phase 4 — coaching + showcase**: coaching settings (roles / difficulty / pace) in the scenario
+step, persona data in `src/shared/coaching.json` shared by client (`src/lib/coaching.ts`) and
+server (`server/coaching.mjs`) and injected into BOTH sim generation and the live nextTurn brain;
+emotion/intensity badges on active turns (sim schema now emits them); motion catalog browser
+(`GET /api/avatars/:id/motions` proxy + `MotionBrowser` dialog with `playMotion` previews);
+`CheatSheet.targetRules` (schema + validator + `Know before you call` section w/ citations);
+Perxona branding badge. See `docs/architecture.md` §11 for the writeup.
+Next: **Phase 5** (TBD — candidate: real camera QR scanning, per-role avatar packs, persistence of
+scenarios/settings, Connect Chatbot as `nextTurn` backend). Companion tap-help still has no
+phone-side vocab picker yet (desktop vocab chips show Tap-help).
 
 ## Stack
 

@@ -2,7 +2,13 @@
  * REST client for the Phase 2 session + ephemeral upload APIs (server.mjs).
  * All endpoints require a better-auth session cookie (same-origin).
  */
-import type { GlossaryEntry, GroundingAnswer, SessionSummary, SimScript } from "@/shared/contract";
+import type {
+  CallSettings,
+  GlossaryEntry,
+  GroundingAnswer,
+  SessionSummary,
+  SimScript,
+} from "@/shared/contract";
 import type { ApiError } from "./api";
 
 async function jsonRequest<T>(path: string, init?: RequestInit): Promise<T> {
@@ -116,6 +122,7 @@ export async function setCallContext(
     summary?: string | null;
     answers?: GroundingAnswer[];
     reference?: string | null;
+    settings?: CallSettings;
   },
 ): Promise<{ ok: boolean }> {
   return jsonRequest<{ ok: boolean }>(`/api/sessions/${sessionId}/call-context`, {
@@ -128,6 +135,7 @@ export async function setCallContext(
         ? { answers: context.answers }
         : {}),
       ...(context.reference ? { reference: context.reference } : {}),
+      ...(context.settings ? { settings: context.settings } : {}),
     }),
   });
 }

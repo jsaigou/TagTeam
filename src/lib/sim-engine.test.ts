@@ -10,6 +10,7 @@ import {
   SIM_FIXTURE,
   SIM_JSON,
 } from "../fixtures/llm";
+import { CALL_ROLES, DIFFICULTIES, PACES } from "./coaching";
 import type { GroundingAnswer } from "../shared/contract";
 
 const TEST_CONFIG = {
@@ -130,5 +131,27 @@ describe("generateSimulation", () => {
     const body = JSON.parse(String(init.body));
     expect(body.messages[0].content).toContain(VOICE_PRESETS.friendly.guidance);
     expect(body.messages[0].content).not.toContain(VOICE_PRESETS.formal.guidance);
+  });
+
+  it("threads the Phase 4 coaching settings into the persona prompt", async () => {
+    const fetchMock = stubFetchJson({ choices: [{ message: { content: SIM_JSON } }] });
+    await generateSimulation(DOC_SUMMARY_FIXTURE, ANSWERS, {
+      config: TEST_CONFIG,
+      settings: { role: "account", difficulty: "advanced", pace: "fast" },
+    });
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(String(init.body));
+    expect(body.messages[0].content).toContain(CALL_ROLES.account.persona);
+    expect(body.messages[0].content).toContain(DIFFICULTIES.advanced.guidance);
+    expect(body.messages[0].content).toContain(PACES.fast.guidance);
+    expect(body.messages[0].content).not.toContain(CALL_ROLES.reception.persona);
+  });
+
+  it("omits coaching guidance when no settings are supplied", async () => {
+    const fetchMock = stubFetchJson({ choices: [{ message: { content: SIM_JSON } }] });
+    await generateSimulation(DOC_SUMMARY_FIXTURE, ANSWERS, { config: TEST_CONFIG });
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(String(init.body));
+    expect(body.messages[0].content).not.toContain("【役割】");
   });
 });

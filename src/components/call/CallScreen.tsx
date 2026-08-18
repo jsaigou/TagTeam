@@ -8,10 +8,11 @@ import { useScriptPlayer } from "@/hooks/use-script-player";
 import { usePushToTalk } from "@/hooks/use-push-to-talk";
 import { setCallContext } from "@/lib/session-api";
 import { pipeline } from "@/state/pipeline";
-import { DEFAULT_AVATAR_ID, DEFAULT_SCENE_ID, DEFAULT_VOICE_ID } from "@/lib/presets";
+import { DEFAULT_AVATAR_ID, DEFAULT_SCENE_ID, DEFAULT_VOICE_ID, PRACTICE_AVATAR_ID } from "@/lib/presets";
 import { Transcript } from "./Transcript";
 import { VocabOverlay } from "./VocabOverlay";
 import { HelpLayer } from "./HelpLayer";
+import { MotionBrowser } from "@/components/stage/MotionBrowser";
 import { DeviceBadge } from "@/components/session/SessionBar";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -120,6 +121,7 @@ export function CallScreen() {
         summary: state.summary,
         answers: state.answers,
         reference: state.reference,
+        settings: state.settings,
       }).catch(() => {
         setConversationError("Live conversation is offline — the script will guide the call.");
       });
@@ -136,6 +138,7 @@ export function CallScreen() {
     state.summary,
     state.answers,
     state.reference,
+    state.settings,
   ]);
 
   const handleHold = useCallback(async () => {
@@ -255,7 +258,7 @@ export function CallScreen() {
     if (!state.cheatSheet) {
       setBusy(true);
       try {
-        const sheet = await pipeline.makeCheatSheet(script, glossary, state.answers);
+        const sheet = await pipeline.makeCheatSheet(script, glossary, state.answers, state.reference);
         setCheatSheet(sheet);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to build cheat sheet");
@@ -283,6 +286,7 @@ export function CallScreen() {
     glossary,
     state.answers,
     state.cheatSheet,
+    state.reference,
     setBusy,
     setCheatSheet,
     setError,
@@ -303,6 +307,10 @@ export function CallScreen() {
         </div>
         <div className="flex items-center gap-3">
           <DeviceBadge />
+          <MotionBrowser
+            avatarId={state.scenario?.avatarId ?? PRACTICE_AVATAR_ID}
+            onPlay={(motionId) => void avatar.playMotion(motionId)}
+          />
           <Button variant="ghost" size="sm" onClick={reset}>
             End & restart
           </Button>
@@ -401,11 +409,17 @@ export function CallScreen() {
         )}
 
         {isSpeaking && (
-          <div className="pointer-events-none absolute left-4 top-4 z-20">
+          <div className="pointer-events-none absolute left-4 top-4 z-20 flex items-center gap-2">
             <span className="inline-flex items-center gap-2 rounded-full bg-accent/25 px-3 py-1 text-xs font-medium">
               <span className="size-2 animate-pulse rounded-full bg-accent" />
               Speaking…
             </span>
+            {activeTurn?.emotion && (
+              <span className="inline-flex items-center rounded-full border border-accent/40 bg-card/70 px-3 py-1 text-xs font-medium text-foreground backdrop-blur">
+                {activeTurn.emotion}
+                {activeTurn.intensity ? ` · ${activeTurn.intensity}` : ""}
+              </span>
+            )}
           </div>
         )}
 

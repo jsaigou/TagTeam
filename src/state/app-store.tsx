@@ -6,6 +6,7 @@ import {
   type ReactNode,
 } from "react";
 import type {
+  CallSettings,
   CheatSheet,
   DocInput,
   GlossaryEntry,
@@ -14,6 +15,7 @@ import type {
   SimScript,
 } from "@/shared/contract";
 import type { DocSummary } from "@/lib/doc-parser";
+import { DEFAULT_CALL_SETTINGS } from "@/lib/coaching";
 
 export type Screen = "setup" | "call" | "cheat-sheet";
 export type SetupStep = "doc" | "grounding" | "scenario";
@@ -37,6 +39,8 @@ type AppState = {
   glossary: GlossaryEntry[];
   cheatSheet: CheatSheet | null;
   scenario: ScenarioSelection | null;
+  /** Phase 4 — coaching preferences for the call (role/difficulty/pace). */
+  settings: CallSettings;
   /** Web-researched reference digest about the office/agency for the call. */
   reference: string | null;
   busy: boolean;
@@ -51,6 +55,7 @@ type Action =
   | { type: "PARSED"; summary: string; doc: DocSummary; questions: GroundingQuestion[] }
   | { type: "ANSWERS_SAVED"; answers: GroundingAnswer[] }
   | { type: "SCENARIO_CHOSEN"; scenario: ScenarioSelection }
+  | { type: "SETTINGS_CHANGED"; settings: CallSettings }
   | { type: "SIM_READY"; script: SimScript; glossary: GlossaryEntry[] }
   | { type: "CHEAT_SHEET_READY"; cheatSheet: CheatSheet }
   | { type: "REFERENCE_READY"; digest: string }
@@ -71,6 +76,7 @@ const initialState: AppState = {
   glossary: [],
   cheatSheet: null,
   scenario: null,
+  settings: DEFAULT_CALL_SETTINGS,
   reference: null,
   busy: false,
   error: null,
@@ -98,6 +104,8 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, answers: action.answers, busy: false };
     case "SCENARIO_CHOSEN":
       return { ...state, scenario: action.scenario };
+    case "SETTINGS_CHANGED":
+      return { ...state, settings: action.settings };
     case "SIM_READY":
       return { ...state, script: action.script, glossary: action.glossary, busy: false };
     case "CHEAT_SHEET_READY":
@@ -127,6 +135,7 @@ type Store = {
   parsed: (summary: string, doc: DocSummary, questions: GroundingQuestion[]) => void;
   saveAnswers: (answers: GroundingAnswer[]) => void;
   chooseScenario: (scenario: ScenarioSelection) => void;
+  setSettings: (settings: CallSettings) => void;
   setSim: (script: SimScript, glossary: GlossaryEntry[]) => void;
   setCheatSheet: (cheatSheet: CheatSheet) => void;
   setReference: (digest: string) => void;
@@ -153,6 +162,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         dispatch({ type: "PARSED", summary, doc, questions }),
       saveAnswers: (answers) => dispatch({ type: "ANSWERS_SAVED", answers }),
       chooseScenario: (scenario) => dispatch({ type: "SCENARIO_CHOSEN", scenario }),
+      setSettings: (settings) => dispatch({ type: "SETTINGS_CHANGED", settings }),
       setSim: (script, glossary) => dispatch({ type: "SIM_READY", script, glossary }),
       setCheatSheet: (cheatSheet) => dispatch({ type: "CHEAT_SHEET_READY", cheatSheet }),
       setReference: (digest) => dispatch({ type: "REFERENCE_READY", digest }),

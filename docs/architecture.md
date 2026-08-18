@@ -95,6 +95,9 @@ type Turn = { id; speaker; jp; en?; vocab: string[]; motion?; emotion?; intensit
 type SimScript = { scenarioTitle: string; target: TargetProfile; turns: Turn[] };      // + target
 type CheatSheet = { goal; keyPhrases; practice; targetRules?: TargetRule[] };          // + target rules
 
+// Phase 4 — coaching settings (threaded into script generation + nextTurn)
+type CallSettings = { role: RoleId; difficulty: "beginner"|"intermediate"|"advanced"; pace: "slow"|"normal"|"fast" };
+
 // Adaptive call state (server-owned)
 type CallState = { sessionId; script; glossary; turnIndex; mode: "guided" | "free"; phase: "listening" | "thinking" | "talking" | "user" | "held" | "ended"; transcript: Turn[]; };
 ```
@@ -224,7 +227,7 @@ are keyed by session, independent of WS connections, and cleared when the room e
 | 1 — Foundation | Architecture doc (this); presenter full surface; provider layer; remove canned demo; better-auth + Drizzle/SQLite (login gate + UI); containerize | ✅ done |
 | 2 — Multi-device + scanning | QR pairing, OpenCV.js edge-detect/crop, multi-page upload, phone control, 3 modes (WebSocket session hub) | ✅ mostly done — see below |
 | 3 — Real conversation | `/api/stt` (whisper.cpp), push-to-talk, `nextTurn` adaptive brain, listening/thinking | ✅ done — see below |
-| 4 — Coaching + showcase | emotion/intensity wiring, motion catalog browser, roles, difficulty/speed, target rules in cheat sheet, Perxona branding | ⏳ |
+| 4 — Coaching + showcase | emotion/intensity wiring, motion catalog browser, roles, difficulty/speed, target rules in cheat sheet, Perxona branding | ✅ done — see below |
 
 **Phase 1 completed:** presenter layer at full 0.2.0 surface (`setListening/setThinking`,
 `present(text,{emotion,intensity})`, `presentWithAudio`, `muteAudio`, `updateCameraAngle`,
@@ -262,7 +265,31 @@ transcript in sync. Verified live end-to-end: whisper → STT → nextTurn → a
 accumulated context.
 
 **Phase 3 deferred:** Connect Chatbot as a `nextTurn` backend (own-LLM is the default; the chatbot
-`ChatbotProvider` interface from §7 remains unimplemented). Coaching/emotion polish lands in Phase 4.
+`ChatbotProvider` interface from §7 remains unimplemented). Coaching/emotion polish landed in
+Phase 4.
+
+**Phase 4 completed (this round):** coaching settings (roles / difficulty / pace) in the scenario
+step — `Who answers the phone` (Reception / Claims desk / Accounts), `Difficulty`
+(Beginner/Intermediate/Advanced) and `Pace` (Slow/Normal/Fast). The persona data lives in
+`src/shared/coaching.json` (the single source shared by the client's script generation via
+`src/lib/coaching.ts` AND the server's nextTurn brain via `server/coaching.mjs`, so the two never
+drift); the composed directive is injected into both the sim prompt and the live `nextTurn` system
+prompt. Settings thread through `CallSettings` (contract) → `app_session` call-context
+(`POST /api/sessions/:id/call-context`) → `buildNextTurnMessages`. **Emotion/intensity wiring:**
+`SIM_SCHEMA` turns now emit `emotion`/`intensity` (validated in `isTurn`), the script player
+already passes them to `present()`, and the live UI shows a `emotion · intensity` badge on the
+active bureaucrat turn (speaking indicator + transcript). **Motion catalog browser:** the Connect
+per-avatar motions endpoint is proxied at `GET /api/avatars/:id/motions`; the `MotionBrowser`
+dialog (call screen header) lists the practice avatar's gestures and previews any of them via
+`playMotion`. **Target rules in the cheat sheet:** `CheatSheet.targetRules: TargetRule[]` (contract
++ schema + validator), extracted from the reference digest by the cheat-sheet prompt and rendered
+as a `Know before you call` section (with source citations + kind badges). **Perxona branding:**
+`PerxonaBadge` on the invite screen + cheat-sheet footer. The Dockerfile runtime stage now copies
+`src/shared` so the server can read `coaching.json`.
+
+**Phase 4 deferred:** no in-app camera QR scanning yet (native camera app + manual code); the
+`roles`/`difficulty`/`pace` settings are session-level, not yet persisted per scenario row;
+`presentWithAudio` codec guarantees still unverified on real hardware.
 
 ## 12. Open questions
 

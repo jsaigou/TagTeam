@@ -36,6 +36,17 @@ export const getConfig = (): Promise<AppConfig> =>
 export const getAvatars = () =>
   request<{ items: CatalogItem[] }>("/api/avatars");
 
+/** A single motion asset in an avatar's motion catalog (Phase 4 browser). */
+export interface MotionAsset {
+  id: string;
+  name: string;
+  tags?: string[];
+  thumbnail?: string | null;
+}
+
+export const getAvatarMotions = (avatarId: string) =>
+  request<{ items: MotionAsset[] }>(`/api/avatars/${encodeURIComponent(avatarId)}/motions`);
+
 export const getScenes = () =>
   request<{ items: CatalogItem[] }>("/api/scenes");
 

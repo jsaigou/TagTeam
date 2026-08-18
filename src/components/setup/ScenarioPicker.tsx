@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { ChevronRight, Sparkles } from "lucide-react";
+import type { CallDifficulty, CallPace, CallSettings, RoleId } from "@/shared/contract";
 import type { ScenarioSelection } from "@/state/app-store";
 import type { PresetAvatar } from "@/hooks/use-catalog";
 import type { ApiError, CatalogItem } from "@/lib/api";
 import { PRACTICE_AVATAR_ID, PRACTICE_SCENE_ID } from "@/lib/presets";
+import { CALL_ROLES, DIFFICULTIES, PACES } from "@/lib/coaching";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -15,6 +17,9 @@ type ScenarioPickerProps = {
   voices: CatalogItem[];
   isLoading: boolean;
   error: ApiError | null;
+  /** Phase 4 — coaching settings. */
+  settings: CallSettings;
+  onSettingsChange: (settings: CallSettings) => void;
 };
 
 type OptionProps = {
@@ -50,6 +55,8 @@ export function ScenarioPicker({
   voices,
   isLoading,
   error,
+  settings,
+  onSettingsChange,
 }: ScenarioPickerProps) {
   const [avatarId, setAvatarId] = useState<string | null>(null);
   const [sceneId, setSceneId] = useState<string | null>(null);
@@ -67,6 +74,21 @@ export function ScenarioPicker({
 
   const ready = Boolean(currentAvatar && currentScene && currentVoice && !busy);
 
+  /* Choosing a role pre-selects its preferred practice avatar (if available) —
+     the persona and the face stay aligned. */
+  const handleRoleChange = (role: RoleId) => {
+    const preferred = CALL_ROLES[role].avatarId;
+    if (preferred && avatars.some((a) => a.id === preferred)) {
+      setAvatarId(preferred);
+    }
+    onSettingsChange({ ...settings, role });
+  };
+
+  const handleDifficultyChange = (difficulty: CallDifficulty) =>
+    onSettingsChange({ ...settings, difficulty });
+
+  const handlePaceChange = (pace: CallPace) => onSettingsChange({ ...settings, pace });
+
   if (isLoading) {
     return <p className="py-8 text-center text-muted-foreground">Loading scenario catalog…</p>;
   }
@@ -80,6 +102,52 @@ export function ScenarioPicker({
       )}
 
       <div className="flex flex-col gap-5">
+        <div className="flex flex-col gap-2">
+          <p className="text-sm font-medium text-primary">Who answers the phone</p>
+          <div className="grid gap-2 sm:grid-cols-3">
+            {(Object.keys(CALL_ROLES) as RoleId[]).map((roleId) => {
+              const role = CALL_ROLES[roleId];
+              return (
+                <Option
+                  key={roleId}
+                  label={role.label}
+                  description={role.description}
+                  active={settings.role === roleId}
+                  onSelect={() => handleRoleChange(roleId)}
+                />
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <p className="text-sm font-medium text-primary">Difficulty</p>
+          <div className="grid gap-2 sm:grid-cols-3">
+            {(Object.keys(DIFFICULTIES) as CallDifficulty[]).map((difficulty) => (
+              <Option
+                key={difficulty}
+                label={DIFFICULTIES[difficulty].label}
+                active={settings.difficulty === difficulty}
+                onSelect={() => handleDifficultyChange(difficulty)}
+              />
+            ))}
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <p className="text-sm font-medium text-primary">Pace</p>
+          <div className="grid gap-2 sm:grid-cols-3">
+            {(Object.keys(PACES) as CallPace[]).map((pace) => (
+              <Option
+                key={pace}
+                label={PACES[pace].label}
+                active={settings.pace === pace}
+                onSelect={() => handlePaceChange(pace)}
+              />
+            ))}
+          </div>
+        </div>
+
         <div className="flex flex-col gap-2">
           <p className="text-sm font-medium text-primary">Avatar</p>
           <div className="grid gap-2 sm:grid-cols-3">

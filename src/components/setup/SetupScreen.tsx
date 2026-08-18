@@ -11,6 +11,7 @@ import { Grounding } from "./Grounding";
 import { ScenarioPicker } from "./ScenarioPicker";
 import { ReferenceSearch } from "./ReferenceSearch";
 import { SessionBar } from "@/components/session/SessionBar";
+import { PerxonaBadge } from "@/components/brand/PerxonaBadge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -44,6 +45,7 @@ export function SetupScreen() {
     parsed,
     saveAnswers,
     chooseScenario,
+    setSettings,
     setSim,
     setError,
     setBusy,
@@ -134,6 +136,7 @@ export function SetupScreen() {
           state.answers,
           state.docSummary,
           state.reference,
+          state.settings,
         );
         setSim(result.script, result.glossary);
         await session.launch(scenario);
@@ -152,6 +155,8 @@ export function SetupScreen() {
       state.summary,
       state.answers,
       state.docSummary,
+      state.reference,
+      state.settings,
       setError,
       session,
     ],
@@ -178,6 +183,7 @@ export function SetupScreen() {
           <p className="text-sm text-muted-foreground">
             Meet Meeks — your practice-call coach.
           </p>
+          <PerxonaBadge />
         </div>
       </div>
     );
@@ -186,7 +192,7 @@ export function SetupScreen() {
   /* Setup pop-up — compact panel, at most ~25% of the screen. */
   return (
     <div className="flex min-h-svh items-center justify-end px-4 py-6 pr-4 md:pr-8">
-      <div className="w-[420px] max-w-[calc(100vw-2rem)] rounded-2xl border bg-card/90 p-5 shadow-xl backdrop-blur-md sm:p-6">
+      <div className="w-[420px] max-w-[calc(100vw-2rem)] overflow-y-auto rounded-2xl border bg-card/90 p-5 shadow-xl backdrop-blur-md sm:p-6 max-h-[calc(100svh-3rem)]">
         <div className="flex flex-col gap-1.5">
           <h2 className="text-xl font-semibold text-primary">Set up your call</h2>
           <p className="text-sm text-muted-foreground">
@@ -253,6 +259,8 @@ export function SetupScreen() {
               voices={catalog.voices}
               isLoading={catalog.isLoading}
               error={catalog.error}
+              settings={state.settings}
+              onSettingsChange={setSettings}
             />
           )}
 

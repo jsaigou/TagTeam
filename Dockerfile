@@ -19,6 +19,7 @@ RUN pnpm install --prod --frozen-lockfile
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/server ./server
 COPY --from=build /app/server.mjs ./server.mjs
+COPY --from=build /app/src/shared ./src/shared
 COPY --from=build /app/.env.example ./.env.example
 
 ENV PORT=8083

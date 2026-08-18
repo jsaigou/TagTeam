@@ -16,9 +16,13 @@ export type CheatSheetContext = {
   script: SimScript;
   glossary: GlossaryEntry[];
   answers: GroundingAnswer[];
+  /** Phase 4 — web-researched reference digest about the office/agency,
+   *  used to extract targetRules (hours/booking/required docs…). */
+  reference?: string;
 };
 
-/** Render the script + glossary + answers as the user message for the model. */
+/** Render the script + glossary + answers (and optional reference digest) as the
+ *  user message for the model. */
 export function buildCheatSheetContext(context: CheatSheetContext): string {
   const turns = context.script.turns
     .map((turn) => `${turn.speaker}: ${turn.jp}${turn.en ? `（${turn.en}）` : ""}`)
@@ -30,7 +34,7 @@ export function buildCheatSheetContext(context: CheatSheetContext): string {
     .map((a) => `- ${a.questionId}: ${a.answer}`)
     .join("\n");
 
-  return [
+  const lines = [
     "【電話の台本】",
     turns,
     "",
@@ -39,7 +43,11 @@ export function buildCheatSheetContext(context: CheatSheetContext): string {
     "",
     "【利用者の目的（回答）】",
     answers,
-  ].join("\n");
+  ];
+  if (context.reference) {
+    lines.push("", "【検索した参考情報（窓口の実態）】", context.reference);
+  }
+  return lines.join("\n");
 }
 
 /** Generate the post-call cheat sheet for this simulation. */

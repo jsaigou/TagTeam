@@ -1,4 +1,5 @@
 import type {
+  CallSettings,
   CheatSheet,
   DocInput,
   GlossaryEntry,
@@ -52,12 +53,14 @@ export const pipeline = {
     answers: GroundingAnswer[],
     doc: DocSummary | null,
     reference: string | null = null,
+    settings?: CallSettings,
   ): Promise<SimResult> {
     if (!doc) {
       throw new Error("Document summary is missing — please go back and re-upload the document.");
     }
     return generateSimulation(doc, answers, {
       reference: reference ?? undefined,
+      settings,
     });
   },
 
@@ -65,7 +68,8 @@ export const pipeline = {
     script: SimScript,
     glossary: GlossaryEntry[],
     answers: GroundingAnswer[],
+    reference?: string | null,
   ): Promise<CheatSheet> {
-    return generateCheatSheet({ script, glossary, answers });
+    return generateCheatSheet({ script, glossary, answers, reference: reference ?? undefined });
   },
 };

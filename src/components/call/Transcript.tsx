@@ -41,6 +41,12 @@ export function Transcript({ turns, activeTurnId }: TranscriptProps) {
             <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
               <User className={cn("size-3.5", isUser ? "text-primary" : "text-accent")} />
               {isUser ? "You" : "Bureaucrat"}
+              {!isUser && turn.emotion && (
+                <span className="rounded-full border border-accent/40 px-1.5 py-px text-[10px] font-medium text-accent">
+                  {turn.emotion}
+                  {turn.intensity ? ` · ${turn.intensity}` : ""}
+                </span>
+              )}
             </div>
             <p className="text-sm leading-relaxed">{turn.jp}</p>
             {turn.en && <p className="text-xs text-muted-foreground">{turn.en}</p>}

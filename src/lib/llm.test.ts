@@ -220,6 +220,25 @@ describe("isTurn", () => {
     expect(isTurn({ id: "t1", speaker: "bureaucrat", jp: "A", vocab: [], motion: 42 })).toBe(false);
     expect(isTurn({ id: "t1", speaker: "bureaucrat", jp: "A", vocab: [], motion: ["bad"] })).toBe(false);
   });
+
+  it("accepts Phase 4 emotion/intensity and rejects unknown values", () => {
+    expect(
+      isTurn({
+        id: "t1",
+        speaker: "bureaucrat",
+        jp: "A",
+        vocab: [],
+        emotion: "gratitude",
+        intensity: "high",
+      }),
+    ).toBe(true);
+    expect(isTurn({ id: "t1", speaker: "bureaucrat", jp: "A", vocab: [], emotion: "angry" })).toBe(
+      false,
+    );
+    expect(
+      isTurn({ id: "t1", speaker: "bureaucrat", jp: "A", vocab: [], intensity: "extreme" }),
+    ).toBe(false);
+  });
 });
 
 describe("chatJson", () => {
