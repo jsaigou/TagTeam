@@ -225,9 +225,10 @@ are keyed by session, independent of WS connections, and cleared when the room e
 | --- | --- | --- |
 | 0 — Research + spike | Perxona capabilities, runtime wiring, geo-search | ✅ done — `docs/phase0-spike.md` |
 | 1 — Foundation | Architecture doc (this); presenter full surface; provider layer; remove canned demo; better-auth + Drizzle/SQLite (login gate + UI); containerize | ✅ done |
-| 2 — Multi-device + scanning | QR pairing, OpenCV.js edge-detect/crop, multi-page upload, phone control, 3 modes (WebSocket session hub) | ✅ mostly done — see below |
+| 2 — Multi-device + scanning | QR pairing, OpenCV.js edge-detect/crop, multi-page upload, phone control, 3 modes (WebSocket session hub) | ✅ done — see below |
 | 3 — Real conversation | `/api/stt` (whisper.cpp), push-to-talk, `nextTurn` adaptive brain, listening/thinking | ✅ done — see below |
 | 4 — Coaching + showcase | emotion/intensity wiring, motion catalog browser, roles, difficulty/speed, target rules in cheat sheet, Perxona branding | ✅ done — see below |
+| 5 — Companion + persistence | in-app camera QR scanning, per-role avatar packs, scenario persistence, Connect Chatbot nextTurn, phone vocab picker, BYO TTS | ✅ done — see below |
 
 **Phase 1 completed:** presenter layer at full 0.2.0 surface (`setListening/setThinking`,
 `present(text,{emotion,intensity})`, `presentWithAudio`, `muteAudio`, `updateCameraAngle`,
@@ -248,9 +249,8 @@ Hold/Resume control, and page scanning; OpenCV.js document edge-detect + perspec
 (stage), phone companion (input+control), phone solo (the app itself on a phone).
 
 **Phase 2 deferred:** the `audio → stt → nextTurn` message and companion mic shipped with
-Phase 3. Companion tap-help UI is driven by the protocol but has no phone-side vocab picker yet —
-desktop vocab chips still show Tap-help. In-app camera QR *scanning* was skipped in favor of the
-native camera app + manual code.
+Phase 3. The remaining Phase 2 deferred items landed in Phase 5: the phone-side vocab picker
+(`AppSnapshot.activeVocab`, Phase 5e) and in-app camera QR *scanning* (`CameraScanner`, Phase 5a).
 
 **Phase 3 completed (this round):** the STT provider (`server/providers.mjs` — whisper.cpp
 subprocess by default, hosted OpenAI-compatible via `STT_PROVIDER=hosted`) + `POST /api/stt`;
@@ -310,9 +310,9 @@ as a `Know before you call` section (with source citations + kind badges). **Per
 `PerxonaBadge` on the invite screen + cheat-sheet footer. The Dockerfile runtime stage now copies
 `src/shared` so the server can read `coaching.json`.
 
-**Phase 4 deferred:** no in-app camera QR scanning yet (native camera app + manual code); the
-`roles`/`difficulty`/`pace` settings are session-level, not yet persisted per scenario row;
-`presentWithAudio` codec guarantees still unverified on real hardware.
+**Phase 4 deferred:** all three deferred items landed in Phase 5 — in-app camera QR scanning
+(Phase 5a), settings persisted per scenario row (Phase 5c), and the `presentWithAudio` codec
+contract normalized + verified (Phase 5f).
 
 **Phase 5 — real camera QR scanning (this round):** the phone companion now scans the desktop
 pairing QR in-app (`CameraScanner`): `getUserMedia` → hidden canvas → jsQR (lazy-loaded, so the

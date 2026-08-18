@@ -1,5 +1,11 @@
 # TagTeam — Build Contract
 
+> **⚠️ STALE — this hackday-era doc is superseded.** Read
+> [`docs/architecture.md`](docs/architecture.md) first (the authoritative design doc, incl. the
+> roadmap through Phase 5) and [`AGENTS.md`](AGENTS.md) (current status + conventions). The module
+> ownership split below predates the server orchestrator, the session hub, and the multi-phase
+> features; the shared data shapes now live in `src/shared/contract.ts` (import-only).
+
 **TagTeam** is an AI-powered voice simulator and live co-pilot that helps non-native residents
 confidently navigate complex Japanese bureaucracy phone calls.
 

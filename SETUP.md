@@ -27,6 +27,7 @@ Fill in the required values:
 
 | Variable | Purpose |
 | --- | --- |
+| `BETTER_AUTH_SECRET` | **Required** — better-auth signing secret (`openssl rand -hex 32`) |
 | `PERXONA_API_BASE_URL` | Your Connect region, e.g. `https://console.perxona.ai/asia` |
 | `PERXONA_CONNECT_EMAIL` / `PERXONA_CONNECT_PASSWORD` | The one shared Connect identity used to mint tokens for all visitors |
 | `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` | The OpenAI-compatible LLM used for document grounding, script generation, and cheat sheets — **server-side**, proxied via `/api/llm` so the key never reaches the browser |
@@ -34,6 +35,8 @@ Fill in the required values:
 | `VITE_PRESENTER_URL` | (optional) `<sv-presenter>` engine CDN; defaults to the asia channel |
 | `WHISPER_BIN` / `WHISPER_MODEL` | (Phase 3, optional) whisper.cpp CLI + model for push-to-talk; see [§5b](#5b-push-to-talk--real-conversation-phase-3) |
 | `STT_PROVIDER` / `STT_BASE_URL` / `STT_API_KEY` / `STT_MODEL` | (Phase 3, optional) hosted STT alternative to whisper.cpp |
+| `NEXTTURN_PROVIDER` / `CHATBOT_ID` | (Phase 5d, optional) Connect Chatbot as the live-conversation brain; see [§5c](#5c-connect-chatbot-as-the-live-brain-phase-5d) |
+| `TTS_PROVIDER` / `TTS_BASE_URL` / `TTS_API_KEY` / `TTS_MODEL` / `TTS_VOICE` | (Phase 5f, optional) BYO avatar speech via your own `/audio/speech` engine; see [§5d](#5d-byo-tts-avatar-speech-from-your-own-engine) |
 | `SEARXNG_URL` / `FIRECRAWL_URL` / `FIRECRAWL_API_KEY` | (optional) your search + scrape endpoints — see [§4](#4-connect-your-own-search) |
 
 `.env` is git-ignored — never commit it.
@@ -147,10 +150,11 @@ A second device (phone) can join the desktop session as a **camera + control sur
 
 1. On the desktop, open **Set up your call** → the **Phone companion** panel shows a QR code
    (and a 6-character pairing code) for the current session.
-2. On the phone, scan the QR with the phone's camera app (it opens the join URL) — or open the
-   app and type the code manually.
+2. On the phone, either scan the QR **in-app** (open the app → **Scan QR with camera**) or with the
+   phone's native camera app (it opens the join URL) — or type the code manually.
 3. The phone joins as a companion: it can **scan document pages** (pushed to the desktop's
-   document bundle) and send **Hold / Resume / Tap-help** during the call.
+   document bundle), send **Hold / Resume / Tap-help** during the call, and tap **vocabulary
+   chips** on the active turn for hints.
 
 How it works:
 

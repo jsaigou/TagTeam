@@ -9,7 +9,7 @@ and an OpenAI-compatible LLM.
 > records what was verified live against Perxona. `CONTRACT.md` is the stale hackday doc and is
 > being superseded.
 
-## Current status (Phase 1 + 2 + 3 + 4)
+## Current status (Phase 1 + 2 + 3 + 4 + 5)
 
 Done: presenter layer at the full 0.2.0 surface; canned demo removed; **better-auth + Drizzle +
 SQLite login gate**; provider module (`server/providers.mjs`); Dockerfile + docker-compose;
@@ -28,14 +28,17 @@ server (`server/coaching.mjs`) and injected into BOTH sim generation and the liv
 emotion/intensity badges on active turns (sim schema now emits them); motion catalog browser
 (`GET /api/avatars/:id/motions` proxy + `MotionBrowser` dialog with `playMotion` previews);
 `CheatSheet.targetRules` (schema + validator + `Know before you call` section w/ citations);
-Perxona branding badge. See `docs/architecture.md` §11 for the writeup.
-Next: **Phase 5** (real camera QR scanning ✓ — `CameraScanner` + jsQR on the phone companion;
-per-role avatar packs ✓ — curated avatar/scene/voice per role in `coaching.json`; persistence ✓ —
-scenarios saved at call start + cheat-sheet attach, restored via `PastCalls` on the setup screen;
-Connect Chatbot as `nextTurn` backend ✓ — `NEXTTURN_PROVIDER=connect-chatbot` + `CHATBOT_ID`, see
-SETUP.md §5c; phone-side vocab picker ✓ — `AppSnapshot.activeVocab` drives companion Tap-help
-chips; BYO TTS ✓ — `TTS_PROVIDER=byo` + `VITE_TTS_PROVIDER=byo`, 16 kHz mono WAV via
-`presentWithAudio`, see SETUP.md §5d). The Phase 5 candidate list is exhausted; next phase is TBD.
+Perxona branding badge.
+**Phase 5 — companion + persistence**: in-app camera QR scanning ✓ (`CameraScanner` + jsQR,
+lazy-loaded, on the phone companion); per-role avatar packs ✓ (curated avatar/scene/voice per role
+in `coaching.json`, verified against the live catalog); scenario persistence ✓ (saved at call start
++ cheat-sheet attach, restored via `PastCalls` on the setup screen); Connect Chatbot as `nextTurn`
+backend ✓ (`NEXTTURN_PROVIDER=connect-chatbot` + `CHATBOT_ID`, see SETUP.md §5c); phone-side vocab
+picker ✓ (`AppSnapshot.activeVocab` drives companion Tap-help chips); BYO TTS ✓ (`TTS_PROVIDER=byo`
++ `VITE_TTS_PROVIDER=byo`, 16 kHz mono WAV via `presentWithAudio`, see SETUP.md §5d). See
+`docs/architecture.md` §11 for the writeup.
+Next: **Phase 6 — TBD** (candidate: target-specific grounding per §4/§5 — geolocate → scrape →
+`extractTargetRules` with user confirmation, using the unused `scenario.target` column).
 
 ## Stack
 
@@ -56,12 +59,18 @@ chips; BYO TTS ✓ — `TTS_PROVIDER=byo` + `VITE_TTS_PROVIDER=byo`, 16 kHz mono
 - **LLM/search (server-side, `server/providers.mjs`):** `LLM_BASE_URL`, `LLM_API_KEY`,
   `LLM_MODEL`, optional `LLM_PROVIDER=openai|anthropic`; optional `SEARXNG_URL`, `FIRECRAWL_URL`,
   `FIRECRAWL_API_KEY`, `SEARCH_LANGUAGE` (default `ja-JP`).
+- **Live brain (server-side):** `NEXTTURN_PROVIDER=own-llm|connect-chatbot` (default `own-llm`) +
+  `CHATBOT_ID` (Connect Chatbot persona — see SETUP.md §5c).
 - **STT (server-side, Phase 3):** `STT_PROVIDER=whisper-cpp|hosted` (default `whisper-cpp`),
   `WHISPER_BIN` (default `whisper-cli`), `WHISPER_MODEL` (default `ggml-base.bin`, resolved under
   `models/` or `data/models/` — whisper.cpp does NOT auto-download; see SETUP.md §5b), optional
   `STT_LANGUAGE` (default `ja`), and for `hosted`: `STT_BASE_URL`, `STT_API_KEY`, `STT_MODEL`.
+- **TTS (server-side, Phase 5f):** `TTS_PROVIDER=perxona|byo` (default `perxona`), and for `byo`:
+  `TTS_BASE_URL`, `TTS_API_KEY`, `TTS_MODEL`, optional `TTS_VOICE`/`TTS_LANGUAGE` (default `ja`) /
+  `TTS_NORMALIZE` (default `1` — resample to 16 kHz mono WAV via ffmpeg; see SETUP.md §5d).
 - **Client-side (`VITE_` prefix, exposed to the browser):** `VITE_PRESENTER_URL`,
-  `VITE_LLM_MODEL`, optional `VITE_OPENCV_URL` (document scan engine; default docs.opencv.org).
+  `VITE_LLM_MODEL`, optional `VITE_OPENCV_URL` (document scan engine; default docs.opencv.org),
+  `VITE_TTS_PROVIDER=perxona|byo` (must mirror server `TTS_PROVIDER` for BYO speech).
 
 **Known environment latency (do not "fix" without asking):** each push-to-talk spawns a fresh
 `whisper-cli` subprocess (loads `ggml-base.bin` ~1s) and the configured homelab LLM
@@ -73,22 +82,32 @@ once on an empty/malformed reply (reasoning models burn the budget).
 
 - **User login via better-auth** (`server/auth.mjs`). `server.mjs` (Express) holds the shared
   Connect identity from env, mints a connect_token for the browser (`GET /api/connect-token`),
-  and proxies the catalog (`GET /api/avatars|scenes|voices`). Vite proxies `/api` → `:8083` in
-  dev; in prod the server serves the built app. Modeled on the perxona-connect-kit
-  `samples/express` server.
+  and proxies the catalog (`GET /api/avatars|scenes|voices` + `GET /api/avatars/:id/motions`).
+  Vite proxies `/api` → `:8083` in dev; in prod the server serves the built app. Modeled on the
+  perxona-connect-kit `samples/express` server.
 - **Multi-device sessions** (`server/hub.mjs` + `src/state/session-context.tsx`): the desktop is
-  the `stage` device; phones join `/phone#s=<id>&p=<code>` as `input`+`control`. Session REST
-  (`POST /api/sessions`, uploads) + WS hub at `/api/ws` (Vite proxy upgrades it with `ws:true`).
-  Shared protocol types are in `src/shared/contract.ts`; pure join/status helpers in
-  `src/lib/session-utils.ts`. Uploaded pages are ephemeral (10-min TTL) and deleted on ack.
+  the `stage` device; phones join `/phone#s=<id>&p=<code>` as `input`+`control` (in-app camera QR
+  scan via `CameraScanner`, or type the code). Session REST (`POST /api/sessions`, uploads) + WS
+  hub at `/api/ws` (Vite proxy upgrades it with `ws:true`). Shared protocol types are in
+  `src/shared/contract.ts`; pure join/status helpers in `src/lib/session-utils.ts`. Uploaded pages
+  are ephemeral (10-min TTL) and deleted on ack.
 - **Real conversation (Phase 3)** — the **server orchestrator** (`server/orchestrator.mjs`) owns the
   per-session call context (`POST /api/sessions/:id/call-context` seeds script+glossary at call
   start) and the running transcript. Push-to-talk audio (16 kHz mono WAV, `src/lib/audio-utils.ts`
   + `src/hooks/use-push-to-talk.ts`) is POSTed to `/api/audio`, announced over the hub as
   `{ type: "audio", audioId }`, and the hub runs `audio → stt (whisper.cpp) → nextTurn
-  (server/next-turn.mjs, own-LLM) → broadcast turn/phase`. The stage presents broadcast bureaucrat
-  turns with `setListening`/`setThinking` around the loop; the phone companion mic uses the same
-  `audio` path. If STT/LLM are unconfigured the call falls back to scripted mode (Skip & continue).
+  (server/next-turn.mjs; `NEXTTURN_PROVIDER` = own-LLM default or Connect Chatbot) → broadcast
+  turn/phase`. The stage presents broadcast bureaucrat turns with `setListening`/`setThinking`
+  around the loop; the phone companion mic uses the same `audio` path. If STT/LLM are unconfigured
+  the call falls back to scripted mode (Skip & continue).
+- **Coaching (Phase 4)** — roles/difficulty/pace chosen in the scenario step; persona data in
+  `src/shared/coaching.json` feeds both script generation (`src/lib/coaching.ts`) and the live
+  brain (`server/coaching.mjs`). Settings persist per scenario row and ride the call context.
+- **Persistence (Phase 5c)** — `server/scenarios.mjs` + `/api/scenarios`: full call state saved at
+  call start, cheat sheet attached at finish, restored from `PastCalls` on the setup screen.
+- **BYO TTS (Phase 5f)** — `TTS_PROVIDER=byo` + `VITE_TTS_PROVIDER=byo`: the avatar session's
+  `present` synthesizes server-side (`POST /api/tts`) and plays via `presentWithAudio` (16 kHz mono
+  WAV, ffmpeg-normalized), falling back to Perxona speech on failure.
 - `<sv-presenter>` runtime loads from the CDN `VITE_PRESENTER_URL`; `@perxona/presenter-types`
   is type-only. Presenter gotchas are in `CONTRACT.md` — read them before writing presenter code.
 - Shared data shapes live in `src/shared/contract.ts` (coordinator-owned, import-only).
