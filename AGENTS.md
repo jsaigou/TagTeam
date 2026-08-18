@@ -53,6 +53,12 @@ manual code.
 - **Client-side (`VITE_` prefix, exposed to the browser):** `VITE_PRESENTER_URL`,
   `VITE_LLM_MODEL`, optional `VITE_OPENCV_URL` (document scan engine; default docs.opencv.org).
 
+**Known environment latency (do not "fix" without asking):** each push-to-talk spawns a fresh
+`whisper-cli` subprocess (loads `ggml-base.bin` ~1s) and the configured homelab LLM
+(`LLM_BASE_URL=https://a0.mango-rockhopper.ts.net/v1`, `gemma4-mtp`) reasons ~40–80s per call, so
+the first reply of a call is slow by design. The `nextTurn` brain caps at 8192 tokens and retries
+once on an empty/malformed reply (reasoning models burn the budget).
+
 ## Architecture
 
 - **User login via better-auth** (`server/auth.mjs`). `server.mjs` (Express) holds the shared
