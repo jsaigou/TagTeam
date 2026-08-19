@@ -11,6 +11,9 @@ import { toNodeHandler, fromNodeHeaders } from "better-auth/node";
 import { config, llmChat, synthesizeSpeech, transcribeAudio } from "./server/providers.mjs";
 import { createCallOrchestrator } from "./server/orchestrator.mjs";
 import { NEXT_TURN_SCHEMA_TEXT } from "./server/next-turn.mjs";
+import { createJobRunner } from "./server/jobs.mjs";
+import { step as researchStep } from "./server/steps/research.mjs";
+import { step as scrapeStep } from "./server/steps/scrape.mjs";
 import {
   createScenario,
   deleteScenario,
@@ -380,10 +383,25 @@ if (DEMO_API_ENABLED) {
   );
 }
 
+// Phase 7b — background job runner. Steps are plain modules (server/steps/*)
+// run by the generic runner in server/jobs.mjs; the "net" lane fans research
+// + scrape out concurrently instead of the old strictly-sequential loop, and
+// the "llm" lane (reserved for later migration slices — see the Phase 7 plan
+// §7b) caps at LLM_CONCURRENCY since the deployed model serializes anyway.
+const jobRunner = createJobRunner({
+  steps: { research: researchStep, scrape: scrapeStep },
+  lanes: {
+    net: { concurrency: 3 },
+    llm: { concurrency: Number(process.env.LLM_CONCURRENCY) || 1 },
+  },
+});
+
 // Reference search — used to research the office/agency the user will call.
-// Searches via SearXNG (JSON API), then scrapes the top results with Firecrawl.
-// Returns a Server-Sent-Events stream so the caller sees hits and scraped pages
-// as they arrive, instead of waiting for everything:
+// Runs research (SearXNG) then scrapes the top results (Firecrawl) through
+// the job runner above; still returns a Server-Sent-Events stream so the
+// caller sees hits and scraped pages as they arrive, instead of waiting for
+// everything — this route is a thin SSE wrapper over background jobs now,
+// not where the work happens (Phase 7 plan §7b.5 migration step 1):
 //   event: hits  → the SearXNG results list (fast)
 //   event: page  → each scraped page as it completes
 //   event: done  → the assembled digest (grounding text for the simulation)
@@ -419,54 +437,25 @@ app.get(
       res.write(`event: ${name}\ndata: ${JSON.stringify(data)}\n\n`);
     };
 
+    // Request-scoped run key — this route has no app_session, so jobs here
+    // are one-shot; clearRun() below drops them immediately rather than
+    // waiting on a TTL sweep meant for long-lived session-scoped runs.
+    const runKey = crypto.randomUUID();
+
     try {
-      const searchUrl = new URL(`${config.search.searxngUrl}/search`);
-      searchUrl.searchParams.set("q", q);
-      searchUrl.searchParams.set("format", "json");
-      searchUrl.searchParams.set("safesearch", "0");
-      // Geo-scoping (Phase 0 spike): a bare office name otherwise surfaces
-      // wrong-country businesses. ja-JP biases results to Japan; callers append
-      // location terms for the specific prefecture/city.
-      searchUrl.searchParams.set("language", config.search.language);
-      const sRes = await fetch(searchUrl, { signal: AbortSignal.timeout(15_000) });
-      if (!sRes.ok) {
-        throw Object.assign(new Error(`SearXNG search failed: ${sRes.status}`), { status: 502 });
-      }
-      const sJson = await sRes.json();
-      const results = (sJson.results ?? [])
-        .filter((r) => r && r.url)
-        .slice(0, 5)
-        .map((r) => ({
-          title: r.title ?? "",
-          url: r.url,
-          snippet: r.content ?? "",
-        }));
+      const { results } = await jobRunner.enqueue(runKey, "research", { q }).settled;
       emit("hits", { query: q, results });
 
       const scraped = [];
       if (config.scrape.firecrawlUrl) {
-        const fHeaders = { "Content-Type": "application/json" };
-        if (config.scrape.firecrawlApiKey) fHeaders.Authorization = `Bearer ${config.scrape.firecrawlApiKey}`;
-        for (const r of results.slice(0, 2)) {
-          try {
-            const fRes = await fetch(`${config.scrape.firecrawlUrl}/v1/scrape`, {
-              method: "POST",
-              headers: fHeaders,
-              body: JSON.stringify({ url: r.url, formats: ["markdown"] }),
-              signal: AbortSignal.timeout(25_000),
-            });
-            if (fRes.ok) {
-              const fJson = await fRes.json();
-              const md = fJson?.data?.markdown ?? "";
-              if (md) {
-                const page = { url: r.url, markdown: md.slice(0, 6000) };
-                scraped.push(page);
-                emit("page", { url: r.url, index: scraped.length, total: results.slice(0, 2).length });
-              }
-            }
-          } catch {
-            /* skip un-scrapable pages */
-          }
+        const targets = results.slice(0, 2);
+        const outcomes = await Promise.allSettled(
+          targets.map((r) => jobRunner.enqueue(runKey, "scrape", { url: r.url }).settled),
+        );
+        for (const outcome of outcomes) {
+          if (outcome.status !== "fulfilled") continue; // skip un-scrapable pages
+          scraped.push(outcome.value);
+          emit("page", { url: outcome.value.url, index: scraped.length, total: targets.length });
         }
       }
 
@@ -483,6 +472,7 @@ app.get(
       const message = err instanceof Error ? err.message : String(err);
       emit("error", { error: message });
     } finally {
+      jobRunner.clearRun(runKey);
       res.end();
     }
   },
