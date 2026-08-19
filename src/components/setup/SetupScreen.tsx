@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Check, Sparkles } from "lucide-react";
+import { Check, Loader2, Mic, Sparkles } from "lucide-react";
 import type { DocInput, GroundingAnswer, RoleId } from "@/shared/contract";
+import type { ChatMessage } from "@/lib/llm";
 import { useAppStore, type SetupStep } from "@/state/app-store";
 import { useAvatar } from "@/state/avatar-context";
 import { useCatalog } from "@/hooks/use-catalog";
+import { useGuideChat, type GuideChatState } from "@/hooks/use-guide-chat";
 import { resolveDefaults } from "@/lib/presets";
 import { DEFAULT_VOICE_ID } from "@/lib/presets";
 import { CALL_ROLES } from "@/lib/coaching";
@@ -41,11 +43,73 @@ const GUIDES: Record<SetupStep, { en: string }> = {
   },
 };
 
+/** Luna's persona for the setup-screen mic chat. Short, warm, actionable. */
+const LUNA_GUIDE_SYSTEM: string = [
+  "You are Luna, a friendly English-speaking guide inside the TagTeam app, which helps",
+  "non-native residents prepare for Japanese bureaucracy phone calls. You appear during",
+  "app setup, on the main screen.",
+  "Keep replies to 1-3 short, plain, warm, actionable sentences. No lists unless asked.",
+  "Refer to the current setup step and the user's document if relevant.",
+  "Never invent specific office hours or rules — if asked about a particular office, suggest",
+  "researching it or asking the staff directly. Gently steer off-topic questions back to setup.",
+].join(" ");
+
 /** Resolve a stored role back to its curated avatar/scene/voice selection. */
 function packToSelection(role: RoleId): { avatarId: string; sceneId: string; voiceId: string } | null {
   const pack = CALL_ROLES[role].pack;
   if (!pack?.avatarId || !pack.sceneId) return null;
   return { avatarId: pack.avatarId, sceneId: pack.sceneId, voiceId: pack.voiceId ?? DEFAULT_VOICE_ID };
+}
+
+/** Hold-to-talk mic that lets the user ask Luna a question on the main screen. */
+function TalkToLunaButton({
+  state,
+  supported,
+  onStart,
+  onStop,
+  compact,
+}: {
+  state: GuideChatState;
+  supported: boolean;
+  onStart: () => void;
+  onStop: () => void;
+  compact?: boolean;
+}) {
+  const thinking = state === "thinking";
+  const listening = state === "listening";
+  return (
+    <button
+      type="button"
+      onPointerDown={onStart}
+      onPointerUp={onStop}
+      onPointerLeave={onStop}
+      onPointerCancel={onStop}
+      disabled={!supported || thinking}
+      className={cn(
+        "flex select-none touch-none items-center justify-center gap-2 rounded-lg border font-semibold transition-colors",
+        compact ? "px-3 py-2 text-xs" : "px-4 py-2.5 text-sm",
+        listening
+          ? "border-destructive/40 bg-destructive/15 text-destructive"
+          : "border-accent/40 bg-accent/15 text-accent hover:bg-accent/25",
+        (!supported || thinking) && "cursor-not-allowed opacity-50",
+      )}
+    >
+      {thinking ? (
+        <Loader2 className={cn("animate-spin", compact ? "size-3.5" : "size-4")} />
+      ) : listening ? (
+        <span className="size-2 animate-pulse rounded-full bg-destructive" />
+      ) : (
+        <Mic className={compact ? "size-3.5" : "size-4"} />
+      )}
+      {listening
+        ? "Listening… release to ask"
+        : thinking
+          ? "Luna is thinking…"
+          : compact
+            ? "Talk to Luna"
+            : "Hold to talk to Luna"}
+    </button>
+  );
 }
 
 export function SetupScreen() {
@@ -67,6 +131,28 @@ export function SetupScreen() {
   const { setupOpen } = state;
   const catalog = useCatalog();
   const { session, unlockAudio, showGuide, speakGuide, startEager, stopEager } = useAvatar();
+
+  /* Phase 6 follow-up — hold-to-talk mic so the user can ask Luna a question on
+     the main screen. Replies are shown + spoken via the guide bubble. */
+  const stepLabel = STEPS.find((s) => s.key === state.setupStep)?.label ?? state.setupStep;
+  const buildGuideContext = useCallback(
+    (transcript: string): ChatMessage[] => {
+      const parts = [`Current setup step: ${stepLabel}.`];
+      if (state.summary) parts.push(`Document summary: ${state.summary}.`);
+      if (state.answers.length > 0) parts.push(`Grounding answers given: ${state.answers.length}.`);
+      parts.push("", `The user said: ${transcript}`);
+      return [
+        { role: "system", content: LUNA_GUIDE_SYSTEM },
+        { role: "user", content: parts.join("\n") },
+      ];
+    },
+    [stepLabel, state.summary, state.answers.length],
+  );
+  const guideChat = useGuideChat({
+    onReply: (reply) => speakGuide({ en: reply }),
+    onThinkingChange: (thinking) => session.setThinking(thinking),
+    buildContext: buildGuideContext,
+  });
   const [analyzing, setAnalyzing] = useState(false);
   const launchedRef = useRef(false);
   const lastGuideStepRef = useRef<SetupStep | null>(null);
@@ -246,11 +332,12 @@ export function SetupScreen() {
     [state.setupStep],
   );
 
-  /* Invite state — the avatar is on screen with a Get started trigger. */
+  /* Invite state — the avatar is on screen in a portrait card with a Get
+     started trigger, right-aligned to mirror the setup panel. */
   if (!setupOpen) {
     return (
-      <div className="flex min-h-svh flex-col items-center justify-center">
-        <div className="flex flex-col items-center gap-3 pb-44">
+      <div className="flex min-h-svh items-center justify-end px-4 py-6 pr-4 md:pr-8">
+        <div className="flex w-[420px] max-w-[calc(100vw-2rem)] flex-col items-center gap-3">
           <Button
             size="lg"
             onClick={handleGetStarted}
@@ -262,6 +349,15 @@ export function SetupScreen() {
           <p className="text-sm text-muted-foreground">
             Meet Luna — your practice-call assistant.
           </p>
+          <TalkToLunaButton
+            state={guideChat.state}
+            supported={guideChat.supported}
+            onStart={() => void guideChat.start()}
+            onStop={() => void guideChat.stop()}
+          />
+          {guideChat.error && (
+            <p className="max-w-xs text-center text-xs text-destructive">{guideChat.error}</p>
+          )}
           <PerxonaBadge />
         </div>
       </div>
@@ -273,10 +369,24 @@ export function SetupScreen() {
     <div className="flex min-h-svh items-center justify-end px-4 py-6 pr-4 md:pr-8">
       <div className="w-[420px] max-w-[calc(100vw-2rem)] overflow-y-auto rounded-2xl border bg-card/90 p-5 shadow-xl backdrop-blur-md sm:p-6 max-h-[calc(100svh-3rem)]">
         <div className="flex flex-col gap-1.5">
-          <h2 className="text-xl font-semibold text-primary">Set up your call</h2>
-          <p className="text-sm text-muted-foreground">
-            Three quick steps, then we connect you with the ward office.
-          </p>
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex flex-col gap-1.5">
+              <h2 className="text-xl font-semibold text-primary">How can I help?</h2>
+              <p className="text-sm text-muted-foreground">
+                Three quick steps, then we connect you with the ward office.
+              </p>
+            </div>
+            <TalkToLunaButton
+              state={guideChat.state}
+              supported={guideChat.supported}
+              onStart={() => void guideChat.start()}
+              onStop={() => void guideChat.stop()}
+              compact
+            />
+          </div>
+          {guideChat.error && (
+            <p className="text-xs text-destructive">{guideChat.error}</p>
+          )}
         </div>
 
         <div className="mt-4 flex items-center gap-1.5">

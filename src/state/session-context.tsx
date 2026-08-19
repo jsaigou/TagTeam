@@ -290,7 +290,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         sessionRef.current = s;
         setSession(s);
         setHubError(null);
-        connectHub(s.wsUrl, s.pairingToken, [...STAGE_CAPABILITIES], s.id);
+        /* The stage connects to the hub on its own origin — deriving the ws URL
+           client-side (like the phone path) guarantees wss on an https page,
+           regardless of the server's forwarded-origin guess. */
+        connectHub(
+          wsUrlFromOrigin(window.location.origin),
+          s.pairingToken,
+          [...STAGE_CAPABILITIES],
+          s.id,
+        );
       })
       .catch((err: unknown) => {
         setHubError(err instanceof Error ? err.message : "Could not start the session.");
@@ -376,7 +384,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     const updated = await rotatePairingApi(current.id);
     sessionRef.current = updated;
     setSession(updated);
-    connectHub(updated.wsUrl, updated.pairingToken, [...STAGE_CAPABILITIES], updated.id);
+    connectHub(
+      wsUrlFromOrigin(window.location.origin),
+      updated.pairingToken,
+      [...STAGE_CAPABILITIES],
+      updated.id,
+    );
   }, [connectHub]);
 
   const value = useMemo<SessionContextValue>(

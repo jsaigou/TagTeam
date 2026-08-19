@@ -196,6 +196,9 @@ async function authedCall(fn) {
 
 const app = express();
 app.disable("x-powered-by");
+// Behind a TLS-terminating reverse proxy (docktail), `req.protocol`/`req.hostname`
+// only reflect the external scheme/host when forwarded headers are trusted.
+app.set("trust proxy", true);
 
 // ── Auth (better-auth) ─────────────────────────────────────────────────────
 
@@ -712,7 +715,11 @@ if (existsSync(DIST_DIR)) {
 function buildOrigin(req) {
   const origin = req.headers.origin;
   if (typeof origin === "string" && origin) return origin.replace(/\/+$/, "");
-  return `${req.protocol}://${req.headers.host}`;
+  // No Origin header (e.g. same-origin GET) — derive from forwarded headers so
+  // the QR join URL and hub wsUrl use https/wss behind a TLS-terminating proxy.
+  const proto = String(req.protocol || "http").split(",")[0];
+  const host = String(req.headers["x-forwarded-host"] || req.headers.host || "").split(",")[0];
+  return `${proto}://${host}`;
 }
 
 function toSessionSummary(row, req) {

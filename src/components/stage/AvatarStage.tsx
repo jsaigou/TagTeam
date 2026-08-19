@@ -1,17 +1,38 @@
+import { useAppStore } from "@/state/app-store";
 import { useAvatar } from "@/state/avatar-context";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
-/** The star: a full-screen, always-present presenter behind every screen. The
- *  scene (anime backdrop) is the avatar's background. */
+/** The star: a framed portrait card on the setup/cheat-sheet screens, expanding
+ *  to a full-screen presenter during the practice call. The scene (anime
+ *  backdrop) is the avatar's background; the widget re-fits itself to the
+ *  container via its internal ResizeObserver. */
 export function AvatarStage() {
   const { stageRef, session } = useAvatar();
+  const { state } = useAppStore();
+  const isCall = state.screen === "call";
 
   return (
     <div className="fixed inset-0 z-0">
-      <div ref={stageRef} className="h-full w-full" />
+      <div className={cn("h-full w-full", !isCall && "flex items-end justify-start p-4")}>
+        <div
+          ref={stageRef}
+          className={cn(
+            "relative overflow-hidden bg-card",
+            isCall
+              ? "h-full w-full"
+              : "h-[420px] w-[280px] rounded-2xl border border-border shadow-2xl",
+          )}
+        />
+      </div>
 
       {!session.ready && (
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+        <div
+          className={cn(
+            "pointer-events-none absolute flex items-center justify-center",
+            isCall ? "inset-0" : "bottom-4 left-4 h-[420px] w-[280px]",
+          )}
+        >
           {session.loadError ? (
             <div className="pointer-events-auto flex flex-col items-center gap-2 rounded-xl border bg-card/90 p-6 text-center shadow-lg">
               <p className="text-sm text-destructive">Could not load the presenter.</p>
