@@ -301,6 +301,67 @@ app.get(
   }),
 );
 
+// ── Demo sandbox API (dev only) ─────────────────────────────────────────────
+// The avatar-effects demo (`/demo` in dev, separate Vite entry) has no login
+// screen, so it needs an unauthenticated token mint + catalog. Registered only
+// when NOT in production (the Docker runtime sets NODE_ENV=production) or when
+// explicitly opted in with ENABLE_DEMO_API=1. The minted token is the same
+// shared Connect identity the authed endpoints use — never per-user secrets.
+const DEMO_API_ENABLED =
+  process.env.NODE_ENV !== "production" || process.env.ENABLE_DEMO_API === "1";
+
+if (DEMO_API_ENABLED) {
+  app.get(
+    "/api/demo/connect-token",
+    rateLimit({ windowMs: 60_000, max: 30 }),
+    route(async (_req, res) => {
+      res.set({ "Cache-Control": "no-store", Pragma: "no-cache" });
+      const connectToken = await authedCall(async (token) => {
+        await connectApi.voices(token);
+        return token;
+      });
+      res.json({ connect_token: connectToken });
+    }),
+  );
+
+  app.get(
+    "/api/demo/avatars",
+    rateLimit({ windowMs: 60_000, max: 30 }),
+    route(async (_req, res) => {
+      res.json(await authedCall((token) => connectApi.avatars(token)));
+    }),
+  );
+
+  app.get(
+    "/api/demo/scenes",
+    rateLimit({ windowMs: 60_000, max: 30 }),
+    route(async (_req, res) => {
+      res.json(await authedCall((token) => connectApi.scenes(token)));
+    }),
+  );
+
+  app.get(
+    "/api/demo/voices",
+    rateLimit({ windowMs: 60_000, max: 30 }),
+    route(async (_req, res) => {
+      res.json(await authedCall((token) => connectApi.voices(token)));
+    }),
+  );
+
+  app.get(
+    "/api/demo/avatars/:avatarId/motions",
+    rateLimit({ windowMs: 60_000, max: 30 }),
+    route(async (req, res) => {
+      const { avatarId } = req.params;
+      if (typeof avatarId !== "string" || !avatarId) {
+        res.status(400).json({ error: "Missing avatar id." });
+        return;
+      }
+      res.json(await authedCall((token) => connectApi.motions(token, avatarId)));
+    }),
+  );
+}
+
 // Reference search — used to research the office/agency the user will call.
 // Searches via SearXNG (JSON API), then scrapes the top results with Firecrawl.
 // Returns a Server-Sent-Events stream so the caller sees hits and scraped pages

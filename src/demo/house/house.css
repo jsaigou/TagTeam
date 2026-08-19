@@ -1,0 +1,227 @@
+/* House demo — the facade + layers (sized for the 900x700 world) */
+
+.house-world {
+  position: relative;
+  width: 900px;
+  height: 700px;
+  flex: none;
+  transform-origin: 50% 68%;
+}
+
+/* The backdrop (sky + ground) — BEHIND the avatar card (z 1 < card z 5), so
+   the card shows through the window/door gaps instead of the sky. Fades with
+   the house for the indoor ending. */
+.house-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+
+/* The whole house, faded out as one layer for the indoor ending. In front of
+   the avatar card (z 10), so it occludes the card except at the window/door. */
+.house-env {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+}
+
+/* ── Backdrop ─────────────────────────────────────────────── */
+
+.house-sky {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: linear-gradient(180deg, #bfe3ff 0%, #ddf0ff 60%, #eef7ff 100%);
+}
+
+.house-ground {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 130px;
+  z-index: 1;
+  background: linear-gradient(180deg, #7cb85a 0%, #5c9e46 100%);
+  border-radius: 4px 4px 0 0;
+}
+
+/* ── House facade (z 10 — occludes the avatar behind it) ──── */
+/* The facade is strips around a transparent window + door.   */
+
+.house-facade {
+  position: absolute;
+  left: 150px;
+  top: 140px;
+  width: 600px;
+  height: 440px;
+  z-index: 10;
+  /* siding */
+  background-image: repeating-linear-gradient(
+    180deg,
+    transparent 0,
+    transparent 18px,
+    rgba(0, 0, 0, 0.06) 18px,
+    rgba(0, 0, 0, 0.06) 19px
+  );
+}
+
+.hf-strip {
+  position: absolute;
+  background: linear-gradient(180deg, #ecdcb4 0%, #dfcba0 100%);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06);
+}
+
+.hf-left {
+  left: 0;
+  top: 0;
+  width: 150px;
+  height: 100%;
+}
+
+.hf-right {
+  right: 0;
+  top: 0;
+  width: 280px;
+  height: 100%;
+}
+
+.hf-top {
+  left: 150px;
+  top: 0;
+  width: 170px;
+  height: 40px;
+}
+
+.hf-mid {
+  left: 150px;
+  top: 170px;
+  width: 170px;
+  height: 40px;
+}
+
+/* Window — the gap in the wall is x 300–470, y 180–310. */
+.house-window-frame {
+  position: absolute;
+  left: 300px;
+  top: 180px;
+  width: 170px;
+  height: 130px;
+  z-index: 11;
+  border: 10px solid #8a6b3f;
+  border-radius: 4px;
+  box-sizing: border-box;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.15);
+}
+
+/* Window glass — ~60% transparent, so the cat shows through dimmed/frosted.
+   The doorway has NO glass: it is 100% transparent when the door is open. */
+.house-window-glass {
+  position: absolute;
+  left: 310px;
+  top: 190px;
+  width: 150px;
+  height: 110px;
+  z-index: 11;
+  background: rgba(205, 224, 245, 0.4); /* 60% see-through */
+  backdrop-filter: blur(1.5px);
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  box-sizing: border-box;
+  pointer-events: none;
+}
+
+/* Door — fills the door hole (x 300–470, y 350–580). The cat waits behind it. */
+.house-door {
+  position: absolute;
+  left: 300px;
+  top: 350px;
+  width: 170px;
+  height: 230px;
+  z-index: 12;
+  transform-origin: left center;
+  background: linear-gradient(180deg, #8a5a33 0%, #7a4a2b 100%);
+  border: 2px solid #5c3a1e;
+  border-bottom: none;
+  border-radius: 4px 4px 0 0;
+  box-sizing: border-box;
+}
+
+.house-door::after {
+  /* handle */
+  content: "";
+  position: absolute;
+  right: 18px;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #f2c94c;
+  box-shadow: 0 0 0 2px #5c3a1e;
+}
+
+.house-door-panel {
+  /* two panels on the door for a bit of character */
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  top: 16px;
+  bottom: 16px;
+  border: 2px solid #5c3a1e;
+  border-radius: 2px;
+  background: repeating-linear-gradient(
+    90deg,
+    transparent 0,
+    transparent 20px,
+    rgba(0, 0, 0, 0.08) 20px,
+    rgba(0, 0, 0, 0.08) 21px
+  );
+}
+
+/* Roof — triangle overhang above the facade. */
+.house-roof {
+  position: absolute;
+  left: 110px;
+  top: 60px;
+  width: 680px;
+  height: 84px;
+  z-index: 10;
+  background: linear-gradient(180deg, #b35c36 0%, #a04f2d 100%);
+  clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.18));
+}
+
+/* Path leading from the door. */
+.house-path {
+  position: absolute;
+  left: 340px;
+  top: 580px;
+  width: 120px;
+  height: 120px;
+  z-index: 9;
+  background: linear-gradient(180deg, #d3c295 0%, #c0ad7f 100%);
+  border-radius: 12px 12px 0 0;
+}
+
+/* Foreground hedge — occludes the cat's feet as it walks out (z 13). */
+.house-bush {
+  position: absolute;
+  left: 150px;
+  top: 545px;
+  width: 600px;
+  height: 56px;
+  z-index: 13;
+  background:
+    radial-gradient(circle at 15% 40%, #4c9148 0 34%, transparent 35%),
+    radial-gradient(circle at 42% 30%, #5aa04f 0 40%, transparent 41%),
+    radial-gradient(circle at 70% 45%, #46883f 0 32%, transparent 33%),
+    radial-gradient(circle at 88% 35%, #58a04d 0 38%, transparent 39%),
+    #3f7d3f;
+  border-radius: 24px 24px 0 0;
+  box-shadow: inset 0 -8px 12px rgba(0, 0, 0, 0.12);
+}
+
+/* The avatar mount (the <sv-presenter> card) is positioned inline. */
+.house-avatar {
+  position: absolute;
+  z-index: 5; /* behind the facade — only visible through the window/door */
+}
