@@ -86,6 +86,21 @@ function resolveWhisperModel() {
   return candidates[0];
 }
 
+const WHISPER_TIMEOUT_MS = Number(process.env.WHISPER_TIMEOUT_MS) || 30_000;
+const FFMPEG_TIMEOUT_MS = Number(process.env.FFMPEG_TIMEOUT_MS) || 15_000;
+
+/** Kill `child` if it hasn't exited within `ms`, rejecting via `reject` with a
+ *  502 (so a hung subprocess can never wedge a session's `inFlight` flag
+ *  forever, see orchestrator.mjs). Returns a cleanup fn to call on settle. */
+function killAfter(child, ms, reject, label) {
+  const timer = setTimeout(() => {
+    child.kill("SIGKILL");
+    reject(Object.assign(new Error(`${label} timed out after ${ms}ms`), { status: 502 }));
+  }, ms);
+  timer.unref?.();
+  return () => clearTimeout(timer);
+}
+
 /** Run whisper.cpp on the buffer and resolve with the joined transcription. */
 function whisperCppTranscribe(buffer, { mimeType, language }) {
   return new Promise((resolve, reject) => {
@@ -112,6 +127,19 @@ function whisperCppTranscribe(buffer, { mimeType, language }) {
         });
         let stdout = "";
         let stderr = "";
+        let settled = false;
+        const settle = (fn) => {
+          if (settled) return;
+          settled = true;
+          clearKill();
+          fn();
+        };
+        const clearKill = killAfter(
+          child,
+          WHISPER_TIMEOUT_MS,
+          (err) => settle(() => reject(err)),
+          "whisper.cpp",
+        );
         child.stdout.on("data", (chunk) => {
           stdout += chunk;
         });
@@ -119,30 +147,34 @@ function whisperCppTranscribe(buffer, { mimeType, language }) {
           stderr += chunk;
         });
         child.on("error", (err) => {
-          reject(
-            Object.assign(
-              new Error(`Could not run ${config.stt.whisperBin}: ${err.message}`),
-              { status: 501 },
+          settle(() =>
+            reject(
+              Object.assign(
+                new Error(`Could not run ${config.stt.whisperBin}: ${err.message}`),
+                { status: 501 },
+              ),
             ),
           );
         });
         child.on("close", (code) => {
           fs.rm(file, { force: true }).catch(() => {});
-          if (code !== 0) {
-            reject(
-              Object.assign(
-                new Error(`whisper.cpp exited ${code}: ${stderr.trim().slice(0, 300)}`),
-                { status: 502 },
-              ),
-            );
-            return;
-          }
-          const text = stdout
-            .split(/\r?\n/)
-            .map((line) => line.replace(/^\s*\[[\d:.,\s-->]+\]\s*/, "").trim())
-            .filter(Boolean)
-            .join(" ");
-          resolve({ text });
+          settle(() => {
+            if (code !== 0) {
+              reject(
+                Object.assign(
+                  new Error(`whisper.cpp exited ${code}: ${stderr.trim().slice(0, 300)}`),
+                  { status: 502 },
+                ),
+              );
+              return;
+            }
+            const text = stdout
+              .split(/\r?\n/)
+              .map((line) => line.replace(/^\s*\[[\d:.,\s-->]+\]\s*/, "").trim())
+              .filter(Boolean)
+              .join(" ");
+            resolve({ text });
+          });
         });
       })
       .catch(reject);
@@ -205,7 +237,7 @@ function openAiCompatibleResponse(payload) {
  */
 export async function llmChat(
   messages,
-  { model, temperature = 0.2, responseFormat, maxTokens = 8192 } = {},
+  { model, temperature = 0.2, responseFormat, maxTokens = 8192, signal } = {},
 ) {
   if (!config.llm.apiKey) {
     throw Object.assign(new Error("LLM is not configured. Set LLM_API_KEY (and LLM_BASE_URL / LLM_MODEL) in .env — see SETUP.md."), { status: 501 });
@@ -244,11 +276,15 @@ export async function llmChat(
     if (responseFormat) body.response_format = responseFormat;
   }
 
+  // Always cap at 120s per attempt; an external `signal` (e.g. the
+  // orchestrator's overall retry-loop deadline) can additionally cut it
+  // short, but never extend it.
+  const attemptCap = AbortSignal.timeout(120_000);
   const res = await fetch(url, {
     method: "POST",
     headers,
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(120_000),
+    signal: signal ? AbortSignal.any([attemptCap, signal]) : attemptCap,
   });
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
@@ -292,31 +328,48 @@ function normalizeToWav16k(buffer) {
     ], { stdio: ["pipe", "pipe", "pipe"] });
     const chunks = [];
     let stderr = "";
+    let settled = false;
+    const settle = (fn) => {
+      if (settled) return;
+      settled = true;
+      clearKill();
+      fn();
+    };
+    const clearKill = killAfter(
+      child,
+      FFMPEG_TIMEOUT_MS,
+      (err) => settle(() => reject(err)),
+      "ffmpeg",
+    );
     child.stdout.on("data", (chunk) => chunks.push(chunk));
     child.stderr.on("data", (chunk) => {
       stderr += chunk;
     });
     child.on("error", (err) => {
-      reject(
-        Object.assign(
-          new Error(
-            `Could not run ffmpeg for BYO TTS normalization: ${err.message}. Install ffmpeg or set TTS_NORMALIZE=0.`,
+      settle(() =>
+        reject(
+          Object.assign(
+            new Error(
+              `Could not run ffmpeg for BYO TTS normalization: ${err.message}. Install ffmpeg or set TTS_NORMALIZE=0.`,
+            ),
+            { status: 501 },
           ),
-          { status: 501 },
         ),
       );
     });
     child.on("close", (code) => {
-      if (code !== 0) {
-        reject(
-          Object.assign(
-            new Error(`ffmpeg exited ${code}: ${stderr.trim().slice(0, 300)}`),
-            { status: 502 },
-          ),
-        );
-        return;
-      }
-      resolve(Buffer.concat(chunks));
+      settle(() => {
+        if (code !== 0) {
+          reject(
+            Object.assign(
+              new Error(`ffmpeg exited ${code}: ${stderr.trim().slice(0, 300)}`),
+              { status: 502 },
+            ),
+          );
+          return;
+        }
+        resolve(Buffer.concat(chunks));
+      });
     });
     child.stdin.on("error", () => {});
     child.stdin.end(buffer);

@@ -112,7 +112,10 @@ export function createUploadStore({
  * Attach the WS hub to an http.Server. Returns the hub handle
  * `{ uploadStore, getDeviceCount, rooms }`.
  */
-export function attachHub(server, { db, schema, uploadStore, orchestrator }) {
+export function attachHub(
+  server,
+  { db, schema, uploadStore, orchestrator, heartbeatMs = 30_000, roomEmptyGraceMs = 60_000 },
+) {
   const store = uploadStore ?? createUploadStore();
   store.start();
 
@@ -121,6 +124,31 @@ export function attachHub(server, { db, schema, uploadStore, orchestrator }) {
   const rooms = new Map();
   /** sessionId -> latest AppSnapshot broadcast by the stage (for re-joins). */
   const snapshots = new Map();
+  /** sessionId -> pending room-teardown timer (grace period for reconnects). */
+  const roomCleanupTimers = new Map();
+
+  function cancelRoomCleanup(sessionId) {
+    const timer = roomCleanupTimers.get(sessionId);
+    if (!timer) return;
+    clearTimeout(timer);
+    roomCleanupTimers.delete(sessionId);
+  }
+
+  function scheduleRoomCleanup(sessionId) {
+    cancelRoomCleanup(sessionId);
+    const timer = setTimeout(() => {
+      roomCleanupTimers.delete(sessionId);
+      const room = rooms.get(sessionId);
+      // Only tear down if the room is still empty — a device may have rejoined.
+      if (room && room.size === 0) {
+        rooms.delete(sessionId);
+        snapshots.delete(sessionId);
+        orchestrator?.clear(sessionId);
+      }
+    }, roomEmptyGraceMs);
+    timer.unref?.();
+    roomCleanupTimers.set(sessionId, timer);
+  }
 
   /** Resolve an app_session from its (6-char, expiring) pairing code. */
   async function resolveSession(pairingToken) {
@@ -201,6 +229,8 @@ export function attachHub(server, { db, schema, uploadStore, orchestrator }) {
     room.set(deviceId, device);
     ws.appSessionId = sessionId;
     ws.appDeviceId = deviceId;
+    // A device rejoined before the grace period elapsed — keep the room alive.
+    cancelRoomCleanup(sessionId);
 
     send(ws, {
       type: "joined",
@@ -286,7 +316,14 @@ export function attachHub(server, { db, schema, uploadStore, orchestrator }) {
       broadcast(sessionId, { type: "turn", turn: replyTurn, ...(end ? { end: true } : {}) });
     } catch (err) {
       console.error("[hub] audio pipeline failed:", err?.message ?? err);
-      const code = err?.status === 409 ? "BUSY" : err?.status === 422 ? "NOT_HEARD" : "STT_FAILED";
+      const code =
+        err?.status === 409
+          ? "BUSY"
+          : err?.status === 422
+            ? "NOT_HEARD"
+            : err?.status === 504
+              ? "TIMEOUT"
+              : "STT_FAILED";
       broadcast(sessionId, { type: "error", code, message: err?.message ?? "Could not process audio." });
     } finally {
       broadcast(sessionId, { type: "phase", phase: "idle" });
@@ -300,6 +337,11 @@ export function attachHub(server, { db, schema, uploadStore, orchestrator }) {
   }
 
   wss.on("connection", (ws) => {
+    ws.isAlive = true;
+    ws.on("pong", () => {
+      ws.isAlive = true;
+    });
+
     ws.on("message", (data) => {
       if (data.length > MAX_WS_MESSAGE_BYTES) return;
       let msg;
@@ -327,10 +369,11 @@ export function attachHub(server, { db, schema, uploadStore, orchestrator }) {
       if (!room) return;
       room.delete(deviceId);
       sendDeviceList(sessionId);
+      // Don't tear down immediately — a refresh or a brief network blip empties
+      // the room for a moment. Give devices a grace period to rejoin before the
+      // transcript/context is discarded.
       if (room.size === 0) {
-        rooms.delete(sessionId);
-        snapshots.delete(sessionId);
-        orchestrator?.clear(sessionId);
+        scheduleRoomCleanup(sessionId);
       }
     });
 
@@ -349,7 +392,7 @@ export function attachHub(server, { db, schema, uploadStore, orchestrator }) {
       ws.isAlive = false;
       ws.ping();
     }
-  }, 30_000);
+  }, heartbeatMs);
   heartbeat.unref?.();
 
   wss.on("close", () => clearInterval(heartbeat));

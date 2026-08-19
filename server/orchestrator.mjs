@@ -25,6 +25,15 @@ function stripJsonFence(text) {
 
 export const CALL_STATE_TTL_MS = 4 * 60 * 60 * 1000;
 
+// Overall budget for the whole nextTurn retry loop (both attempts combined).
+// Previously each attempt had its own 120s cap with nothing bounding the
+// pair, so a persistently-malformed-but-slow reply could hold a session's
+// `inFlight` flag for up to 240s. This is real cancellation (an AbortSignal
+// threaded into llmChat), not a client-side guess — the deployed homelab LLM
+// legitimately takes 40-80s per call (see AGENTS.md), so this must stay well
+// above that.
+export const NEXT_TURN_DEADLINE_MS = 150_000;
+
 /** Keep only vocab ids that actually exist in the glossary (defensive). */
 function safeVocab(ids, glossary) {
   if (!Array.isArray(ids)) return [];
@@ -119,13 +128,38 @@ export function createCallOrchestrator({ transcribeAudio, llmChat }) {
       s.expiresAt = Date.now() + CALL_STATE_TTL_MS;
 
       // Retry once on a malformed reply, then surface (architecture §5).
+      // Both attempts share one overall deadline — a real AbortSignal, not a
+      // client-side guess — so a slow-but-alive model gets its full
+      // NEXT_TURN_DEADLINE_MS combined, never twice that.
+      const deadline = new AbortController();
+      const deadlineTimer = setTimeout(() => deadline.abort(), NEXT_TURN_DEADLINE_MS);
       let reply;
-      for (let attempt = 0; attempt < 2; attempt++) {
-        const generated = await generateNextTurn(s.context, s.transcript);
-        if (generated) {
-          reply = generated;
-          break;
+      let timedOut = false;
+      try {
+        for (let attempt = 0; attempt < 2 && !deadline.signal.aborted; attempt++) {
+          let generated;
+          try {
+            generated = await generateNextTurn(s.context, s.transcript, { signal: deadline.signal });
+          } catch (err) {
+            if (deadline.signal.aborted) {
+              timedOut = true;
+              break;
+            }
+            throw err;
+          }
+          if (generated) {
+            reply = generated;
+            break;
+          }
         }
+      } finally {
+        clearTimeout(deadlineTimer);
+      }
+      if (timedOut) {
+        throw Object.assign(
+          new Error("The office is taking a long time to reply — please try again."),
+          { status: 504 },
+        );
       }
       if (!reply) {
         throw Object.assign(
@@ -142,7 +176,7 @@ export function createCallOrchestrator({ transcribeAudio, llmChat }) {
   }
 
   /** One LLM call for the next turn; null when the reply failed validation. */
-  async function generateNextTurn(context, transcript) {
+  async function generateNextTurn(context, transcript, { signal } = {}) {
     const messages = buildNextTurnMessages(context, transcript);
     const payload = await llmChat(messages, {
       temperature: 0.6,
@@ -150,6 +184,7 @@ export function createCallOrchestrator({ transcribeAudio, llmChat }) {
       // reasoning before emitting `content` — a tight cap returns empty text.
       maxTokens: 8192,
       responseFormat: { type: "json_object" },
+      signal,
     });
     const rawText = payload.choices?.[0]?.message?.content;
     let parsed;

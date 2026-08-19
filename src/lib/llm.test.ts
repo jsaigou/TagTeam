@@ -174,6 +174,90 @@ describe("chat", () => {
     await assertion;
   });
 
+  it("throws a typed canceled error (not timeout) when an external signal aborts", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        (_url: string, init: RequestInit) =>
+          new Promise((_resolve, reject) => {
+            init.signal?.addEventListener("abort", () =>
+              reject(new DOMException("aborted", "AbortError")),
+            );
+          }),
+      ),
+    );
+
+    const controller = new AbortController();
+    const promise = chat([{ role: "user", content: "x" }], {
+      config: TEST_CONFIG,
+      timeoutMs: 60_000,
+      signal: controller.signal,
+    });
+    const assertion = expect(promise).rejects.toMatchObject({ kind: "canceled" });
+    controller.abort();
+    await assertion;
+  });
+
+  it("does not report a timeout before the configured deadline elapses", async () => {
+    vi.useFakeTimers();
+    let settle: (() => void) | undefined;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        (_url: string, init: RequestInit) =>
+          new Promise((_resolve, reject) => {
+            settle = () => reject(new DOMException("aborted", "AbortError"));
+            init.signal?.addEventListener("abort", () => settle?.());
+          }),
+      ),
+    );
+
+    const promise = chat([{ role: "user", content: "x" }], {
+      config: TEST_CONFIG,
+      timeoutMs: 60_000,
+    });
+    let settled = false;
+    promise.catch(() => {
+      settled = true;
+    });
+
+    await vi.advanceTimersByTimeAsync(59_999);
+    expect(settled).toBe(false);
+
+    const assertion = expect(promise).rejects.toMatchObject({ kind: "timeout" });
+    await vi.advanceTimersByTimeAsync(2);
+    await assertion;
+  });
+
+  it("still enforces the deadline while reading a stalled response body", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((_url: string, init: RequestInit) => {
+        const res = new Response(
+          new ReadableStream({
+            start(controller) {
+              init.signal?.addEventListener("abort", () => {
+                controller.error(new DOMException("aborted", "AbortError"));
+              });
+              // Never enqueue/close — simulates headers-arrived-then-stalled.
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+        return Promise.resolve(res);
+      }),
+    );
+
+    const promise = chat([{ role: "user", content: "x" }], {
+      config: TEST_CONFIG,
+      timeoutMs: 100,
+    });
+    const assertion = expect(promise).rejects.toMatchObject({ kind: "timeout" });
+    await vi.advanceTimersByTimeAsync(150);
+    await assertion;
+  });
+
   it("throws invalid_response on a non-JSON body", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("not json", { status: 200 })));
     await expect(chat([{ role: "user", content: "x" }], { config: TEST_CONFIG })).rejects.toMatchObject({

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 // @ts-expect-error server .mjs modules ship without type declarations
 import { buildNextTurnMessages, isNextTurnResult } from "../../server/next-turn.mjs";
 // @ts-expect-error server .mjs modules ship without type declarations
-import { createCallOrchestrator } from "../../server/orchestrator.mjs";
+import { createCallOrchestrator, NEXT_TURN_DEADLINE_MS } from "../../server/orchestrator.mjs";
 
 const SCRIPT = {
   scenarioTitle: "Test call",
@@ -148,6 +148,32 @@ describe("createCallOrchestrator", () => {
     });
     release();
     await first;
+  });
+
+  it("bounds the retry loop to one overall deadline instead of two full attempts", async () => {
+    vi.useFakeTimers();
+    // A hung llmChat that only ever settles when its signal is aborted —
+    // mirrors what a real fetch does once AbortSignal.any() fires.
+    const llm = vi.fn(
+      (_messages: unknown, opts: { signal?: AbortSignal }) =>
+        new Promise((_resolve, reject) => {
+          opts.signal?.addEventListener("abort", () =>
+            reject(new DOMException("aborted", "AbortError")),
+          );
+        }),
+    );
+    const { orchestrator } = makeOrchestrator({ llm });
+    orchestrator.setContext("s1", { script: SCRIPT, glossary: GLOSSARY });
+
+    const promise = orchestrator.handleAudio("s1", { buffer: Buffer.from("x") });
+    const assertion = expect(promise).rejects.toMatchObject({ status: 504 });
+    await vi.advanceTimersByTimeAsync(NEXT_TURN_DEADLINE_MS + 1_000);
+    await assertion;
+
+    // The shared deadline fires during attempt 1 — never worth starting a
+    // second full-budget attempt on top of it.
+    expect(llm).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
   });
 
   it("clears session state", () => {

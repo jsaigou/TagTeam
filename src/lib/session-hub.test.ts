@@ -50,13 +50,17 @@ afterEach(async () => {
 });
 
 /** Start a hub backed by an in-memory DB pre-seeded with the given rows. */
-async function startHub(rows: object[] = [], orchestrator?: unknown) {
+async function startHub(
+  rows: object[] = [],
+  orchestrator?: unknown,
+  hubOptions: Record<string, unknown> = {},
+) {
   const db = makeDb();
   for (const row of rows) {
     await db.insert(schema.appSession).values(row as never).run();
   }
   const server = http.createServer();
-  const hub = attachHub(server, { db, schema, orchestrator });
+  const hub = attachHub(server, { db, schema, orchestrator, ...hubOptions });
   await new Promise<void>((resolve) => server.listen(0, () => resolve()));
   servers.push(server);
   const { port } = server.address() as AddressInfo;
@@ -313,5 +317,63 @@ describe("session hub", () => {
     phone.ws.send(JSON.stringify({ type: "audio", audioId: "nope" }));
     const error = await waitFor(phone, (m) => m?.type === "error");
     expect(error.code).toBe("AUDIO_EXPIRED");
+  });
+});
+
+describe("heartbeat", () => {
+  // Regression for the "every socket dies at 60s" bug: the hub pinged but
+  // never registered a pong handler, so ws.isAlive was never restored and
+  // every connection was terminated on the second heartbeat tick. A live
+  // client (the `ws` package auto-replies to protocol-level pings with
+  // pongs, same as a browser) must survive many ticks.
+  it("keeps a responsive connection alive across multiple heartbeat ticks", async () => {
+    const { url } = await startHub([activeSessionRow()], undefined, { heartbeatMs: 20 });
+    const stage = connect(url, joinStage);
+    await stage.opened;
+    await waitFor(stage, (m) => m?.type === "joined");
+
+    // Outlive several heartbeat intervals.
+    await new Promise((resolve) => setTimeout(resolve, 150));
+
+    expect(stage.ws.readyState).toBe(WebSocket.OPEN);
+    // And it can still round-trip a message, proving the server side is alive too.
+    stage.ws.send(JSON.stringify({ type: "ping" }));
+    const pong = await waitFor(stage, (m) => m?.type === "pong");
+    expect(pong.type).toBe("pong");
+  });
+});
+
+describe("room-empty grace period", () => {
+  it("keeps orchestrator state alive through a brief disconnect and rejoin", async () => {
+    const clear = vi.fn();
+    const { url } = await startHub([activeSessionRow()], { handleAudio: vi.fn(), clear }, { roomEmptyGraceMs: 200 });
+
+    const first = connect(url, joinStage);
+    await first.opened;
+    await waitFor(first, (m) => m?.type === "joined");
+    first.ws.close();
+
+    // Rejoin well within the grace period.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const second = connect(url, joinStage);
+    await second.opened;
+    await waitFor(second, (m) => m?.type === "joined");
+
+    // Give the (cancelled) cleanup timer's original deadline time to pass.
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    expect(clear).not.toHaveBeenCalled();
+  });
+
+  it("still tears down the room if nobody rejoins within the grace period", async () => {
+    const clear = vi.fn();
+    const { url } = await startHub([activeSessionRow()], { handleAudio: vi.fn(), clear }, { roomEmptyGraceMs: 30 });
+
+    const client = connect(url, joinStage);
+    await client.opened;
+    await waitFor(client, (m) => m?.type === "joined");
+    client.ws.close();
+
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(clear).toHaveBeenCalledWith("session-1");
   });
 });

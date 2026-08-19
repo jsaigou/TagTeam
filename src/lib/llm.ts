@@ -55,6 +55,7 @@ export function resolveLlmConfig(
 export type LlmErrorKind =
   | "config"
   | "timeout"
+  | "canceled"
   | "auth"
   | "http"
   | "network"
@@ -134,7 +135,15 @@ export async function chat(messages: ChatMessage[], options: ChatOptions = {}): 
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const startedAt = Date.now();
+  // Distinguishes "our deadline fired" from "something else aborted the
+  // controller" (an external signal, or the fetch/body-read itself throwing
+  // after abort) — the two must never be reported as the same error kind.
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
   const onExternalAbort = () => controller.abort();
   if (options.signal) {
     if (options.signal.aborted) {
@@ -162,37 +171,48 @@ export async function chat(messages: ChatMessage[], options: ChatOptions = {}): 
 
   const fetchImpl = options.fetchImpl ?? fetch;
 
-  let res: Response;
+  /** Elapsed wall-clock time, measured — never the configured budget. */
+  const elapsed = () => Date.now() - startedAt;
+  const abortError = (err: unknown) =>
+    timedOut
+      ? new LlmError("timeout", `LLM request timed out after ${elapsed()}ms`, { cause: err })
+      : new LlmError("canceled", "LLM request was canceled", { cause: err });
+
+  // The timer stays armed through the body read below — aborting after headers
+  // arrive still cancels an in-progress `res.json()`, and a model that streams
+  // headers then stalls on the body must not hang forever.
   try {
-    res = await fetchImpl(cfg.baseUrl, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    });
-  } catch (err) {
-    if (controller.signal.aborted) {
-      throw new LlmError("timeout", `LLM request timed out after ${timeoutMs}ms`, { cause: err });
+    let res: Response;
+    try {
+      res = await fetchImpl(cfg.baseUrl, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+    } catch (err) {
+      if (controller.signal.aborted) throw abortError(err);
+      throw new LlmError("network", `LLM request failed: ${messageOf(err)}`, { cause: err });
     }
-    throw new LlmError("network", `LLM request failed: ${messageOf(err)}`, { cause: err });
+
+    if (!res.ok) {
+      const kind = res.status === 401 || res.status === 403 ? "auth" : "http";
+      const detail = await safeErrorText(res);
+      throw new LlmError(kind, `LLM request failed (${res.status}): ${detail}`, { status: res.status });
+    }
+
+    let data: unknown;
+    try {
+      data = await res.json();
+    } catch (err) {
+      if (controller.signal.aborted) throw abortError(err);
+      throw new LlmError("invalid_response", "LLM returned a non-JSON response body", { cause: err });
+    }
+    return parseChatPayload(data);
   } finally {
     clearTimeout(timer);
     options.signal?.removeEventListener("abort", onExternalAbort);
   }
-
-  if (!res.ok) {
-    const kind = res.status === 401 || res.status === 403 ? "auth" : "http";
-    const detail = await safeErrorText(res);
-    throw new LlmError(kind, `LLM request failed (${res.status}): ${detail}`, { status: res.status });
-  }
-
-  let data: unknown;
-  try {
-    data = await res.json();
-  } catch (err) {
-    throw new LlmError("invalid_response", "LLM returned a non-JSON response body", { cause: err });
-  }
-  return parseChatPayload(data);
 }
 
 /** Extract `choices[0].message.content` from a raw chat completions payload. */

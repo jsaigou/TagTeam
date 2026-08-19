@@ -31,6 +31,13 @@ export function usePushToTalk() {
     chunks: Float32Array[];
     startedAt: number;
   } | null>(null);
+  // `start()` awaits getUserMedia — a quick tap can fire stop() before that
+  // resolves. These track the in-flight arming so stop() can tear the
+  // recorder down the instant it's ready, instead of finding
+  // recorderRef.current still null and silently no-op'ing (which used to
+  // leave the mic recording forever with nobody able to stop it).
+  const startPromiseRef = useRef<Promise<boolean> | null>(null);
+  const stopRequestedRef = useRef(false);
 
   const supported = useMemo(() => {
     if (typeof navigator === "undefined" || typeof window === "undefined") return false;
@@ -39,41 +46,69 @@ export function usePushToTalk() {
     return Boolean(navigator.mediaDevices?.getUserMedia) && Boolean(AudioCtor);
   }, []);
 
-  const start = useCallback(async (): Promise<boolean> => {
-    if (recorderRef.current) return false;
+  const start = useCallback((): Promise<boolean> => {
+    if (recorderRef.current || startPromiseRef.current) return Promise.resolve(false);
     setError(null);
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const Ctor =
-        window.AudioContext ??
-        (window as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-      if (!Ctor) {
-        stream.getTracks().forEach((t) => t.stop());
+    stopRequestedRef.current = false;
+    const armed = (async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        // A release can land here, before the recorder even exists — tear
+        // down immediately rather than leaving a hot mic nobody can stop.
+        if (stopRequestedRef.current) {
+          stream.getTracks().forEach((t) => t.stop());
+          setState("idle");
+          return false;
+        }
+        const Ctor =
+          window.AudioContext ??
+          (window as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+        if (!Ctor) {
+          stream.getTracks().forEach((t) => t.stop());
+          setState("idle");
+          setError("Audio capture is not supported in this browser.");
+          return false;
+        }
+        const context = new Ctor();
+        await context.resume();
+        if (stopRequestedRef.current) {
+          stream.getTracks().forEach((t) => t.stop());
+          await context.close().catch(() => {});
+          setState("idle");
+          return false;
+        }
+        const source = context.createMediaStreamSource(stream);
+        const processor = context.createScriptProcessor(4096, 1, 1);
+        const chunks: Float32Array[] = [];
+        processor.onaudioprocess = (event) => {
+          chunks.push(new Float32Array(event.inputBuffer.getChannelData(0)));
+        };
+        source.connect(processor);
+        processor.connect(context.destination);
+        recorderRef.current = { stream, context, source, processor, chunks, startedAt: Date.now() };
+        setState("recording");
+        return true;
+      } catch (err) {
         setState("idle");
-        setError("Audio capture is not supported in this browser.");
+        setError(micErrorMessage(err));
         return false;
+      } finally {
+        startPromiseRef.current = null;
       }
-      const context = new Ctor();
-      await context.resume();
-      const source = context.createMediaStreamSource(stream);
-      const processor = context.createScriptProcessor(4096, 1, 1);
-      const chunks: Float32Array[] = [];
-      processor.onaudioprocess = (event) => {
-        chunks.push(new Float32Array(event.inputBuffer.getChannelData(0)));
-      };
-      source.connect(processor);
-      processor.connect(context.destination);
-      recorderRef.current = { stream, context, source, processor, chunks, startedAt: Date.now() };
-      setState("recording");
-      return true;
-    } catch (err) {
-      setState("idle");
-      setError(micErrorMessage(err));
-      return false;
-    }
+    })();
+    startPromiseRef.current = armed;
+    return armed;
   }, []);
 
   const stop = useCallback(async (): Promise<PushToTalkResult | null> => {
+    if (startPromiseRef.current) {
+      // start() is still awaiting getUserMedia/resume — flag it to tear
+      // itself down the moment it's ready, then wait for that to happen.
+      // There's never anything to return here (arming took under a beat).
+      stopRequestedRef.current = true;
+      await startPromiseRef.current;
+      return null;
+    }
     const rec = recorderRef.current;
     if (!rec) return null;
     recorderRef.current = null;
@@ -107,6 +142,10 @@ export function usePushToTalk() {
 
   /** Discard the current recording without returning audio. */
   const cancel = useCallback(() => {
+    if (startPromiseRef.current) {
+      stopRequestedRef.current = true;
+      return;
+    }
     const rec = recorderRef.current;
     if (!rec) return;
     recorderRef.current = null;

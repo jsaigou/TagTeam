@@ -81,9 +81,16 @@ function TalkToLunaButton({
   return (
     <button
       type="button"
-      onPointerDown={onStart}
+      onPointerDown={(e) => {
+        // Capture the pointer so a drag off the button (common on touch)
+        // still delivers pointerup/pointercancel HERE instead of wherever
+        // the finger ends up — without capture, that release could land on
+        // a different element and never call onStop, leaving the mic
+        // recording with no way to stop it.
+        e.currentTarget.setPointerCapture(e.pointerId);
+        onStart();
+      }}
       onPointerUp={onStop}
-      onPointerLeave={onStop}
       onPointerCancel={onStop}
       disabled={!supported || thinking}
       className={cn(
@@ -240,6 +247,12 @@ export function SetupScreen() {
     onThinkingChange: (thinking) => session.setThinking(thinking),
     onUserInput: (text) => appendChat({ role: "user", text }),
     buildContext: buildGuideContext,
+    // Echo guard: don't listen while Luna is speaking. Only listen
+    // hands-free once the setup panel is open (not on the pre-interaction
+    // invite screen), same spirit as the in-call VAD window only running
+    // once the call has started.
+    avatarSpeaking: session.isSpeaking,
+    voiceTalkEnabled: setupOpen,
   });
   const sendChat = useCallback(
     (text: string) => {
@@ -251,6 +264,11 @@ export function SetupScreen() {
   const [analyzing, setAnalyzing] = useState(false);
   const launchedRef = useRef(false);
   const lastGuideStepRef = useRef<SetupStep | null>(null);
+  // Guards the invite line below against duplicate appends — the effect
+  // re-runs (StrictMode double-invoke, or any identity change on
+  // handleShowGuide/startEager/stopEager) every time `!setupOpen`, and used
+  // to append INVITE_LINE to `chat` again on each re-run.
+  const invitedRef = useRef(false);
 
   /* Launch the guide avatar (Luna / cc051_meeks by default) once the catalog is ready so
      it is present while inviting the user + guiding through setup. */
@@ -271,7 +289,10 @@ export function SetupScreen() {
      Before Get started, Luna does NOT speak — eager gestures only. */
   useEffect(() => {
     if (!setupOpen) {
-      handleShowGuide(INVITE_LINE);
+      if (!invitedRef.current) {
+        invitedRef.current = true;
+        handleShowGuide(INVITE_LINE);
+      }
       startEager();
       return () => stopEager();
     }
