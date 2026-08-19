@@ -107,6 +107,24 @@
   color: var(--color-accent);
 }
 
+/* Header phone icon — gentle attention-seeking wiggle until a phone joins. */
+@keyframes wiggle {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  25% {
+    transform: rotate(-12deg);
+  }
+  75% {
+    transform: rotate(12deg);
+  }
+}
+.animate-wiggle {
+  animation: wiggle 1.1s ease-in-out infinite;
+  transform-origin: 50% 40%;
+}
+
 @media print {
   @page {
     margin: 12mm;

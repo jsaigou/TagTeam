@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Check, Loader2, Mic, Sparkles } from "lucide-react";
+import { Check, Loader2, Mic, Send, Sparkles } from "lucide-react";
 import type { DocInput, GroundingAnswer, RoleId } from "@/shared/contract";
 import type { ChatMessage } from "@/lib/llm";
 import { useAppStore, type SetupStep } from "@/state/app-store";
-import { useAvatar } from "@/state/avatar-context";
+import { useAvatar, type GuideLine } from "@/state/avatar-context";
 import { useCatalog } from "@/hooks/use-catalog";
 import { useGuideChat, type GuideChatState } from "@/hooks/use-guide-chat";
 import { resolveDefaults } from "@/lib/presets";
@@ -16,9 +16,10 @@ import { Grounding } from "./Grounding";
 import { ScenarioPicker } from "./ScenarioPicker";
 import { ReferenceSearch } from "./ReferenceSearch";
 import { PastCalls } from "./PastCalls";
-import { SessionBar } from "@/components/session/SessionBar";
+import { ChatBox, type ChatEntry } from "./ChatBox";
 import { PerxonaBadge } from "@/components/brand/PerxonaBadge";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
 const STEPS: { key: SetupStep; label: string }[] = [
@@ -112,6 +113,71 @@ function TalkToLunaButton({
   );
 }
 
+/** Persistent chat with Luna — transcript + text input + mic. The comic bubble
+ *  is transient; this panel keeps every line. */
+function LunaChatPanel({
+  messages,
+  state,
+  supported,
+  onStart,
+  onStop,
+  onSend,
+}: {
+  messages: ChatEntry[];
+  state: GuideChatState;
+  supported: boolean;
+  onStart: () => void;
+  onStop: () => void;
+  onSend: (text: string) => void;
+}) {
+  const [draft, setDraft] = useState("");
+  const thinking = state === "thinking";
+
+  const submit = () => {
+    const text = draft.trim();
+    if (!text || thinking) return;
+    onSend(text);
+    setDraft("");
+  };
+
+  return (
+    <div className="flex w-full flex-col gap-2">
+      <ChatBox messages={messages} />
+      <div className="flex items-end gap-2">
+        <Textarea
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              submit();
+            }
+          }}
+          placeholder="Ask Luna… or hold the mic"
+          rows={1}
+          className="min-h-9 resize-none"
+        />
+        <Button
+          size="icon"
+          onClick={submit}
+          disabled={!draft.trim() || thinking}
+          aria-label="Send to Luna"
+          title="Send"
+        >
+          <Send className="size-4" />
+        </Button>
+        <TalkToLunaButton
+          state={state}
+          supported={supported}
+          onStart={onStart}
+          onStop={onStop}
+          compact
+        />
+      </div>
+    </div>
+  );
+}
+
 export function SetupScreen() {
   const {
     state,
@@ -132,6 +198,27 @@ export function SetupScreen() {
   const catalog = useCatalog();
   const { session, unlockAudio, showGuide, speakGuide, startEager, stopEager } = useAvatar();
 
+  /* Persistent chat transcript — the comic bubble is transient, this never
+     loses a line. Every guide line (spoken or not) and every user turn lands here. */
+  const [chat, setChat] = useState<ChatEntry[]>([]);
+  const appendChat = useCallback((entry: ChatEntry) => {
+    setChat((prev) => [...prev, entry]);
+  }, []);
+  const handleShowGuide = useCallback(
+    (line: GuideLine) => {
+      showGuide(line);
+      appendChat({ role: "luna", text: line.en });
+    },
+    [showGuide, appendChat],
+  );
+  const handleSpeakGuide = useCallback(
+    (line: GuideLine) => {
+      speakGuide(line);
+      appendChat({ role: "luna", text: line.en });
+    },
+    [speakGuide, appendChat],
+  );
+
   /* Phase 6 follow-up — hold-to-talk mic so the user can ask Luna a question on
      the main screen. Replies are shown + spoken via the guide bubble. */
   const stepLabel = STEPS.find((s) => s.key === state.setupStep)?.label ?? state.setupStep;
@@ -149,10 +236,18 @@ export function SetupScreen() {
     [stepLabel, state.summary, state.answers.length],
   );
   const guideChat = useGuideChat({
-    onReply: (reply) => speakGuide({ en: reply }),
+    onReply: (reply) => handleSpeakGuide({ en: reply }),
     onThinkingChange: (thinking) => session.setThinking(thinking),
+    onUserInput: (text) => appendChat({ role: "user", text }),
     buildContext: buildGuideContext,
   });
+  const sendChat = useCallback(
+    (text: string) => {
+      appendChat({ role: "user", text });
+      guideChat.sendText(text);
+    },
+    [appendChat, guideChat],
+  );
   const [analyzing, setAnalyzing] = useState(false);
   const launchedRef = useRef(false);
   const lastGuideStepRef = useRef<SetupStep | null>(null);
@@ -176,15 +271,15 @@ export function SetupScreen() {
      Before Get started, Luna does NOT speak — eager gestures only. */
   useEffect(() => {
     if (!setupOpen) {
-      showGuide(INVITE_LINE);
+      handleShowGuide(INVITE_LINE);
       startEager();
       return () => stopEager();
     }
     stopEager();
     if (state.setupStep === lastGuideStepRef.current) return;
     lastGuideStepRef.current = state.setupStep;
-    speakGuide(GUIDES[state.setupStep]);
-  }, [setupOpen, state.setupStep, showGuide, speakGuide, startEager, stopEager]);
+    handleSpeakGuide(GUIDES[state.setupStep]);
+  }, [setupOpen, state.setupStep, handleShowGuide, handleSpeakGuide, startEager, stopEager]);
 
   useEffect(() => {
     /* Bounce back to the doc step only if nothing has been parsed yet. `docSummary`
@@ -349,11 +444,13 @@ export function SetupScreen() {
           <p className="text-sm text-muted-foreground">
             Meet Luna — your practice-call assistant.
           </p>
-          <TalkToLunaButton
+          <LunaChatPanel
+            messages={chat}
             state={guideChat.state}
             supported={guideChat.supported}
             onStart={() => void guideChat.start()}
             onStop={() => void guideChat.stop()}
+            onSend={sendChat}
           />
           {guideChat.error && (
             <p className="max-w-xs text-center text-xs text-destructive">{guideChat.error}</p>
@@ -369,25 +466,25 @@ export function SetupScreen() {
     <div className="flex min-h-svh items-center justify-end px-4 py-6 pr-4 md:pr-8">
       <div className="w-[420px] max-w-[calc(100vw-2rem)] overflow-y-auto rounded-2xl border bg-card/90 p-5 shadow-xl backdrop-blur-md sm:p-6 max-h-[calc(100svh-3rem)]">
         <div className="flex flex-col gap-1.5">
-          <div className="flex items-start justify-between gap-2">
-            <div className="flex flex-col gap-1.5">
-              <h2 className="text-xl font-semibold text-primary">How can I help?</h2>
-              <p className="text-sm text-muted-foreground">
-                Three quick steps, then we connect you with the ward office.
-              </p>
-            </div>
-            <TalkToLunaButton
-              state={guideChat.state}
-              supported={guideChat.supported}
-              onStart={() => void guideChat.start()}
-              onStop={() => void guideChat.stop()}
-              compact
-            />
+          <div className="flex flex-col gap-1.5">
+            <h2 className="text-xl font-semibold text-primary">How can I help?</h2>
+            <p className="text-sm text-muted-foreground">
+              Three quick steps, then we connect you with the ward office.
+            </p>
           </div>
           {guideChat.error && (
             <p className="text-xs text-destructive">{guideChat.error}</p>
           )}
         </div>
+
+        <LunaChatPanel
+          messages={chat}
+          state={guideChat.state}
+          supported={guideChat.supported}
+          onStart={() => void guideChat.start()}
+          onStop={() => void guideChat.stop()}
+          onSend={sendChat}
+        />
 
         <div className="mt-4 flex items-center gap-1.5">
           {STEPS.map((step, i) => {
@@ -458,10 +555,6 @@ export function SetupScreen() {
               {state.error}
             </p>
           )}
-        </div>
-
-        <div className="mt-5 border-t pt-4">
-          <SessionBar />
         </div>
 
         <PastCalls onRestore={(id) => void handleRestore(id)} busy={state.busy} />

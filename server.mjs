@@ -4,7 +4,7 @@ import crypto from "node:crypto";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
-import { eq, desc } from "drizzle-orm";
+import { and, desc, eq, gt } from "drizzle-orm";
 
 import { auth } from "./server/auth.mjs";
 import { toNodeHandler, fromNodeHeaders } from "better-auth/node";
@@ -759,7 +759,9 @@ app.post(
   }),
 );
 
-// The user's most recent active session (reconnect path for the desktop).
+// The user's most recent active session (reconnect path for the desktop). A
+// session whose pairing code has expired is NOT reusable — the desktop needs a
+// live code to join the hub, so it must look like a 404 (creates a fresh one).
 app.get(
   "/api/sessions/current",
   requireAuth,
@@ -767,7 +769,12 @@ app.get(
     const [row] = await db
       .select()
       .from(schema.appSession)
-      .where(eq(schema.appSession.userId, req.user.id))
+      .where(
+        and(
+          eq(schema.appSession.userId, req.user.id),
+          gt(schema.appSession.pairingExpiresAt, new Date()),
+        ),
+      )
       .orderBy(desc(schema.appSession.createdAt))
       .limit(1);
     if (!row || row.status !== "active") {

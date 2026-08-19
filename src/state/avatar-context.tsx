@@ -30,6 +30,9 @@ type AvatarContextValue = {
   showGuide: (line: GuideLine | null) => void;
   /** Show a guide line; if audio is unlocked, speak it (English). */
   speakGuide: (line: GuideLine | null) => void;
+  /** Clear the current guide bubble (comic-bubble auto-dismiss). The persistent
+   *  chat transcript keeps the text, so this only hides the transient bubble. */
+  clearGuide: () => void;
   /** Loop eager wave/laugh motions to get the user's attention (no speech). */
   startEager: () => void;
   stopEager: () => void;
@@ -58,6 +61,8 @@ export function AvatarProvider({ children }: { children: ReactNode }) {
   const showGuide = useCallback((line: GuideLine | null) => {
     setGuide(line);
   }, []);
+
+  const clearGuide = useCallback(() => setGuide(null), []);
 
   /* Resumes the AudioContext from a user gesture (autoplay). Does NOT speak —
      speech is driven by explicit speakGuide()/player calls. */
@@ -103,10 +108,11 @@ export function AvatarProvider({ children }: { children: ReactNode }) {
       guide,
       showGuide,
       speakGuide,
+      clearGuide,
       startEager,
       stopEager,
     }),
-    [session, unlockAudio, guide, showGuide, speakGuide, startEager, stopEager],
+    [session, unlockAudio, guide, showGuide, speakGuide, clearGuide, startEager, stopEager],
   );
 
   return <AvatarContext.Provider value={value}>{children}</AvatarContext.Provider>;

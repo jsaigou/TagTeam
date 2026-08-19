@@ -1,16 +1,16 @@
 import { useCallback, useMemo, useState } from "react";
 import {
   AudioLines,
-  ChevronDown,
   Leaf,
   LifeBuoy,
   Loader2,
   LogOut,
+  Menu,
   Mic,
-  Monitor,
   Moon,
   Scale,
   Settings,
+  Smartphone,
   Sun,
   User,
 } from "lucide-react";
@@ -18,6 +18,8 @@ import { authClient } from "@/lib/auth";
 import { useAuth } from "@/hooks/use-auth";
 import { useTheme } from "@/state/theme-context";
 import { useTalkMode } from "@/state/talk-mode-context";
+import { useSession } from "@/state/session-context";
+import { useScannerSetting } from "@/hooks/use-scanner-available";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -26,6 +28,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { PhonePairingDialog } from "@/components/session/PhonePairingDialog";
 import { AttributionsDialog } from "./AttributionsDialog";
 import { cn } from "@/lib/utils";
 
@@ -38,78 +41,20 @@ export function Wordmark({ className }: { className?: string }) {
   );
 }
 
-const THEME_LABEL = {
-  light: "Light",
-  dark: "Dark",
-  system: "System",
-} as const;
-
-/** Light / Dark / System selector used in the header + settings dialog. */
-export function ThemeSelector({ align = "right" }: { align?: "left" | "right" }) {
-  const { theme, resolved, setTheme } = useTheme();
-  const Icon = theme === "system" ? Monitor : theme === "dark" ? Moon : Sun;
-  const [open, setOpen] = useState(false);
-
+/** One-tap light / dark toggle. Shows the icon of the theme you'll switch to. */
+function ThemeToggle() {
+  const { theme, setTheme } = useTheme();
+  const isDark = theme === "dark";
   return (
-    <div className="relative">
-      <Button
-        variant="ghost"
-        size="sm"
-        className="gap-1.5"
-        onClick={() => setOpen((o) => !o)}
-        aria-label={`Theme: ${THEME_LABEL[theme]}`}
-        aria-expanded={open}
-      >
-        <Icon className="size-4" />
-        <span className="hidden sm:inline">{THEME_LABEL[theme]}</span>
-        <ChevronDown className="size-3.5 opacity-60" />
-      </Button>
-      {open && (
-        <>
-          <button
-            type="button"
-            className="fixed inset-0 z-40 cursor-default"
-            aria-label="Close theme menu"
-            onClick={() => setOpen(false)}
-          />
-          <div
-            className={cn(
-              "absolute z-50 mt-1 flex min-w-32 flex-col overflow-hidden rounded-lg border bg-popover p-1 shadow-lg",
-              align === "right" ? "right-0" : "left-0",
-            )}
-          >
-            {(["light", "dark", "system"] as const).map((t) => {
-              const Icon = t === "system" ? Monitor : t === "dark" ? Moon : Sun;
-              const active = theme === t;
-              return (
-                <button
-                  key={t}
-                  type="button"
-                  onClick={() => {
-                    setTheme(t);
-                    setOpen(false);
-                  }}
-                  className={cn(
-                    "flex items-center gap-2 rounded-md px-2.5 py-1.5 text-sm transition-colors",
-                    active
-                      ? "bg-primary/10 font-medium text-primary"
-                      : "text-foreground hover:bg-accent",
-                  )}
-                >
-                  <Icon className="size-3.5" />
-                  {THEME_LABEL[t]}
-                  {t === "system" && (
-                    <span className="ml-auto text-xs text-muted-foreground">
-                      {resolved === "dark" ? "dark" : "light"}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </>
-      )}
-    </div>
+    <Button
+      variant="ghost"
+      size="icon"
+      onClick={() => setTheme(isDark ? "light" : "dark")}
+      aria-label={`Switch to ${isDark ? "light" : "dark"} theme`}
+      title={isDark ? "Light theme" : "Dark theme"}
+    >
+      {isDark ? <Sun className="size-4" /> : <Moon className="size-4" />}
+    </Button>
   );
 }
 
@@ -162,7 +107,7 @@ function HelpDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: b
             </span>
             <span>
               <strong>Show us your letter.</strong> Upload a photo of the document you need help
-              with, or describe the issue in your own words.
+              with, or scan it with your phone.
             </span>
           </li>
           <li className="flex gap-3">
@@ -188,8 +133,8 @@ function HelpDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: b
               4
             </span>
             <span>
-              <strong>Connect your phone (optional).</strong> Open <em>Connect a phone</em> on the
-              desktop and scan the QR — use your phone as a camera, mic and remote control.
+              <strong>Connect your phone (optional).</strong> Tap the phone icon up top and scan
+              the QR — use your phone as a camera, mic and remote control.
             </span>
           </li>
         </ol>
@@ -202,7 +147,7 @@ function HelpDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: b
   );
 }
 
-/** Settings dialog — theme + practice defaults live here. */
+/** Settings dialog — theme + input + practice defaults live here. */
 function SettingsDialog({
   open,
   onOpenChange,
@@ -212,6 +157,9 @@ function SettingsDialog({
   onOpenChange: (o: boolean) => void;
   onAttributions: () => void;
 }) {
+  const { theme, setTheme } = useTheme();
+  const [scannerOn, setScannerOn] = useScannerSetting();
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
@@ -225,7 +173,28 @@ function SettingsDialog({
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-2">
             <p className="text-sm font-medium">Theme</p>
-            <ThemeSelector align="left" />
+            <div className="flex items-center gap-1 rounded-lg border bg-muted/40 p-1">
+              {(["light", "dark"] as const).map((t) => {
+                const Icon = t === "light" ? Sun : Moon;
+                return (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setTheme(t)}
+                    aria-pressed={theme === t}
+                    className={cn(
+                      "flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm transition-colors",
+                      theme === t
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:bg-accent",
+                    )}
+                  >
+                    <Icon className="size-3.5" />
+                    {t === "light" ? "Light" : "Dark"}
+                  </button>
+                );
+              })}
+            </div>
           </div>
           <div className="flex flex-col gap-2">
             <p className="text-sm font-medium">How you talk</p>
@@ -233,6 +202,21 @@ function SettingsDialog({
             <p className="text-xs text-muted-foreground">
               Hold a button while you speak, or let the mic detect your voice automatically
               (Silero VAD runs in your browser — nothing is recorded until you speak).
+            </p>
+          </div>
+          <div className="flex flex-col gap-2">
+            <label className="flex items-center gap-2 text-sm font-medium">
+              <input
+                type="checkbox"
+                checked={scannerOn}
+                onChange={(e) => setScannerOn(e.target.checked)}
+                className="size-4 accent-primary"
+              />
+              Document scanner connected
+            </label>
+            <p className="text-xs text-muted-foreground">
+              Reveals the <em>Scan</em> action on the main screen for capturing pages from your
+              scanner.
             </p>
           </div>
           <div className="flex flex-col gap-2">
@@ -287,7 +271,9 @@ function UserBadge() {
         <span className="flex size-6 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
           {initials}
         </span>
-        <ChevronDown className="size-3.5 opacity-60" />
+        <span className="max-w-20 truncate text-xs text-muted-foreground sm:max-w-28 sm:inline">
+          {name || email || "Account"}
+        </span>
       </button>
       {open && (
         <>
@@ -330,11 +316,14 @@ type AppHeaderProps = {
   right?: React.ReactNode;
 };
 
-/** The persistent app frame: wordmark + help + settings + theme + user badge. */
+/** The persistent app frame: wordmark + phone pairing + help + settings + theme + user badge. */
 export function AppHeader({ onHome, title, right }: AppHeaderProps) {
   const [helpOpen, setHelpOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [attributionsOpen, setAttributionsOpen] = useState(false);
+  const [pairOpen, setPairOpen] = useState(false);
+  const { devices } = useSession();
+  const phoneConnected = devices.some((d) => d.connected);
 
   return (
     <header className="relative z-20 flex items-center justify-between gap-3 border-b bg-card px-4 py-2.5 print:hidden">
@@ -357,18 +346,46 @@ export function AppHeader({ onHome, title, right }: AppHeaderProps) {
 
       <div className="flex items-center gap-1.5">
         {right}
-        <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => setHelpOpen(true)}>
+        {/* Connect a phone — wiggles until a companion joins. */}
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => setPairOpen(true)}
+          aria-label="Connect your phone"
+          title="Connect your phone"
+          className="relative"
+        >
+          <Smartphone className={cn("size-4", !phoneConnected && "animate-wiggle")} />
+          <span
+            className={cn(
+              "absolute right-1.5 top-1.5 size-1.5 rounded-full",
+              phoneConnected ? "bg-primary" : "bg-muted-foreground/50",
+            )}
+          />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => setHelpOpen(true)}
+          aria-label="Help"
+          title="Help"
+        >
           <LifeBuoy className="size-4" />
-          <span className="hidden sm:inline">Help</span>
         </Button>
-        <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => setSettingsOpen(true)}>
-          <Settings className="size-4" />
-          <span className="hidden sm:inline">Settings</span>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => setSettingsOpen(true)}
+          aria-label="Settings"
+          title="Settings"
+        >
+          <Menu className="size-4" />
         </Button>
-        <ThemeSelector />
+        <ThemeToggle />
         <UserBadge />
       </div>
 
+      <PhonePairingDialog open={pairOpen} onOpenChange={setPairOpen} />
       <HelpDialog open={helpOpen} onOpenChange={setHelpOpen} />
       <SettingsDialog
         open={settingsOpen}

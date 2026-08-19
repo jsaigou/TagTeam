@@ -135,6 +135,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const phaseListenersRef = useRef<Set<PhaseListener>>(new Set());
   const playerStateRef = useRef<PlayerState | undefined>(undefined);
   const activeTurnRef = useRef<Turn | null>(null);
+  const handleMessageRef = useRef<(msg: WsServerMessage) => void>(() => {});
+  const recoveringPairingRef = useRef(false);
 
   const buildSnapshot = useCallback(
     (): AppSnapshot => ({
@@ -193,6 +195,23 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  const connectHub = useCallback(
+    (wsUrl: string, pairingToken: string, capabilities: DeviceCapability[], sessionId?: string) => {
+      hubRef.current?.close();
+      const hub = new HubClient(wsUrl);
+      hubRef.current = hub;
+      hub.onStatusChange = setHubStatus;
+      hub.subscribe(handleMessageRef.current);
+      hub.connect({
+        type: "join",
+        ...(sessionId ? { sessionId } : {}),
+        pairingToken,
+        capabilities,
+      });
+    },
+    [],
+  );
+
   const handleMessage = useCallback(
     (msg: WsServerMessage) => {
       switch (msg.type) {
@@ -226,30 +245,45 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           break;
         case "error":
           setHubError(msg.message);
+          /* The desktop reuses the most recent session on load. If its pairing
+             code somehow expired/invalidated between fetch and join, recover by
+             rotating to a fresh code and rejoining as the stage — otherwise the
+             whole app sits disconnected with a scary-looking error. */
+          if (
+            msg.code === "INVALID_PAIRING" &&
+            !recoveringPairingRef.current &&
+            sessionRef.current
+          ) {
+            recoveringPairingRef.current = true;
+            void rotatePairingApi(sessionRef.current.id)
+              .then((updated) => {
+                sessionRef.current = updated;
+                setSession(updated);
+                connectHub(
+                  wsUrlFromOrigin(window.location.origin),
+                  updated.pairingToken,
+                  [...STAGE_CAPABILITIES],
+                  updated.id,
+                );
+              })
+              .catch(() => {
+                /* leave the error visible — the user can hit "New code" */
+              })
+              .finally(() => {
+                recoveringPairingRef.current = false;
+              });
+          }
           break;
         default:
           break;
       }
     },
-    [handleIncomingUpload],
+    [handleIncomingUpload, connectHub],
   );
 
-  const connectHub = useCallback(
-    (wsUrl: string, pairingToken: string, capabilities: DeviceCapability[], sessionId?: string) => {
-      hubRef.current?.close();
-      const hub = new HubClient(wsUrl);
-      hubRef.current = hub;
-      hub.onStatusChange = setHubStatus;
-      hub.subscribe(handleMessage);
-      hub.connect({
-        type: "join",
-        ...(sessionId ? { sessionId } : {}),
-        pairingToken,
-        capabilities,
-      });
-    },
-    [handleMessage],
-  );
+  /* Latest handleMessage — assigned each render so connectHub can subscribe
+     without creating a dependency cycle. */
+  handleMessageRef.current = handleMessage;
 
   function ensureSession(): Promise<SessionSummary | null> {
     if (!ensurePromiseRef.current) {

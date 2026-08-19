@@ -14,14 +14,14 @@ export function AvatarStage() {
 
   return (
     <div className="fixed inset-0 z-0">
-      <div className={cn("h-full w-full", !isCall && "flex items-end justify-start p-4")}>
+      <div className={cn("h-full w-full", !isCall && "flex items-center justify-center p-4")}>
         <div
           ref={stageRef}
           className={cn(
             "relative overflow-hidden bg-card",
             isCall
               ? "h-full w-full"
-              : "h-[420px] w-[280px] rounded-2xl border border-border shadow-2xl",
+              : "size-[min(60vmin,24rem)] rounded-2xl border border-border shadow-2xl",
           )}
         />
       </div>
@@ -30,7 +30,7 @@ export function AvatarStage() {
         <div
           className={cn(
             "pointer-events-none absolute flex items-center justify-center",
-            isCall ? "inset-0" : "bottom-4 left-4 h-[420px] w-[280px]",
+            isCall ? "inset-0" : "inset-0",
           )}
         >
           {session.loadError ? (
