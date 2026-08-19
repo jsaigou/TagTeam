@@ -9,7 +9,7 @@ and an OpenAI-compatible LLM.
 > records what was verified live against Perxona. `CONTRACT.md` is the stale hackday doc and is
 > being superseded.
 
-## Current status (Phase 1 + 2 + 3 + 4 + 5)
+## Current status (Phase 1 + 2 + 3 + 4 + 5 + 6)
 
 Done: presenter layer at the full 0.2.0 surface; canned demo removed; **better-auth + Drizzle +
 SQLite login gate**; provider module (`server/providers.mjs`); Dockerfile + docker-compose;
@@ -37,8 +37,21 @@ backend ✓ (`NEXTTURN_PROVIDER=connect-chatbot` + `CHATBOT_ID`, see SETUP.md §
 picker ✓ (`AppSnapshot.activeVocab` drives companion Tap-help chips); BYO TTS ✓ (`TTS_PROVIDER=byo`
 + `VITE_TTS_PROVIDER=byo`, 16 kHz mono WAV via `presentWithAudio`, see SETUP.md §5d). See
 `docs/architecture.md` §11 for the writeup.
-Next: **Phase 6 — TBD** (candidate: target-specific grounding per §4/§5 — geolocate → scrape →
+**Phase 6 — voice-activated talk + attributions**: talk mode (Settings → How you talk) switches
+between hold-to-talk (default) and hands-free voice-activated using **Silero VAD** in the browser
+(`@ricky0123/vad-web` + `onnxruntime-web`, lazy-loaded from CDN, AudioWorklet; `src/hooks/use-voice-talk.ts`
++ `src/state/talk-mode-context.tsx`), wired into BOTH the desktop call screen (`CallScreen.tsx`) and the
+phone companion (`PhoneApp.tsx`) with an echo guard (mic only runs on the user's turn while the avatar
+isn't speaking/thinking); VAD clips ride the same `/api/audio` → STT → nextTurn pipeline as PTT; an
+attributions dialog (`AttributionsDialog.tsx`, from Settings) credits all open-source deps + Perxona.
+Next: **Phase 6 cont.** — candidate: target-specific grounding per §4/§5 (geolocate → scrape →
 `extractTargetRules` with user confirmation, using the unused `scenario.target` column).
+
+**Dev-only avatar-effect demos (see `docs/avatar-effects-demo.md`):** `/demo/` (primitive
+resize/walk/front-layer) and `/demo2/` (the "cat comes to the door" house story — a **launch
+candidate**). Both are separate Vite entries under `demo/`/`demo2/` + `src/demo/`, use the
+dev-gated unauthenticated `/api/demo/*` endpoints (disabled when `NODE_ENV=production`), and
+touch no real-app code. `pnpm dev` → `http://localhost:5173/demo/` and `/demo2/`.
 
 ## Stack
 
@@ -70,7 +83,9 @@ Next: **Phase 6 — TBD** (candidate: target-specific grounding per §4/§5 — 
   `TTS_NORMALIZE` (default `1` — resample to 16 kHz mono WAV via ffmpeg; see SETUP.md §5d).
 - **Client-side (`VITE_` prefix, exposed to the browser):** `VITE_PRESENTER_URL`,
   `VITE_LLM_MODEL`, optional `VITE_OPENCV_URL` (document scan engine; default docs.opencv.org),
-  `VITE_TTS_PROVIDER=perxona|byo` (must mirror server `TTS_PROVIDER` for BYO speech).
+  `VITE_TTS_PROVIDER=perxona|byo` (must mirror server `TTS_PROVIDER` for BYO speech), optional
+  `VITE_SILERO_VAD_URL`/`VITE_SILERO_VAD_WASM_URL` (voice-activated talk assets; default jsDelivr
+  pinned to the installed `@ricky0123/vad-web`/`onnxruntime-web` — see SETUP.md §5e).
 
 **Known environment latency (do not "fix" without asking):** each push-to-talk spawns a fresh
 `whisper-cli` subprocess (loads `ggml-base.bin` ~1s) and the configured homelab LLM
@@ -129,6 +144,22 @@ once on an empty/malformed reply (reasoning models burn the budget).
 - English UI copy; the avatar speaks Japanese (LLM-generated turns).
 - Tests (`*.test.ts`) live next to the code under `src/` and run with Vitest.
 - Never commit `.env` or real secrets (see `CONTRACT.md` secret hygiene).
+
+## Deployment
+
+- Production runs on **Core** (a Tailscale host) via docktail at
+  `https://tagteam.mango-rockhopper.ts.net` (svc `tagteam`, container `tagteam-api` on the
+  `tagteam-internal` bridge, port 8083→443). No host ports are published.
+- The source on Core lives at `/home/jon/docker/tagteam` and is **not** a git repo — it is populated
+  from an archive: `git archive HEAD | tailscale ssh core 'cd /home/jon/docker/tagteam && tar -x'`.
+  The stack `.env` there is the production one (BETTER_AUTH_URL + TRUSTED_ORIGINS = the tailnet
+  domain; STT_PROVIDER=hosted → stt.mango-rockhopper.ts.net, since whisper-cli isn't in the
+  container).
+- Redeploy: the archive pipe above, then
+  `tailscale ssh core 'cd /home/jon/docker/tagteam && docker compose up -d --build'`. If docktail
+  hits the NoState race afterwards, `tailscale ssh core 'docker restart docktail'`.
+- The Dockerfile compiles better-sqlite3 in the build stage and copies a pruned `node_modules` to a
+  toolchain-free runtime; `VITE_*` client vars are baked at build time via compose build args.
 
 ## Getting Started
 

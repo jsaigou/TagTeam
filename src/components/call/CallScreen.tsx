@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ChevronRight, Loader2, Mic, PhoneCall } from "lucide-react";
+import { AudioLines, ChevronRight, Loader2, Mic, PhoneCall } from "lucide-react";
 import type { HoldHelp, PlayerState, TapHelp, Turn } from "@/shared/contract";
 import { useAppStore } from "@/state/app-store";
 import { useAvatar } from "@/state/avatar-context";
 import { useSession } from "@/state/session-context";
 import { useScriptPlayer } from "@/hooks/use-script-player";
 import { usePushToTalk } from "@/hooks/use-push-to-talk";
+import { useVoiceTalk } from "@/hooks/use-voice-talk";
+import { useTalkMode } from "@/state/talk-mode-context";
 import { setCallContext } from "@/lib/session-api";
 import { createScenario, updateScenario } from "@/lib/scenario-api";
 import { pipeline } from "@/state/pipeline";
@@ -42,6 +44,8 @@ export function CallScreen() {
   const { session, setPlayerState, setActiveTurn, onControl, onTurn, onPhase, sendPushToTalk } =
     useSession();
   const ptt = usePushToTalk();
+  const { talkMode } = useTalkMode();
+  const vad = useVoiceTalk();
 
   const [turns, setTurns] = useState<Turn[]>([]);
   const [activeTurnId, setActiveTurnId] = useState<string | null>(null);
@@ -247,6 +251,27 @@ export function CallScreen() {
     }
   }, [ptt, avatar]);
 
+  /* Phase 3 — submit a recorded utterance to the orchestrator and show the
+     avatar "thinking". Shared by push-to-talk and voice-activated (VAD) paths. */
+  const submitUtterance = useCallback(
+    async (audio: { audioBase64: string; mimeType: "audio/wav" }) => {
+      setAdaptive(true);
+      setBrainPhase("thinking");
+      avatar.setThinking(true);
+      try {
+        await sendPushToTalk(audio);
+      } catch (err) {
+        setBrainPhase("idle");
+        avatar.setThinking(false);
+        setUserTurnActive(true);
+        setConversationError(
+          err instanceof Error ? err.message : "Could not send your voice — please try again.",
+        );
+      }
+    },
+    [avatar, sendPushToTalk],
+  );
+
   const handlePTTUp = useCallback(async () => {
     if (ptt.state !== "recording") return;
     avatar.setListening(false);
@@ -255,20 +280,41 @@ export function CallScreen() {
       setUserTurnActive(true);
       return;
     }
-    setAdaptive(true);
-    setBrainPhase("thinking");
-    avatar.setThinking(true);
-    try {
-      await sendPushToTalk(audio);
-    } catch (err) {
-      setBrainPhase("idle");
-      avatar.setThinking(false);
-      setUserTurnActive(true);
-      setConversationError(
-        err instanceof Error ? err.message : "Could not send your voice — please try again.",
-      );
+    await submitUtterance(audio);
+  }, [ptt, avatar, submitUtterance]);
+
+  /* Phase 6 — voice-activated talk (Silero VAD). The mic runs only while it's
+     the user's turn AND the avatar is not speaking/thinking (echo guard). */
+  const ended = playerState === "ended" || conversationEnded;
+  const canStart = !started && !ended && Boolean(script);
+
+  const vadWindow =
+    talkMode === "vad" &&
+    started &&
+    !ended &&
+    showUserTurn &&
+    brainPhase === "idle";
+
+  useEffect(() => {
+    if (!vadWindow) {
+      void vad.stop();
+      avatar.setListening(false);
+      return;
     }
-  }, [ptt, avatar, sendPushToTalk]);
+    void vad.start({
+      onUtterance: (audio) => void submitUtterance(audio),
+    });
+    avatar.setListening(true);
+    return () => {
+      void vad.stop();
+      avatar.setListening(false);
+    };
+    /* Deps deliberately use the stable functions, not the `vad`/`avatar`
+       context objects which change identity every render. */
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vadWindow, vad.start, vad.stop, avatar.setListening, submitUtterance]);
+
+  const vadFallback = talkMode === "vad" && (!vad.supported || vad.state === "error");
 
   const handleFinish = useCallback(async () => {
     if (!script) return;
@@ -317,9 +363,6 @@ export function CallScreen() {
     speakGuide,
   ]);
 
-  const ended = playerState === "ended" || conversationEnded;
-  const canStart = !started && !ended && Boolean(script);
-
   return (
     <div className="relative z-10 flex h-svh flex-col">
       {state.error && (
@@ -353,7 +396,49 @@ export function CallScreen() {
         {showUserTurn && !ended && (
           <div className="absolute inset-x-0 bottom-24 z-30 flex justify-center px-4">
             <div className="flex w-[26rem] max-w-full flex-col gap-3 rounded-xl border bg-card/95 p-4 shadow-lg backdrop-blur">
-              {ptt.state === "recording" ? (
+              {brainPhase === "thinking" ? (
+                <div className="flex items-center gap-2 text-sm text-foreground">
+                  <Loader2 className="size-4 animate-spin text-accent" />
+                  The office is thinking…
+                </div>
+              ) : talkMode === "vad" && !vadFallback ? (
+                <>
+                  <p className="text-xs font-medium uppercase tracking-wide text-primary">
+                    Your turn
+                  </p>
+                  {vad.state === "listening" ? (
+                    <p className="flex items-center gap-2 text-sm text-foreground">
+                      <span className="size-2 animate-pulse rounded-full bg-emerald-500" />
+                      Listening — speak whenever you're ready.
+                    </p>
+                  ) : vad.state === "speaking" ? (
+                    <p className="flex items-center gap-2 text-sm text-foreground">
+                      <span className="size-2 animate-pulse rounded-full bg-destructive" />
+                      I can hear you — go ahead.
+                    </p>
+                  ) : (
+                    <p className="flex items-center gap-2 text-sm text-foreground">
+                      <Loader2 className="size-4 animate-spin text-accent" />
+                      Starting microphone…
+                    </p>
+                  )}
+                  <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <AudioLines className="size-3.5" />
+                    Voice-activated — no button needed.
+                  </p>
+                  {conversationError && (
+                    <p className="text-xs text-destructive">{conversationError}</p>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={handleContinue}
+                    className="gap-1 self-end"
+                  >
+                    Skip & continue <ChevronRight className="size-4" />
+                  </Button>
+                </>
+              ) : ptt.state === "recording" ? (
                 <>
                   <p className="text-xs font-medium uppercase tracking-wide text-primary">
                     Listening…
@@ -363,11 +448,6 @@ export function CallScreen() {
                     Keep holding to speak — release when done.
                   </p>
                 </>
-              ) : brainPhase === "thinking" ? (
-                <div className="flex items-center gap-2 text-sm text-foreground">
-                  <Loader2 className="size-4 animate-spin text-accent" />
-                  The office is thinking…
-                </div>
               ) : (
                 <>
                   <p className="text-xs font-medium uppercase tracking-wide text-primary">
@@ -379,6 +459,11 @@ export function CallScreen() {
                       {activeTurn.en && (
                         <span className="ml-1.5 text-xs text-muted-foreground">{activeTurn.en}</span>
                       )}
+                    </p>
+                  )}
+                  {vad.state === "error" && vad.error && (
+                    <p className="text-xs text-destructive">
+                      {vad.error} Falling back to the hold button.
                     </p>
                   )}
                   <button

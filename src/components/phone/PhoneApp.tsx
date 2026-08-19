@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  AudioLines,
   Check,
   Loader2,
   Mic,
@@ -11,6 +12,8 @@ import {
 import type { GlossaryEntry, ImageDoc, Turn } from "@/shared/contract";
 import { useSession } from "@/state/session-context";
 import { usePushToTalk } from "@/hooks/use-push-to-talk";
+import { useVoiceTalk } from "@/hooks/use-voice-talk";
+import { useTalkMode } from "@/state/talk-mode-context";
 import { joinHashFromQr, parsePhoneHash } from "@/lib/session-utils";
 import { ScanSheet } from "@/components/setup/ScanSheet";
 import { CameraScanner } from "@/components/phone/CameraScanner";
@@ -41,6 +44,8 @@ export function PhoneApp() {
     onTurn,
   } = useSession();
   const ptt = usePushToTalk();
+  const { talkMode } = useTalkMode();
+  const vad = useVoiceTalk();
   const [code, setCode] = useState("");
   const [qrScanOpen, setQrScanOpen] = useState(false);
   const [scanOpen, setScanOpen] = useState(false);
@@ -130,6 +135,35 @@ export function PhoneApp() {
   const running = snapshot?.status === "running" || snapshot?.status === "ready";
   const activeTurn = snapshot?.activeTurn;
   const userTurn = activeTurn?.speaker === "user";
+
+  /* Phase 6 — voice-activated talk (Silero VAD) on the companion. Runs only
+     while it's the user's turn and the office isn't thinking. */
+  const vadWindow =
+    talkMode === "vad" &&
+    hasCode &&
+    connected &&
+    running &&
+    userTurn &&
+    !thinking;
+
+  useEffect(() => {
+    if (!vadWindow) {
+      void vad.stop();
+      return;
+    }
+    void vad.start({
+      onUtterance: (audio) =>
+        void sendPushToTalk(audio).catch((err) =>
+          setVoiceError(err instanceof Error ? err.message : "Could not send your voice."),
+        ),
+    });
+    return () => {
+      void vad.stop();
+    };
+    /* Deps deliberately use the stable functions, not the `vad` object which
+       changes identity every render. */
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vadWindow, vad.start, vad.stop, sendPushToTalk]);
 
   return (
     <div className="mx-auto flex min-h-svh w-full max-w-md flex-col gap-3 px-4 py-6">
@@ -290,33 +324,68 @@ export function PhoneApp() {
           <div className="flex flex-col gap-2 rounded-xl border bg-card p-4">
             <div className="flex items-center justify-between">
               <p className="text-sm font-medium">Speak</p>
-              {(thinking || ptt.state === "recording") && (
+              {(thinking || ptt.state === "recording" || vad.state === "speaking") && (
                 <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
                   <span
                     className={cn(
                       "size-1.5 animate-pulse rounded-full",
-                      ptt.state === "recording" ? "bg-destructive" : "bg-accent",
+                      ptt.state === "recording" || vad.state === "speaking"
+                        ? "bg-destructive"
+                        : "bg-accent",
                     )}
                   />
-                  {ptt.state === "recording" ? "Listening…" : thinking ? "Office is thinking…" : ""}
+                  {ptt.state === "recording" || vad.state === "speaking"
+                    ? "Listening…"
+                    : thinking
+                      ? "Office is thinking…"
+                      : ""}
                 </span>
               )}
             </div>
-            <button
-              type="button"
-              onPointerDown={() => void handlePTTDown()}
-              onPointerUp={() => void handlePTTUp()}
-              onPointerLeave={() => void handlePTTUp()}
-              onPointerCancel={() => void handlePTTUp()}
-              disabled={!ptt.supported || !running}
-              className={cn(
-                "flex select-none touch-none items-center justify-center gap-2 rounded-lg border border-accent/40 bg-accent/15 px-4 py-3 text-sm font-semibold text-accent transition-colors hover:bg-accent/25 active:bg-accent/30",
-                (!ptt.supported || !running) && "cursor-not-allowed opacity-50",
-              )}
-            >
-              <Mic className="size-4" />
-              {ptt.state === "recording" ? "Release to send" : "Hold to speak"}
-            </button>
+            {talkMode === "vad" && vad.supported && vad.state !== "error" ? (
+              <>
+                <div className="flex flex-col gap-1 rounded-lg border border-accent/30 bg-accent/10 px-4 py-3">
+                  <p className="flex items-center gap-2 text-sm text-foreground">
+                    <span
+                      className={cn(
+                        "size-2 animate-pulse rounded-full",
+                        vad.state === "speaking" ? "bg-destructive" : "bg-emerald-500",
+                      )}
+                    />
+                    {vad.state === "speaking"
+                      ? "I can hear you…"
+                      : vad.state === "loading"
+                        ? "Starting microphone…"
+                        : "Listening — speak anytime"}
+                  </p>
+                  <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <AudioLines className="size-3.5" />
+                    Voice-activated — no button needed.
+                  </p>
+                </div>
+              </>
+            ) : (
+              <button
+                type="button"
+                onPointerDown={() => void handlePTTDown()}
+                onPointerUp={() => void handlePTTUp()}
+                onPointerLeave={() => void handlePTTUp()}
+                onPointerCancel={() => void handlePTTUp()}
+                disabled={!ptt.supported || !running}
+                className={cn(
+                  "flex select-none touch-none items-center justify-center gap-2 rounded-lg border border-accent/40 bg-accent/15 px-4 py-3 text-sm font-semibold text-accent transition-colors hover:bg-accent/25 active:bg-accent/30",
+                  (!ptt.supported || !running) && "cursor-not-allowed opacity-50",
+                )}
+              >
+                <Mic className="size-4" />
+                {ptt.state === "recording" ? "Release to send" : "Hold to speak"}
+              </button>
+            )}
+            {vad.state === "error" && vad.error && (
+              <p className="text-xs text-destructive">
+                {vad.error} Falling back to the hold button.
+              </p>
+            )}
             {voiceError && <p className="text-xs text-destructive">{voiceError}</p>}
             {liveTurns.length > 0 && (
               <div className="flex flex-col gap-1.5 border-t pt-2">

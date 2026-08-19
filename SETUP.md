@@ -275,6 +275,28 @@ by default the server resamples whatever the engine emits via ffmpeg (`TTS_NORMA
 ffmpeg, or set `TTS_NORMALIZE=0` to pass the engine bytes through untouched). If synthesis fails the
 avatar falls back to Perxona's voice. The English guide voice stays on Perxona regardless.
 
+## 5e. Voice-activated talk (Phase 6)
+
+Settings → **How you talk** switches between **Hold to talk** (push-to-talk, default) and
+**Voice-activated** (hands-free). In voice-activated mode the mic listens only while it's your turn and
+the avatar isn't speaking/thinking, and a detected utterance is transcribed and answered exactly like a
+held clip.
+
+Voice detection runs **entirely in the browser** — Silero VAD (`@ricky0123/vad-web` + `onnxruntime-web`)
+is lazy-loaded and streamed through an AudioWorklet; no audio leaves the device until you actually
+speak and the clip is sent to `/api/audio`. The model + wasm load from jsDelivr by default, pinned to
+the installed versions. For offline/self-hosted deploys, vendor the two directories and override:
+
+```
+VITE_SILERO_VAD_URL=https://your-host/silero-vad/dist/
+VITE_SILERO_VAD_WASM_URL=https://your-host/onnxruntime-web/dist/
+```
+
+`VITE_SILERO_VAD_URL` must serve the `vad-web` dist directory (the `silero_vad_v5.onnx` model +
+`vad.worklet.bundle.min.js`); `VITE_SILERO_VAD_WASM_URL` must serve `onnxruntime-web`'s `dist/`
+directory. The voice-activated option applies to the desktop call screen and the phone companion.
+
+
 ## 6. Troubleshooting
 
 | Symptom | Fix |
@@ -287,6 +309,8 @@ avatar falls back to Perxona's voice. The English guide voice stays on Perxona r
 | LLM calls fail | Check `LLM_API_KEY`/`LLM_BASE_URL`; the model must support `response_format: json_object` |
 | "Hold to speak" says microphone denied | Allow mic access in the browser (the request only fires while holding) |
 | Push-to-talk upload fails | Check the server is reachable (`/api/audio`); the 8 MB ephemeral-store cap is plenty for 16 kHz WAV |
+| Voice-activated talk falls back to the hold button | Mic permission denied, or the Silero VAD model/wasm failed to load from CDN — check the browser console and `VITE_SILERO_VAD_URL`/`VITE_SILERO_VAD_WASM_URL` (see §5e) |
+| VAD re-triggers on the avatar's own voice | The echo guard pauses the mic while the avatar speaks; if it still triggers, browser echo cancellation should suppress the speaker — use headphones for the cleanest result |
 | STT error from whisper.cpp | `WHISPER_BIN` not on PATH or `WHISPER_MODEL` missing — download it into `data/models/` (see §5b) |
 | "The office is still replying" | The brain is mid-generation; wait a moment before holding again |
 | Phone shows "invalid or expired" pairing code | The 15-min code expired or the desktop rotated it — generate a **New code** and re-scan |
