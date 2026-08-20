@@ -52,6 +52,7 @@ function setup() {
   const geolocate = controllableStep();
   const research = controllableStep();
   const extractTargetRules = controllableStep();
+  const planScenario = controllableStep();
 
   const jobRunner = createJobRunner({
     steps: {
@@ -59,6 +60,7 @@ function setup() {
       geolocate: { run: geolocate.run },
       research: { run: research.run, lane: "net" },
       extractTargetRules: { run: extractTargetRules.run, lane: "llm" },
+      planScenario: { run: planScenario.run, lane: "llm" },
     },
   });
 
@@ -66,7 +68,16 @@ function setup() {
   const runEngine = createRunEngine({ jobRunner });
   runEngine.addListener((_runKey: string, run: unknown) => snapshots.push(run));
 
-  return { jobRunner, runEngine, identifyTarget, geolocate, research, extractTargetRules, snapshots };
+  return {
+    jobRunner,
+    runEngine,
+    identifyTarget,
+    geolocate,
+    research,
+    extractTargetRules,
+    planScenario,
+    snapshots,
+  };
 }
 
 const CANDIDATES = [
@@ -94,6 +105,7 @@ describe("GRAPH shape", () => {
     expect(GRAPH.extractTargetRules.deps).toEqual(["confirmTarget"]);
     expect(GRAPH.extractTargetRules.speculative).toBe(true);
     expect(GRAPH.research.deps).toEqual(["identifyTarget", "geolocate?"]);
+    expect(GRAPH.planScenario.deps).toEqual(["confirmTarget", "extractTargetRules?"]);
   });
 });
 
@@ -210,5 +222,92 @@ describe("createRunEngine", () => {
       (j: { status: string; step: string }) => j.step === "identifyTarget" && j.status === "superseded",
     );
     expect(firstJobCanceled || env.identifyTarget.calls.length === 2).toBe(true);
+  });
+});
+
+describe("planScenario (Phase 7 plan §7b.5 migration step 4)", () => {
+  it("does not start while the confirmTarget gate is still open", async () => {
+    const env = setup();
+    await driveToGate(env);
+    expect(env.planScenario.calls).toHaveLength(0);
+  });
+
+  it("waits for extractTargetRules to reach a terminal status before starting (soft dep)", async () => {
+    const env = setup();
+    await driveToGate(env);
+    const run = env.runEngine.getRun("s1");
+    env.runEngine.resolveGate("s1", run.runId, "https://a.example");
+    await tick();
+    await tick();
+
+    // extractTargetRules is still "running" (promoted, not yet resolved) —
+    // planScenario's soft dep is not satisfied by "running", only by a
+    // terminal status, so it must not have started yet.
+    expect(env.planScenario.calls).toHaveLength(0);
+
+    env.extractTargetRules.resolve({
+      name: "Mejiro Dental Clinic",
+      url: "https://a.example",
+      rules: [{ id: "r1", rule: "Open weekdays 9-17", kind: "hours", source: "https://a.example" }],
+    });
+    await tick();
+    await tick();
+
+    expect(env.planScenario.calls).toHaveLength(1);
+    expect(env.planScenario.calls[0]).toMatchObject({
+      target: { name: "Mejiro Dental Clinic", url: "https://a.example" },
+    });
+  });
+
+  it("still starts (with no cited rules) when extractTargetRules fails outright", async () => {
+    const env = setup();
+    await driveToGate(env);
+    const run = env.runEngine.getRun("s1");
+    env.runEngine.resolveGate("s1", run.runId, "https://a.example");
+    await tick();
+    await tick();
+
+    env.extractTargetRules.reject(new Error("scrape failed"));
+    await tick();
+    await tick();
+    await tick();
+
+    expect(env.planScenario.calls).toHaveLength(1);
+    expect(env.planScenario.calls[0]).toMatchObject({
+      target: { name: "Mejiro Dental Clinic", url: "https://a.example", rules: [] },
+    });
+  });
+
+  it("carries docSummary/answers/settings seeded via startRun's extra ctx", async () => {
+    const env = setup();
+    const docSummary = { documentType: "x", issuingAgency: "y", purpose: "z", keyFields: [], questions: [] };
+    const answers = [{ questionId: "q1", answer: "a" }];
+    const settings = { role: "reception", difficulty: "beginner", pace: "slow" };
+
+    env.runEngine.startRun("s1", "book an appointment at Mejiro Dental Clinic", {
+      docSummary,
+      answers,
+      settings,
+    });
+    env.identifyTarget.resolve({ name: "Mejiro Dental Clinic", city: "Toshima", query: "目白 歯科" });
+    await tick();
+    await tick();
+    env.geolocate.resolve({ locality: "Toshima", queryHint: "Mejiro Dental Clinic Toshima" });
+    await tick();
+    await tick();
+    env.research.resolve({ query: "x", results: CANDIDATES });
+    await tick();
+    await tick();
+
+    const run = env.runEngine.getRun("s1");
+    env.runEngine.resolveGate("s1", run.runId, "https://a.example");
+    await tick();
+    await tick();
+    env.extractTargetRules.resolve({ name: "Mejiro Dental Clinic", url: "https://a.example", rules: [] });
+    await tick();
+    await tick();
+
+    expect(env.planScenario.calls).toHaveLength(1);
+    expect(env.planScenario.calls[0]).toMatchObject({ docSummary, answers, settings });
   });
 });

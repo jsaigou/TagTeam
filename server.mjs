@@ -19,6 +19,7 @@ import { step as scrapeStep } from "./server/steps/scrape.mjs";
 import { step as identifyTargetStep } from "./server/steps/identifyTarget.mjs";
 import { step as geolocateStep } from "./server/steps/geolocate.mjs";
 import { step as extractTargetRulesStep } from "./server/steps/extractTargetRules.mjs";
+import { step as planScenarioStep } from "./server/steps/planScenario.mjs";
 import {
   createScenario,
   deleteScenario,
@@ -400,6 +401,7 @@ const jobRunner = createJobRunner({
     identifyTarget: identifyTargetStep,
     geolocate: geolocateStep,
     extractTargetRules: extractTargetRulesStep,
+    planScenario: planScenarioStep,
   },
   lanes: {
     net: { concurrency: 3 },

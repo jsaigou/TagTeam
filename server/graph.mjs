@@ -90,6 +90,22 @@ export const GRAPH = {
     speculative: true,
     input: (ctx) => ({ candidate: ctx.confirmTarget }),
   },
+  planScenario: {
+    // Hard dep on confirmTarget (architecture principle 6 — never build a
+    // practice script on an unconfirmed guess). Soft dep on
+    // extractTargetRules: a failed/slow rule extraction must not block the
+    // script forever — it just runs with the confirmed candidate's name/
+    // address and no cited rules.
+    deps: ["confirmTarget", "extractTargetRules?"],
+    step: "planScenario",
+    input: (ctx) => ({
+      docSummary: ctx.docSummary,
+      answers: ctx.answers,
+      settings: ctx.settings,
+      preset: ctx.preset,
+      target: ctx.extractTargetRules ?? (ctx.confirmTarget && { ...ctx.confirmTarget, rules: [] }),
+    }),
+  },
 };
 
 /** Nodes that may speculatively run off a gate's top guess while it's open. */
@@ -239,13 +255,18 @@ export function createRunEngine({ jobRunner, graph = GRAPH } = {}) {
     if (TERMINAL_STATUSES.has(jobSnap.status) && jobSnap.status !== "done") tryAdvance(run);
   });
 
-  function startRun(runKey, goal) {
+  // `extra` seeds ctx fields no graph node produces (docSummary/answers/
+  // settings/preset — the setup-screen document/grounding state, which lives
+  // client-side until slice 5 wires the intent-message UI). Additive: every
+  // existing 2-arg call site (e.g. hub.mjs's `startRun(sessionId, objective)`)
+  // still works unchanged.
+  function startRun(runKey, goal, extra = {}) {
     if (runs.has(runKey)) jobRunner.cancelRun(runKey);
     const run = {
       runId: crypto.randomUUID(),
       runKey,
       goal,
-      ctx: { goal },
+      ctx: { goal, ...extra },
       nodes: {},
       gate: undefined,
     };
