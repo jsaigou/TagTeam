@@ -35,8 +35,10 @@ function AppContent() {
         {state.screen === "call" && <CallScreen />}
         {state.screen === "cheat-sheet" &&
           (state.cheatSheet ? (
-            <div className="ml-auto flex min-h-svh w-full max-w-3xl flex-col justify-center px-4 py-8 pr-4 md:pr-12">
-              <CheatSheetView sheet={state.cheatSheet} onRestart={reset} />
+            <div className="flex min-h-svh w-full flex-col items-center justify-start px-4 pb-8 pt-[21rem] md:justify-center md:pl-[calc(3.5rem_+_min(36vmin,17rem))] md:pr-12 md:pt-8">
+              <div className="w-full max-w-3xl">
+                <CheatSheetView sheet={state.cheatSheet} onRestart={reset} />
+              </div>
             </div>
           ) : (
             <div className="flex min-h-svh items-center justify-center text-muted-foreground">

@@ -3,10 +3,18 @@ import { useAvatar } from "@/state/avatar-context";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-/** The star: a framed portrait card on the setup/cheat-sheet screens, expanding
- *  to a full-screen presenter during the practice call. The scene (anime
- *  backdrop) is the avatar's background; the widget re-fits itself to the
- *  container via its internal ResizeObserver. */
+/** The assistant: a framed portrait card on the setup/cheat-sheet screens,
+ *  expanding to a full-screen presenter during the practice call (there the
+ *  avatar IS the practice partner). The scene (anime backdrop) is the avatar's
+ *  background; the widget re-fits itself to the container via its internal
+ *  ResizeObserver.
+ *
+ *  Non-call placement — Luna assists, she is not the star. Desktop (md+): the
+ *  card sits LEFT and vertically centered (`md:pl-8`, `md:size-[min(36vmin,17rem)]`)
+ *  while the screens reserve that lane and take the dominant share. Below md:
+ *  a small top-anchored card (`pt-40`, `size-36`) with content stacked under it.
+ *  Keep these numbers in sync with AvatarGuide's bubble anchor and the screens'
+ *  `pl-[calc(3.5rem+min(36vmin,17rem))]` / `pt-[21rem]` reservations. */
 export function AvatarStage() {
   const { stageRef, session } = useAvatar();
   const { state } = useAppStore();
@@ -14,14 +22,20 @@ export function AvatarStage() {
 
   return (
     <div className="fixed inset-0 z-0">
-      <div className={cn("h-full w-full", !isCall && "flex items-center justify-center p-4")}>
+      <div
+        className={cn(
+          "h-full w-full",
+          !isCall &&
+            "flex items-start justify-center pt-40 md:items-center md:justify-start md:pl-8 md:pt-0",
+        )}
+      >
         <div
           ref={stageRef}
           className={cn(
             "relative overflow-hidden bg-card",
             isCall
               ? "h-full w-full"
-              : "size-[min(60vmin,24rem)] rounded-2xl border border-border shadow-2xl",
+              : "size-36 rounded-2xl border border-border shadow-2xl md:size-[min(36vmin,17rem)]",
           )}
         />
       </div>
@@ -29,10 +43,19 @@ export function AvatarStage() {
       {!session.ready && (
         <div
           className={cn(
-            "pointer-events-none absolute flex items-center justify-center",
-            isCall ? "inset-0" : "inset-0",
+            "pointer-events-none absolute inset-0 flex",
+            isCall
+              ? "items-center justify-center"
+              : "items-start justify-center pt-40 md:items-center md:justify-start md:pl-8 md:pt-0",
           )}
         >
+          {/* Mirror the card's box so the pill/retry sits ON the card. */}
+          <div
+            className={cn(
+              "flex items-center justify-center",
+              !isCall && "size-36 md:size-[min(36vmin,17rem)]",
+            )}
+          >
           {session.loadError ? (
             <div className="pointer-events-auto flex flex-col items-center gap-2 rounded-xl border bg-card/90 p-6 text-center shadow-lg">
               <p className="text-sm text-destructive">Could not load the presenter.</p>
@@ -45,6 +68,7 @@ export function AvatarStage() {
               Waking Luna up…
             </p>
           )}
+          </div>
         </div>
       )}
     </div>

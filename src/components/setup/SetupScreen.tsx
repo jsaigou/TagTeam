@@ -448,12 +448,12 @@ export function SetupScreen() {
     [state.setupStep],
   );
 
-  /* Invite state — the avatar is on screen in a portrait card with a Get
-     started trigger, right-aligned to mirror the setup panel. */
+  /* Invite state — Luna's card owns the left lane (AvatarStage); this column
+     fills the remaining width, stacked under the card below md. */
   if (!setupOpen) {
     return (
-      <div className="flex min-h-svh items-center justify-end px-4 py-6 pr-4 md:pr-8">
-        <div className="flex w-[420px] max-w-[calc(100vw-2rem)] flex-col items-center gap-3">
+      <div className="flex min-h-svh flex-col items-center justify-start px-4 pb-6 pt-[21rem] md:flex-row md:items-center md:justify-center md:pl-[calc(3.5rem_+_min(36vmin,17rem))] md:pr-8 md:pt-6">
+        <div className="flex w-full max-w-lg flex-col items-center gap-3">
           <Button
             size="lg"
             onClick={handleGetStarted}
@@ -482,10 +482,11 @@ export function SetupScreen() {
     );
   }
 
-  /* Setup pop-up — compact panel, at most ~25% of the screen. */
+  /* Setup pop-up — the dominant panel in the content lane (the avatar keeps
+     the left lane; below md the panel stacks under the card). */
   return (
-    <div className="flex min-h-svh items-center justify-end px-4 py-6 pr-4 md:pr-8">
-      <div className="w-[420px] max-w-[calc(100vw-2rem)] overflow-y-auto rounded-2xl border bg-card/90 p-5 shadow-xl backdrop-blur-md sm:p-6 max-h-[calc(100svh-3rem)]">
+    <div className="flex min-h-svh flex-col items-center justify-start px-4 pb-6 pt-[21rem] md:flex-row md:items-center md:justify-center md:pl-[calc(3.5rem_+_min(36vmin,17rem))] md:pr-8 md:pt-6">
+      <div className="w-full max-w-2xl overflow-y-auto rounded-2xl border bg-card/90 p-5 shadow-xl backdrop-blur-md sm:p-6 max-h-[calc(100svh-22.5rem)] md:max-h-[calc(100svh-3rem)]">
         <div className="flex flex-col gap-1.5">
           <div className="flex flex-col gap-1.5">
             <h2 className="text-xl font-semibold text-primary">How can I help?</h2>
