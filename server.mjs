@@ -20,6 +20,7 @@ import { step as identifyTargetStep } from "./server/steps/identifyTarget.mjs";
 import { step as geolocateStep } from "./server/steps/geolocate.mjs";
 import { step as extractTargetRulesStep } from "./server/steps/extractTargetRules.mjs";
 import { step as planScenarioStep } from "./server/steps/planScenario.mjs";
+import { createParseDocumentStep } from "./server/steps/parseDocument.mjs";
 import {
   createScenario,
   deleteScenario,
@@ -30,6 +31,7 @@ import {
 import { db, schema } from "./server/db.mjs";
 import {
   attachHub,
+  createUploadStore,
   generatePairingCode,
   PAIRING_TTL_MS,
 } from "./server/hub.mjs";
@@ -389,6 +391,13 @@ if (DEMO_API_ENABLED) {
   );
 }
 
+// Phase 7b — ephemeral upload store, hoisted ABOVE the job runner: the
+// parseDocument step reads uploaded document bytes by uploadId, so the runner
+// and the WS hub must share ONE store. attachHub below is handed this same
+// instance (it starts the TTL sweeper itself), keeping the existing
+// companion-photo-handoff routes and the job step on one store.
+const uploadStore = createUploadStore();
+
 // Phase 7b — background job runner. Steps are plain modules (server/steps/*)
 // run by the generic runner in server/jobs.mjs; the "net" lane fans research
 // + scrape out concurrently instead of the old strictly-sequential loop, and
@@ -402,6 +411,9 @@ const jobRunner = createJobRunner({
     geolocate: geolocateStep,
     extractTargetRules: extractTargetRulesStep,
     planScenario: planScenarioStep,
+    // A factory, unlike the pure env-singleton steps above: it needs the
+    // shared upload store injected (see server/steps/parseDocument.mjs).
+    parseDocument: createParseDocumentStep({ uploadStore }).step,
   },
   lanes: {
     net: { concurrency: 3 },
@@ -953,6 +965,10 @@ const orchestrator = createCallOrchestrator({ transcribeAudio, llmChat: nextTurn
 const hub = attachHub(server, {
   db,
   schema,
+  // The SAME store the parseDocument job step was built with above, so an
+  // upload POSTed via /api/uploads is visible to the job (and ack/expiry
+  // semantics stay identical for the companion-photo-handoff flow).
+  uploadStore,
   orchestrator,
   runEngine,
   // Intent classification runs OUTSIDE the "llm" lane's own queueing (it's

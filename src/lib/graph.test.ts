@@ -49,6 +49,7 @@ function controllableStep() {
  *  gate) without hitting llmChat/SearXNG/Firecrawl. */
 function setup() {
   const identifyTarget = controllableStep();
+  const parseDocument = controllableStep();
   const geolocate = controllableStep();
   const research = controllableStep();
   const extractTargetRules = controllableStep();
@@ -57,6 +58,7 @@ function setup() {
   const jobRunner = createJobRunner({
     steps: {
       identifyTarget: { run: identifyTarget.run, lane: "llm" },
+      parseDocument: { run: parseDocument.run, lane: "llm" },
       geolocate: { run: geolocate.run },
       research: { run: research.run, lane: "net" },
       extractTargetRules: { run: extractTargetRules.run, lane: "llm" },
@@ -72,6 +74,7 @@ function setup() {
     jobRunner,
     runEngine,
     identifyTarget,
+    parseDocument,
     geolocate,
     research,
     extractTargetRules,
@@ -105,7 +108,17 @@ describe("GRAPH shape", () => {
     expect(GRAPH.extractTargetRules.deps).toEqual(["confirmTarget"]);
     expect(GRAPH.extractTargetRules.speculative).toBe(true);
     expect(GRAPH.research.deps).toEqual(["identifyTarget", "geolocate?"]);
-    expect(GRAPH.planScenario.deps).toEqual(["confirmTarget", "extractTargetRules?"]);
+    expect(GRAPH.planScenario.deps).toEqual(["confirmTarget", "extractTargetRules?", "parseDocument?"]);
+  });
+
+  it("declares parseDocument as a dep-free node gated on a seeded doc", () => {
+    expect(GRAPH.parseDocument.deps).toEqual([]);
+    expect(GRAPH.parseDocument.step).toBe("parseDocument");
+    expect(GRAPH.parseDocument.enabled({ doc: { kind: "text", text: "x" } })).toBe(true);
+    expect(GRAPH.parseDocument.enabled({})).toBe(false);
+    expect(GRAPH.parseDocument.input({ doc: { kind: "text", text: "x" } })).toEqual({
+      doc: { kind: "text", text: "x" },
+    });
   });
 });
 
@@ -309,5 +322,128 @@ describe("planScenario (Phase 7 plan §7b.5 migration step 4)", () => {
 
     expect(env.planScenario.calls).toHaveLength(1);
     expect(env.planScenario.calls[0]).toMatchObject({ docSummary, answers, settings });
+  });
+});
+
+describe("parseDocument (Phase 7 plan §7b.5 migration step 5)", () => {
+  const DOC = { kind: "image", uploadId: "u1" };
+  const SEED_SUMMARY = { documentType: "seeded", issuingAgency: "s", purpose: "p", keyFields: [], questions: [] };
+  const PARSED_SUMMARY = { documentType: "parsed", issuingAgency: "p", purpose: "p", keyFields: [], questions: [] };
+
+  it("starts immediately at startRun (no deps) when a doc is seeded", async () => {
+    const env = setup();
+    env.runEngine.startRun("s1", "book an appointment at Mejiro Dental Clinic", { doc: DOC });
+    await tick();
+
+    // Enqueued in the very first advance, alongside identifyTarget (it sits
+    // "queued" behind it only because the llm lane serializes by default).
+    const jobs = env.jobRunner.getJobs("s1");
+    expect(jobs.find((j: { step: string }) => j.step === "parseDocument")).toMatchObject({
+      step: "parseDocument",
+      status: "queued",
+    });
+
+    env.identifyTarget.resolve({ name: "Mejiro Dental Clinic", city: "Toshima", query: "目白 歯科" });
+    await tick();
+    await tick();
+
+    expect(env.parseDocument.calls).toEqual([{ doc: DOC }]);
+  });
+
+  it("never runs when no doc is seeded, and the skipped node stays out of the feed", async () => {
+    const env = setup();
+    await driveToGate(env);
+
+    expect(env.parseDocument.calls).toHaveLength(0);
+    const run = env.runEngine.getRun("s1");
+    // The node was marked "skipped" internally — buildSnapshot filters it.
+    expect(run.jobs.find((j: { step: string }) => j.step === "parseDocument")).toBeUndefined();
+  });
+
+  it("planScenario still starts when ctx.doc is absent (soft dep on a never-started node)", async () => {
+    const env = setup();
+    await driveToGate(env);
+    expect(env.parseDocument.calls).toHaveLength(0);
+
+    const run = env.runEngine.getRun("s1");
+    env.runEngine.resolveGate("s1", run.runId, "https://a.example");
+    await tick();
+    await tick();
+    env.extractTargetRules.resolve({ name: "Mejiro Dental Clinic", url: "https://a.example", rules: [] });
+    await tick();
+    await tick();
+
+    // The whole point of the "skipped" terminal status: a parseDocument that
+    // never started must not block the soft dep forever.
+    expect(env.planScenario.calls).toHaveLength(1);
+  });
+
+  it("planScenario's docSummary comes from the parseDocument result when it completed", async () => {
+    const env = setup();
+    env.runEngine.startRun("s1", "book an appointment at Mejiro Dental Clinic", {
+      doc: DOC,
+      docSummary: SEED_SUMMARY,
+    });
+    env.identifyTarget.resolve({ name: "Mejiro Dental Clinic", city: "Toshima", query: "目白 歯科" });
+    await tick();
+    await tick();
+    env.parseDocument.resolve(PARSED_SUMMARY);
+    await tick();
+    await tick();
+    env.geolocate.resolve({ locality: "Toshima", queryHint: "Mejiro Dental Clinic Toshima" });
+    await tick();
+    await tick();
+    env.research.resolve({ query: "x", results: CANDIDATES });
+    await tick();
+    await tick();
+
+    const run = env.runEngine.getRun("s1");
+    env.runEngine.resolveGate("s1", run.runId, "https://a.example");
+    await tick();
+    await tick();
+    env.extractTargetRules.resolve({ name: "Mejiro Dental Clinic", url: "https://a.example", rules: [] });
+    await tick();
+    await tick();
+
+    expect(env.planScenario.calls).toHaveLength(1);
+    expect(env.planScenario.calls[0]).toMatchObject({ docSummary: PARSED_SUMMARY });
+  });
+
+  it("planScenario falls back to the extra-seeded docSummary when parseDocument fails", async () => {
+    const env = setup();
+    env.runEngine.startRun("s1", "book an appointment at Mejiro Dental Clinic", {
+      doc: DOC,
+      docSummary: SEED_SUMMARY,
+    });
+    env.identifyTarget.resolve({ name: "Mejiro Dental Clinic", city: "Toshima", query: "目白 歯科" });
+    await tick();
+    await tick();
+    env.parseDocument.reject(new Error("Upload not found or expired — please try again."));
+    await tick();
+    await tick();
+    env.geolocate.resolve({ locality: "Toshima", queryHint: "Mejiro Dental Clinic Toshima" });
+    await tick();
+    await tick();
+    env.research.resolve({ query: "x", results: CANDIDATES });
+    await tick();
+    await tick();
+
+    const run = env.runEngine.getRun("s1");
+    env.runEngine.resolveGate("s1", run.runId, "https://a.example");
+    await tick();
+    await tick();
+    env.extractTargetRules.resolve({ name: "Mejiro Dental Clinic", url: "https://a.example", rules: [] });
+    await tick();
+    await tick();
+    await tick();
+
+    // A FAILED parseDocument is a terminal status the soft dep accepts, and
+    // the failure is real work — unlike "skipped", it shows in the feed.
+    const finalRun = env.runEngine.getRun("s1");
+    expect(finalRun.jobs.find((j: { step: string }) => j.step === "parseDocument")).toMatchObject({
+      status: "failed",
+    });
+    expect(env.planScenario.calls).toHaveLength(1);
+    expect(env.planScenario.calls[0]).toMatchObject({ docSummary: SEED_SUMMARY });
   });
 });

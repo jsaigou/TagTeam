@@ -33,8 +33,12 @@ function parseDeps(deps) {
   );
 }
 
-const TERMINAL_NOT_DONE = new Set(["failed", "canceled", "superseded"]);
-const TERMINAL_STATUSES = new Set(["done", "failed", "canceled", "superseded"]);
+// "skipped" is a graph-level terminal status (never a jobs.mjs job status):
+// an `enabled`-gated node whose input never materialized — e.g. a text-only
+// objective has no document, so `parseDocument` skips instead of running.
+// Soft deps accept it exactly like failed/canceled/superseded.
+const TERMINAL_NOT_DONE = new Set(["failed", "canceled", "superseded", "skipped"]);
+const TERMINAL_STATUSES = new Set(["done", "failed", "canceled", "superseded", "skipped"]);
 
 function depsSatisfied(run, deps) {
   return parseDeps(deps).every(({ id, soft }) => {
@@ -47,16 +51,27 @@ function depsSatisfied(run, deps) {
 
 /**
  * The confirmTarget sub-graph (Phase 7 plan §7b.3, slice "the confirmTarget
- * gate"). `planScenario`/`cheatSheet`/`parseDocument`/`classifyIntent` are
- * declared in the shared JobStep union (src/shared/contract.ts) but have no
- * graph node yet — later slices add them here, additively, same as the rest
- * of Phase 7b.
+ * gate"). `cheatSheet`/`classifyIntent` are declared in the shared JobStep
+ * union (src/shared/contract.ts) but have no graph node yet — later slices
+ * add them here, additively, same as the rest of Phase 7b.
  */
 export const GRAPH = {
   identifyTarget: {
     deps: [],
     step: "identifyTarget",
     input: (ctx) => ({ goal: ctx.goal }),
+  },
+  parseDocument: {
+    // Runs alongside identifyTarget from the moment a run starts — but only
+    // when startRun seeded a `doc` (uploadId(s) into the ephemeral upload
+    // store, or a text description). Most runs have none: `enabled` then
+    // marks the node "skipped" (a terminal status soft deps accept) instead
+    // of leaving it never-started, which would block planScenario's soft dep
+    // forever — depsSatisfied only knows about nodes that exist.
+    deps: [],
+    step: "parseDocument",
+    enabled: (ctx) => ctx.doc != null,
+    input: (ctx) => ({ doc: ctx.doc }),
   },
   geolocate: {
     deps: ["identifyTarget"],
@@ -95,11 +110,13 @@ export const GRAPH = {
     // practice script on an unconfirmed guess). Soft dep on
     // extractTargetRules: a failed/slow rule extraction must not block the
     // script forever — it just runs with the confirmed candidate's name/
-    // address and no cited rules.
-    deps: ["confirmTarget", "extractTargetRules?"],
+    // address and no cited rules. Soft dep on parseDocument: it may never
+    // run at all (a text-only objective skips it) or fail, and either way
+    // the script falls back to the client-seeded docSummary.
+    deps: ["confirmTarget", "extractTargetRules?", "parseDocument?"],
     step: "planScenario",
     input: (ctx) => ({
-      docSummary: ctx.docSummary,
+      docSummary: ctx.parseDocument ?? ctx.docSummary,
       answers: ctx.answers,
       settings: ctx.settings,
       preset: ctx.preset,
@@ -138,7 +155,11 @@ export function createRunEngine({ jobRunner, graph = GRAPH } = {}) {
     const jobs = Object.entries(run.nodes)
       // A gate node has no jobs.mjs job of its own (it's a pause, not a
       // step) — every entry in run.nodes represents a real started/opened/
-      // resolved node, so nothing here needs filtering.
+      // resolved node. The one exception is an `enabled`-gated node that was
+      // marked "skipped" without ever starting: it's internal bookkeeping
+      // for the soft-dep check, not work the status feed should show (and
+      // "skipped" is not a JobStatus the contract declares).
+      .filter(([, n]) => n.status !== "skipped")
       .map(([nodeId, n]) => ({
         id: n.job?.id ?? nodeId,
         step: graph[nodeId]?.step ?? nodeId,
@@ -218,8 +239,17 @@ export function createRunEngine({ jobRunner, graph = GRAPH } = {}) {
 
   function tryAdvance(run) {
     for (const [nodeId, def] of Object.entries(graph)) {
-      if (run.nodes[nodeId]) continue; // already started/opened
+      if (run.nodes[nodeId]) continue; // already started/opened/skipped
       if (!depsSatisfied(run, def.deps)) continue;
+      if (def.enabled && !def.enabled(run.ctx)) {
+        // Nothing for this node to ever do (its input never materialized,
+        // e.g. a run with no document). Mark it terminal-skipped so soft
+        // dependents see a settled status instead of waiting on a node that
+        // will never start. Never re-considered: run.nodes[nodeId] now
+        // exists, so the loop above passes over it.
+        run.nodes[nodeId] = { status: "skipped" };
+        continue;
+      }
       if (def.kind === "gate") {
         openGate(run, nodeId, def);
       } else {
@@ -257,9 +287,10 @@ export function createRunEngine({ jobRunner, graph = GRAPH } = {}) {
 
   // `extra` seeds ctx fields no graph node produces (docSummary/answers/
   // settings/preset — the setup-screen document/grounding state, which lives
-  // client-side until slice 5 wires the intent-message UI). Additive: every
-  // existing 2-arg call site (e.g. hub.mjs's `startRun(sessionId, objective)`)
-  // still works unchanged.
+  // client-side until slice 5 wires the intent-message UI — and `doc`, the
+  // parseDocument step's input: uploadId(s) already in the server's upload
+  // store, or a text description). Additive: every existing 2-arg call site
+  // (e.g. hub.mjs's `startRun(sessionId, objective)`) still works unchanged.
   function startRun(runKey, goal, extra = {}) {
     if (runs.has(runKey)) jobRunner.cancelRun(runKey);
     const run = {
