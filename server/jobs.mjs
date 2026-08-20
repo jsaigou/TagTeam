@@ -94,8 +94,20 @@ export function createJobRunner({ steps, lanes = {}, onChange, now = Date.now } 
     };
   }
 
+  const listeners = new Set();
+  if (onChange) listeners.add(onChange);
+
+  /** Subscribe to every job snapshot change (queued/running/progress/terminal),
+   *  across all runKeys. Returns an unsubscribe fn. Used by server/graph.mjs to
+   *  drive RunSnapshot updates without this module knowing about runs/graphs. */
+  function addListener(fn) {
+    listeners.add(fn);
+    return () => listeners.delete(fn);
+  }
+
   function notify(job) {
-    onChange?.(snapshot(job));
+    const snap = snapshot(job);
+    for (const fn of listeners) fn(snap);
   }
 
   function getRunMap(runKey) {
@@ -289,5 +301,5 @@ export function createJobRunner({ steps, lanes = {}, onChange, now = Date.now } 
     return run ? [...run.values()].map(snapshot) : [];
   }
 
-  return { enqueue, cancel, cancelRun, clearRun, sweep, getJobs, snapshot };
+  return { enqueue, cancel, cancelRun, clearRun, sweep, getJobs, snapshot, addListener };
 }

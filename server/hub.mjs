@@ -114,7 +114,20 @@ export function createUploadStore({
  */
 export function attachHub(
   server,
-  { db, schema, uploadStore, orchestrator, heartbeatMs = 30_000, roomEmptyGraceMs = 60_000 },
+  {
+    db,
+    schema,
+    uploadStore,
+    orchestrator,
+    // Phase 7b — background job runner (server/graph.mjs createRunEngine) and
+    // the free-text classifier (server/intent.mjs) that decides when a `run`
+    // starts or a gate resolves. Both optional: a hub with neither still
+    // serves every pre-7b message unchanged.
+    runEngine,
+    classifyIntent,
+    heartbeatMs = 30_000,
+    roomEmptyGraceMs = 60_000,
+  },
 ) {
   const store = uploadStore ?? createUploadStore();
   store.start();
@@ -124,8 +137,15 @@ export function attachHub(
   const rooms = new Map();
   /** sessionId -> latest AppSnapshot broadcast by the stage (for re-joins). */
   const snapshots = new Map();
+  /** sessionId -> latest RunSnapshot from runEngine (for re-joins). */
+  const latestRun = new Map();
   /** sessionId -> pending room-teardown timer (grace period for reconnects). */
   const roomCleanupTimers = new Map();
+
+  const unsubscribeRunEngine = runEngine?.addListener((sessionId, run) => {
+    latestRun.set(sessionId, run);
+    broadcast(sessionId, { type: "run", run });
+  });
 
   function cancelRoomCleanup(sessionId) {
     const timer = roomCleanupTimers.get(sessionId);
@@ -143,7 +163,9 @@ export function attachHub(
       if (room && room.size === 0) {
         rooms.delete(sessionId);
         snapshots.delete(sessionId);
+        latestRun.delete(sessionId);
         orchestrator?.clear(sessionId);
+        runEngine?.endSession(sessionId);
       }
     }, roomEmptyGraceMs);
     timer.unref?.();
@@ -238,6 +260,8 @@ export function attachHub(
       roles,
       snapshot: snapshots.get(sessionId) ?? null,
     });
+    const run = latestRun.get(sessionId);
+    if (run) send(ws, { type: "run", run });
     sendDeviceList(sessionId);
   }
 
@@ -288,7 +312,55 @@ export function attachHub(
       case "ping":
         send(ws, { type: "pong" });
         break;
+      // Phase 7b — free-text turn classified into a fixed action (never a
+      // free tool call) and background research with a user-confirmed gate.
+      case "intent":
+        if (typeof msg.text === "string" && msg.text.trim()) void handleIntent(sessionId, msg.text);
+        break;
+      case "confirm": {
+        if (typeof msg.runId !== "string") break;
+        const candidateId = typeof msg.candidateId === "string" ? msg.candidateId : null;
+        runEngine?.resolveGate(sessionId, msg.runId, candidateId);
+        break;
+      }
+      case "cancelRun":
+        if (typeof msg.runId === "string") runEngine?.cancelRun(sessionId, msg.runId);
+        break;
       default:
+        break;
+    }
+  }
+
+  /** Classify free text into a fixed action; the model classifies, it never
+   *  chooses what runs (Phase 7 plan §7b.4). No-ops if either dependency is
+   *  unwired (a hub not configured for Phase 7b). */
+  async function handleIntent(sessionId, text) {
+    if (!runEngine || !classifyIntent) return;
+    const current = latestRun.get(sessionId);
+    const gateOpen = Boolean(current?.gate);
+    let result;
+    try {
+      result = await classifyIntent(text, { gateOpen });
+    } catch (err) {
+      console.error("[hub] intent classification failed:", err?.message ?? err);
+      return;
+    }
+    switch (result.intent) {
+      case "state_objective":
+        runEngine.startRun(sessionId, result.objective || text);
+        break;
+      case "confirm":
+        if (current?.gate) {
+          const candidateId = current.gate.guessId ?? current.gate.candidates[0]?.id ?? null;
+          runEngine.resolveGate(sessionId, current.runId, candidateId);
+        }
+        break;
+      case "reject":
+        if (current?.gate) runEngine.resolveGate(sessionId, current.runId, null);
+        break;
+      default:
+        // provide_url / question / other: no job in this slice — the guide
+        // chat's normal LLM turn (client-side, unrelated to this hub) handles it.
         break;
     }
   }
@@ -395,7 +467,10 @@ export function attachHub(
   }, heartbeatMs);
   heartbeat.unref?.();
 
-  wss.on("close", () => clearInterval(heartbeat));
+  wss.on("close", () => {
+    clearInterval(heartbeat);
+    unsubscribeRunEngine?.();
+  });
 
   function getDeviceCount(sessionId) {
     return rooms.get(sessionId)?.size ?? 0;

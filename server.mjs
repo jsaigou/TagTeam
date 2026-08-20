@@ -12,8 +12,13 @@ import { config, llmChat, synthesizeSpeech, transcribeAudio } from "./server/pro
 import { createCallOrchestrator } from "./server/orchestrator.mjs";
 import { NEXT_TURN_SCHEMA_TEXT } from "./server/next-turn.mjs";
 import { createJobRunner } from "./server/jobs.mjs";
+import { createRunEngine } from "./server/graph.mjs";
+import { classifyIntent } from "./server/intent.mjs";
 import { step as researchStep } from "./server/steps/research.mjs";
 import { step as scrapeStep } from "./server/steps/scrape.mjs";
+import { step as identifyTargetStep } from "./server/steps/identifyTarget.mjs";
+import { step as geolocateStep } from "./server/steps/geolocate.mjs";
+import { step as extractTargetRulesStep } from "./server/steps/extractTargetRules.mjs";
 import {
   createScenario,
   deleteScenario,
@@ -389,12 +394,23 @@ if (DEMO_API_ENABLED) {
 // the "llm" lane (reserved for later migration slices — see the Phase 7 plan
 // §7b) caps at LLM_CONCURRENCY since the deployed model serializes anyway.
 const jobRunner = createJobRunner({
-  steps: { research: researchStep, scrape: scrapeStep },
+  steps: {
+    research: researchStep,
+    scrape: scrapeStep,
+    identifyTarget: identifyTargetStep,
+    geolocate: geolocateStep,
+    extractTargetRules: extractTargetRulesStep,
+  },
   lanes: {
     net: { concurrency: 3 },
     llm: { concurrency: Number(process.env.LLM_CONCURRENCY) || 1 },
   },
 });
+
+// Phase 7b §7b.3 — the confirmTarget gate. Sits on top of the same jobRunner
+// (shared lanes/concurrency with the flat /api/search usage above) and adds
+// dependency resolution + the user-confirm pause. See server/graph.mjs.
+const runEngine = createRunEngine({ jobRunner });
 
 // Reference search — used to research the office/agency the user will call.
 // Runs research (SearXNG) then scrapes the top results (Firecrawl) through
@@ -932,7 +948,18 @@ const nextTurnChat =
     : llmChat;
 
 const orchestrator = createCallOrchestrator({ transcribeAudio, llmChat: nextTurnChat });
-const hub = attachHub(server, { db, schema, orchestrator });
+const hub = attachHub(server, {
+  db,
+  schema,
+  orchestrator,
+  runEngine,
+  // Intent classification runs OUTSIDE the "llm" lane's own queueing (it's
+  // meant to be near-instant) — see the Phase 7 plan §7b.1's open note on
+  // reserving a lane slot vs. a smaller model. No LLM_INTENT_MODEL is wired
+  // yet, so this currently rides the same serialized model as everything
+  // else; that's an accepted latency trade-off for this slice, not a bug.
+  classifyIntent: (text, opts) => classifyIntent(text, { ...opts, llmChat }),
+});
 
 server.listen(PORT, () => {
   console.log(`\nTagTeam`);

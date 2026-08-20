@@ -15,6 +15,7 @@ import type {
   DeviceInfo,
   ImageDoc,
   PlayerState,
+  RunSnapshot,
   SessionSummary,
   Turn,
   WsServerMessage,
@@ -50,6 +51,10 @@ export type PendingUpload = {
 export type ControlListener = (message: Extract<WsServerMessage, { type: "control" }>) => void;
 export type TurnListener = (message: Extract<WsServerMessage, { type: "turn" }>) => void;
 export type PhaseListener = (message: Extract<WsServerMessage, { type: "phase" }>) => void;
+/** Phase 7b — one job's status/progress changed (see JobSnapshot). */
+export type JobListener = (message: Extract<WsServerMessage, { type: "job" }>) => void;
+/** Phase 7b — the full run snapshot changed (status feed + confirmTarget gate). */
+export type RunListener = (message: Extract<WsServerMessage, { type: "run" }>) => void;
 
 type SessionContextValue = {
   /** The created/reused app session (desktop). Null until ensured. */
@@ -66,6 +71,8 @@ type SessionContextValue = {
   isPhone: boolean;
   /** Latest snapshot received from the stage (companion view). */
   snapshot: AppSnapshot | null;
+  /** Phase 7b — latest server-authoritative run snapshot (status feed + gate). */
+  run: RunSnapshot | null;
   /** Pages companions pushed over the hub, waiting for the stage to add them. */
   pendingUploads: PendingUpload[];
   /** Pages this companion uploaded, still awaiting the stage's ack. */
@@ -79,6 +86,17 @@ type SessionContextValue = {
   onTurn: (listener: TurnListener) => () => void;
   /** Phase 3 — register a handler for `phase` broadcasts (thinking/idle). */
   onPhase: (listener: PhaseListener) => () => void;
+  /** Phase 7b — register a handler for individual `job` broadcasts. */
+  onJob: (listener: JobListener) => () => void;
+  /** Phase 7b — register a handler for `run` broadcasts (full status feed). */
+  onRun: (listener: RunListener) => () => void;
+  /** Phase 7b — state a free-text objective / answer a gate in plain language;
+   *  server/intent.mjs classifies it into a fixed action. */
+  sendIntent: (text: string) => void;
+  /** Phase 7b — resolve an open confirmTarget gate. `candidateId: null` = none match. */
+  sendConfirm: (runId: string, candidateId: string | null) => void;
+  /** Phase 7b — cancel a run in progress. */
+  cancelRun: (runId: string) => void;
   /** Stage: consume a companion-pushed page and tell the companion it's done. */
   ackPendingUpload: (uploadId: string) => void;
   /** Companion: upload a scanned page and announce it to the stage. */
@@ -123,6 +141,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [roles, setRoles] = useState<DeviceCapability[]>([]);
   const [deviceId, setDeviceId] = useState<string | null>(null);
   const [snapshot, setSnapshot] = useState<AppSnapshot | null>(null);
+  const [run, setRun] = useState<RunSnapshot | null>(null);
   const [pendingUploads, setPendingUploads] = useState<PendingUpload[]>([]);
   const [sentUploadIds, setSentUploadIds] = useState<string[]>([]);
 
@@ -133,6 +152,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const controlListenersRef = useRef<Set<ControlListener>>(new Set());
   const turnListenersRef = useRef<Set<TurnListener>>(new Set());
   const phaseListenersRef = useRef<Set<PhaseListener>>(new Set());
+  const jobListenersRef = useRef<Set<JobListener>>(new Set());
+  const runListenersRef = useRef<Set<RunListener>>(new Set());
   const playerStateRef = useRef<PlayerState | undefined>(undefined);
   const activeTurnRef = useRef<Turn | null>(null);
   const handleMessageRef = useRef<(msg: WsServerMessage) => void>(() => {});
@@ -236,6 +257,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           break;
         case "phase":
           for (const listener of phaseListenersRef.current) listener(msg);
+          break;
+        case "job":
+          for (const listener of jobListenersRef.current) listener(msg);
+          break;
+        case "run":
+          setRun(msg.run);
+          for (const listener of runListenersRef.current) listener(msg);
           break;
         case "upload":
           void handleIncomingUpload(msg.uploadId, msg.filename);
@@ -387,6 +415,28 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     return () => phaseListenersRef.current.delete(listener);
   }, []);
 
+  const onJob = useCallback((listener: JobListener) => {
+    jobListenersRef.current.add(listener);
+    return () => jobListenersRef.current.delete(listener);
+  }, []);
+
+  const onRun = useCallback((listener: RunListener) => {
+    runListenersRef.current.add(listener);
+    return () => runListenersRef.current.delete(listener);
+  }, []);
+
+  const sendIntent = useCallback((text: string) => {
+    hubRef.current?.send({ type: "intent", text });
+  }, []);
+
+  const sendConfirm = useCallback((runId: string, candidateId: string | null) => {
+    hubRef.current?.send({ type: "confirm", runId, candidateId });
+  }, []);
+
+  const cancelRun = useCallback((runId: string) => {
+    hubRef.current?.send({ type: "cancelRun", runId });
+  }, []);
+
   const sendPushToTalk = useCallback(async (audio: { audioBase64: string; mimeType?: string }) => {
     const { uploadId } = await uploadAudio(audio);
     hubRef.current?.send({
@@ -437,6 +487,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       isStage: roles.includes("stage"),
       isPhone,
       snapshot,
+      run,
       pendingUploads,
       sentUploadIds,
       setPlayerState,
@@ -444,6 +495,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       onControl,
       onTurn,
       onPhase,
+      onJob,
+      onRun,
+      sendIntent,
+      sendConfirm,
+      cancelRun,
       ackPendingUpload,
       uploadFromCompanion,
       sendControl,
@@ -459,6 +515,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       deviceId,
       isPhone,
       snapshot,
+      run,
       pendingUploads,
       sentUploadIds,
       setPlayerState,
@@ -466,6 +523,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       onControl,
       onTurn,
       onPhase,
+      onJob,
+      onRun,
+      sendIntent,
+      sendConfirm,
+      cancelRun,
       ackPendingUpload,
       uploadFromCompanion,
       sendControl,

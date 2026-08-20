@@ -227,6 +227,9 @@ export type AppSnapshot = {
   /** Phase 5e — glossary entries for `activeTurn`, so companion devices can
    *  render vocab chips + tap-help without holding the full glossary. */
   activeVocab?: GlossaryEntry[];
+  /** Phase 7b — background job runner status, derived server-side from job
+   *  state; additive, so legacy clients ignoring it still see `callPhase`. */
+  run?: RunSnapshot;
 };
 
 /** Control surface actions a companion device can trigger on the stage. */
@@ -237,6 +240,83 @@ export type ControlAction = "hold" | "resume" | "tapHelp";
  * stage's avatar) can mirror "listening" / "thinking". `idle` = not processing.
  */
 export type CallPhase = "idle" | "thinking";
+
+/* -- Phase 7b: background job runner (foreground/background split) -------- */
+
+/**
+ * A node in the server-side step graph (server/graph.mjs). The graph — not
+ * the LLM — decides what runs next; classifyIntent (server/intent.mjs) only
+ * ever returns one schema-validated JSON object, never a free tool call.
+ */
+export type JobStep =
+  | "classifyIntent"
+  | "parseDocument"
+  | "identifyTarget"
+  | "geolocate"
+  | "research"
+  | "scrape"
+  | "extractTargetRules"
+  | "confirmTarget"
+  | "planScenario"
+  | "cheatSheet";
+
+export type JobStatus =
+  | "queued"
+  | "running"
+  | "needs_input"
+  | "done"
+  | "failed"
+  | "canceled"
+  | "superseded";
+
+/** Machine step + human-readable progress, streamed for the status feed. */
+export type JobSnapshot = {
+  id: string;
+  step: JobStep;
+  status: JobStatus;
+  label: string;
+  detail?: string;
+  progress?: number;
+  elapsedMs?: number;
+  error?: { message: string; code?: string };
+};
+
+/** One candidate target office/agency surfaced by research, for the user to
+ *  confirm or reject before anything downstream treats it as fact. */
+export type TargetCandidate = {
+  id: string;
+  name: string;
+  url?: string;
+  address?: string;
+  snippet?: string;
+};
+
+/**
+ * `confirmTarget` pauses here — a resumable pause, not a re-run — until the
+ * client sends `confirm`. `guessId` is the top candidate a speculative
+ * subtree may already be working on (quarantined; never used as fact until
+ * confirmed) — see the Phase 7 plan §7b.3.
+ */
+export type JobGate = {
+  nodeId: "confirmTarget";
+  candidates: TargetCandidate[];
+  guessId?: string;
+};
+
+/** The confirmed target office, once `extractTargetRules` completes. */
+export type TargetProfile = {
+  name: string;
+  url?: string;
+  address?: string;
+  rules: TargetRule[];
+};
+
+export type RunSnapshot = {
+  runId: string;
+  goal: string;
+  jobs: JobSnapshot[];
+  gate?: JobGate;
+};
 
 /** Client → server WebSocket messages (mirrors docs/architecture.md §9). */
 export type WsClientMessage =
@@ -261,7 +341,20 @@ export type WsClientMessage =
       audioId: string;
       mimeType?: string;
     }
-  | { type: "ping" };
+  | { type: "ping" }
+  | {
+      /** Phase 7b — free-text turn, classified server-side (server/intent.mjs)
+       *  into a fixed action; the model classifies, it never chooses. */
+      type: "intent";
+      text: string;
+    }
+  | {
+      /** Resolve an open gate. `candidateId: null` = none of these match. */
+      type: "confirm";
+      runId: string;
+      candidateId: string | null;
+    }
+  | { type: "cancelRun"; runId: string };
 
 /** Server → client WebSocket messages. */
 export type WsServerMessage =
@@ -288,7 +381,12 @@ export type WsServerMessage =
       end?: boolean;
     }
   | { type: "phase"; phase: CallPhase }
-  | { type: "error"; code: string; message: string };
+  | { type: "error"; code: string; message: string }
+  /** Phase 7b — one job's status/progress changed (see JobSnapshot). */
+  | { type: "job"; runId: string; job: JobSnapshot }
+  /** Phase 7b — the full run snapshot, sent on every meaningful change and
+   *  replayed to a device that joins mid-run. */
+  | { type: "run"; run: RunSnapshot };
 
 /** REST shape for a created/looked-up app session (QR-able). */
 export type SessionSummary = {
