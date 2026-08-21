@@ -15,6 +15,7 @@ import type {
   DeviceInfo,
   ImageDoc,
   PlayerState,
+  RunContext,
   RunSnapshot,
   SessionSummary,
   Turn,
@@ -91,8 +92,9 @@ type SessionContextValue = {
   /** Phase 7b — register a handler for `run` broadcasts (full status feed). */
   onRun: (listener: RunListener) => () => void;
   /** Phase 7b — state a free-text objective / answer a gate in plain language;
-   *  server/intent.mjs classifies it into a fixed action. */
-  sendIntent: (text: string) => void;
+   *  server/intent.mjs classifies it into a fixed action. `context` seeds the
+   *  run's ctx when the text states an objective (setup-screen state). */
+  sendIntent: (text: string, context?: RunContext) => void;
   /** Phase 7b — resolve an open confirmTarget gate. `candidateId: null` = none match. */
   sendConfirm: (runId: string, candidateId: string | null) => void;
   /** Phase 7b — cancel a run in progress. */
@@ -425,8 +427,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     return () => runListenersRef.current.delete(listener);
   }, []);
 
-  const sendIntent = useCallback((text: string) => {
-    hubRef.current?.send({ type: "intent", text });
+  const sendIntent = useCallback((text: string, context?: RunContext) => {
+    hubRef.current?.send({ type: "intent", text, ...(context ? { context } : {}) });
   }, []);
 
   const sendConfirm = useCallback((runId: string, candidateId: string | null) => {

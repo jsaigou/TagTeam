@@ -1,15 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, Loader2, Mic, Send, Sparkles } from "lucide-react";
-import type { DocInput, GroundingAnswer, RoleId } from "@/shared/contract";
+import type { DocInput, GroundingAnswer, RoleId, RunContext } from "@/shared/contract";
 import type { ChatMessage } from "@/lib/llm";
 import { useAppStore, type SetupStep } from "@/state/app-store";
 import { useAvatar, type GuideLine } from "@/state/avatar-context";
+import { useSession } from "@/state/session-context";
 import { useCatalog } from "@/hooks/use-catalog";
 import { useGuideChat, type GuideChatState } from "@/hooks/use-guide-chat";
 import { resolveDefaults } from "@/lib/presets";
 import { DEFAULT_VOICE_ID } from "@/lib/presets";
 import { CALL_ROLES } from "@/lib/coaching";
 import { getScenario } from "@/lib/scenario-api";
+import { uploadPage } from "@/lib/session-api";
 import { pipeline } from "@/state/pipeline";
 import { DocUpload } from "./DocUpload";
 import { Grounding } from "./Grounding";
@@ -17,6 +19,7 @@ import { ScenarioPicker } from "./ScenarioPicker";
 import { ReferenceSearch } from "./ReferenceSearch";
 import { PastCalls } from "./PastCalls";
 import { ChatBox, type ChatEntry } from "./ChatBox";
+import { RunStatus } from "./RunStatus";
 import { PerxonaBadge } from "@/components/brand/PerxonaBadge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -190,6 +193,7 @@ export function SetupScreen() {
     state,
     setSetupStep,
     setSetupOpen,
+    setDoc,
     parsed,
     saveAnswers,
     chooseScenario,
@@ -204,6 +208,10 @@ export function SetupScreen() {
   const { setupOpen } = state;
   const catalog = useCatalog();
   const { session, unlockAudio, showGuide, speakGuide, startEager, stopEager } = useAvatar();
+  /* Phase 7b slice 6 — the server-authoritative run: this screen's chat rides
+     `sendIntent` (classify → maybe start a run), RunStatus renders the feed
+     and gate, and the delivered scenario drops into the store below. */
+  const { run, sendIntent } = useSession();
 
   /* Persistent chat transcript — the comic bubble is transient, this never
      loses a line. Every guide line (spoken or not) and every user turn lands here. */
@@ -254,12 +262,58 @@ export function SetupScreen() {
     avatarSpeaking: session.isSpeaking,
     voiceTalkEnabled: setupOpen,
   });
+  /* Run context seeding — the fields no graph node produces (see RunContext).
+     Document pages are uploaded to the server's ephemeral store lazily on
+     first objective and cached per DocInput identity, so restating the
+     objective doesn't re-upload (and the parseDocument job dedups on the
+     same uploadIds). */
+  const uploadedDocRef = useRef<{ doc: DocInput; uploadIds: string[] } | null>(null);
+  const buildRunContext = useCallback(async (): Promise<RunContext> => {
+    const context: RunContext = {};
+    if (state.answers.length > 0) context.answers = state.answers;
+    context.settings = state.settings;
+    if (state.docSummary) context.docSummary = { ...state.docSummary };
+    const doc = state.doc;
+    if (!doc) return context;
+    if (doc.kind === "text") {
+      context.doc = { kind: "text", text: doc.text };
+      return context;
+    }
+    const pages = doc.kind === "images" ? doc.images : [doc];
+    let uploadIds = uploadedDocRef.current?.doc === doc ? uploadedDocRef.current.uploadIds : null;
+    if (!uploadIds) {
+      uploadIds = [];
+      for (const [i, page] of pages.entries()) {
+        const { uploadId } = await uploadPage({
+          filename: `doc-page-${i + 1}.jpg`,
+          mimeType: page.mimeType,
+          dataUrl: page.dataUrl,
+        });
+        uploadIds.push(uploadId);
+      }
+      uploadedDocRef.current = { doc, uploadIds };
+    }
+    context.doc =
+      uploadIds.length === 1
+        ? { kind: "image", uploadId: uploadIds[0], mimeType: pages[0].mimeType }
+        : { kind: "images", uploadIds };
+    return context;
+  }, [state.answers, state.settings, state.docSummary, state.doc]);
+
   const sendChat = useCallback(
     (text: string) => {
       appendChat({ role: "user", text });
+      /* Server side: classify the turn; a stated objective starts a run
+         seeded with the setup-screen context. Upload failures must not eat
+         the message — fall back to an unseeded intent. */
+      void buildRunContext()
+        .then((context) => sendIntent(text, context))
+        .catch(() => sendIntent(text));
+      /* Client side: Luna's guide chat still answers questions and chatter —
+         the hub only acts on the intents it owns (objective/confirm/reject). */
       guideChat.sendText(text);
     },
-    [appendChat, guideChat],
+    [appendChat, buildRunContext, sendIntent, guideChat],
   );
   const [analyzing, setAnalyzing] = useState(false);
   const launchedRef = useRef(false);
@@ -317,6 +371,10 @@ export function SetupScreen() {
 
   const analyzeDoc = useCallback(
     async (doc: DocInput) => {
+      /* Keep the DocInput in the store — the run context builder uploads its
+         pages to the server's ephemeral store when the user states their
+         objective (the parseDocument step's input). */
+      setDoc(doc);
       setAnalyzing(true);
       setBusy(true);
       try {
@@ -330,7 +388,7 @@ export function SetupScreen() {
         setBusy(false);
       }
     },
-    [parsed, setBusy, setError, setSetupStep],
+    [setDoc, parsed, setBusy, setError, setSetupStep],
   );
 
   const handleAnswers = useCallback(
@@ -448,6 +506,47 @@ export function SetupScreen() {
     [state.setupStep],
   );
 
+  /* Phase 7b slice 6 — the run delivered a scenario: drop script + glossary
+     into the store, launch the practice avatar, and move to the call. The
+     selection is the user's pick when they made one, else the configured
+     role's curated pack (the intent path skips the ScenarioPicker).
+     Once-per-runId: the snapshot re-broadcasts on every job change. */
+  const appliedRunRef = useRef<string | null>(null);
+  useEffect(() => {
+    const result = run?.result;
+    if (!run || !result || appliedRunRef.current === run.runId) return;
+    appliedRunRef.current = run.runId;
+    const selection = state.scenario ?? packToSelection(state.settings.role);
+    if (!selection) {
+      setError("That call is missing its avatar setup.");
+      return;
+    }
+    chooseScenario(selection);
+    setSim(result.script, result.glossary);
+    setBusy(true);
+    session.setThinking(true);
+    void session
+      .launch(selection)
+      .then(() => toCall())
+      .catch((err: unknown) =>
+        setError(err instanceof Error ? err.message : "Failed to launch the presenter."),
+      )
+      .finally(() => {
+        session.setThinking(false);
+        setBusy(false);
+      });
+  }, [
+    run,
+    state.scenario,
+    state.settings.role,
+    chooseScenario,
+    setSim,
+    setBusy,
+    setError,
+    session,
+    toCall,
+  ]);
+
   /* Invite state — Luna's card owns the left lane (AvatarStage); this column
      fills the remaining width, stacked under the card below md. */
   if (!setupOpen) {
@@ -473,6 +572,7 @@ export function SetupScreen() {
             onStop={() => void guideChat.stop()}
             onSend={sendChat}
           />
+          <RunStatus />
           {guideChat.error && (
             <p className="max-w-xs text-center text-xs text-destructive">{guideChat.error}</p>
           )}
@@ -507,6 +607,10 @@ export function SetupScreen() {
           onStop={() => void guideChat.stop()}
           onSend={sendChat}
         />
+
+        <div className="mt-3">
+          <RunStatus />
+        </div>
 
         <div className="mt-4 flex items-center gap-1.5">
           {STEPS.map((step, i) => {

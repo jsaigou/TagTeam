@@ -62,29 +62,50 @@ afterEach(async () => {
  *  step set — resolves synchronously to advance straight to the gate, so
  *  these tests exercise hub wiring, not real LLM/network latency. */
 function fakeSteps() {
+  const planScenarioInputs: unknown[] = [];
   return {
-    identifyTarget: {
-      lane: "llm",
-      run: async ({ goal }: { goal: string }) => ({ name: "Mejiro Dental Clinic", query: goal }),
-    },
-    geolocate: { run: async () => ({ locality: null, queryHint: null }) },
-    research: {
-      lane: "net",
-      run: async () => ({
-        query: "x",
-        results: [
-          { title: "Mejiro Dental Clinic", url: "https://a.example", snippet: "A" },
-          { title: "Another Clinic", url: "https://b.example", snippet: "B" },
-        ],
-      }),
-    },
-    extractTargetRules: {
-      lane: "llm",
-      run: async ({ candidate }: { candidate: { name: string; url: string } }) => ({
-        name: candidate.name,
-        url: candidate.url,
-        rules: [],
-      }),
+    planScenarioInputs,
+    steps: {
+      identifyTarget: {
+        lane: "llm",
+        run: async ({ goal }: { goal: string }) => ({ name: "Mejiro Dental Clinic", query: goal }),
+      },
+      parseDocument: {
+        lane: "llm",
+        run: async () => ({
+          documentType: "letter",
+          issuingAgency: "Ward office",
+          purpose: "appointment",
+          keyFields: [],
+          questions: [],
+        }),
+      },
+      geolocate: { run: async () => ({ locality: null, queryHint: null }) },
+      research: {
+        lane: "net",
+        run: async () => ({
+          query: "x",
+          results: [
+            { title: "Mejiro Dental Clinic", url: "https://a.example", snippet: "A" },
+            { title: "Another Clinic", url: "https://b.example", snippet: "B" },
+          ],
+        }),
+      },
+      extractTargetRules: {
+        lane: "llm",
+        run: async ({ candidate }: { candidate: { name: string; url: string } }) => ({
+          name: candidate.name,
+          url: candidate.url,
+          rules: [],
+        }),
+      },
+      planScenario: {
+        lane: "llm",
+        run: async (input: unknown) => {
+          planScenarioInputs.push(input);
+          return { script: { scenarioTitle: "Fake scenario", turns: [] }, glossary: [] };
+        },
+      },
     },
   };
 }
@@ -94,7 +115,8 @@ async function startHub(rows: object[] = []) {
   for (const row of rows) {
     await db.insert(schema.appSession).values(row as never).run();
   }
-  const jobRunner = createJobRunner({ steps: fakeSteps() });
+  const { steps, planScenarioInputs } = fakeSteps();
+  const jobRunner = createJobRunner({ steps });
   const runEngine = createRunEngine({ jobRunner });
   const classifyIntent = vi.fn(async (text: string, opts: { gateOpen?: boolean }) => {
     if (opts.gateOpen && /^yes/i.test(text)) return { intent: "confirm" };
@@ -107,7 +129,7 @@ async function startHub(rows: object[] = []) {
   await new Promise<void>((resolve) => server.listen(0, () => resolve()));
   servers.push(server);
   const { port } = server.address() as AddressInfo;
-  return { hub, runEngine, classifyIntent, url: `ws://127.0.0.1:${port}/api/ws` };
+  return { hub, runEngine, classifyIntent, planScenarioInputs, url: `ws://127.0.0.1:${port}/api/ws` };
 }
 
 type TestClient = { ws: WebSocket; received: unknown[]; opened: Promise<void> };
@@ -241,5 +263,49 @@ describe("hub + run engine", () => {
     // cancelRun() is synchronous in graph.mjs — give the message a tick.
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(runEngine.getRun("session-1")).toBeNull();
+  });
+
+  it("`intent` with a context seeds the run and delivers the scenario result", async () => {
+    const { url, planScenarioInputs } = await startHub([activeSessionRow()]);
+    const stage = connect(url, joinStage);
+    await stage.opened;
+    await waitFor(stage, (m) => m?.type === "joined");
+
+    stage.ws.send(
+      JSON.stringify({
+        type: "intent",
+        text: "book an appointment at Mejiro Dental Clinic",
+        context: {
+          doc: { kind: "text", text: "I got a letter about a dental checkup" },
+          answers: [{ questionId: "q1", answer: "next week" }],
+          settings: { role: "reception", difficulty: "beginner", pace: "normal" },
+        },
+      }),
+    );
+
+    // The seeded doc enabled the parseDocument node alongside identifyTarget.
+    const run = await waitFor(stage, (m) => m?.type === "run" && Boolean((m.run as { gate?: unknown })?.gate));
+    const jobsAtGate = (run.run as { jobs: Array<{ step: string }> }).jobs;
+    expect(jobsAtGate.some((j) => j.step === "parseDocument")).toBe(true);
+
+    const { runId, gate } = run.run as { runId: string; gate: { guessId: string } };
+    stage.ws.send(JSON.stringify({ type: "confirm", runId, candidateId: gate.guessId }));
+
+    const done = await waitFor(stage, (m) => m?.type === "run" && Boolean((m.run as { result?: unknown })?.result));
+    const result = (done.run as {
+      result: { step: string; script: { scenarioTitle: string }; target?: { name: string; rules: unknown[] } };
+    }).result;
+    expect(result.step).toBe("planScenario");
+    expect(result.script.scenarioTitle).toBe("Fake scenario");
+    expect(result.target?.name).toBe("Mejiro Dental Clinic");
+
+    // The seeded context reached planScenario's input — parseDocument's output
+    // as docSummary (it completed), plus the client's answers/settings.
+    expect(planScenarioInputs).toHaveLength(1);
+    expect(planScenarioInputs[0]).toMatchObject({
+      docSummary: { documentType: "letter" },
+      answers: [{ questionId: "q1", answer: "next week" }],
+      settings: { role: "reception", difficulty: "beginner", pace: "normal" },
+    });
   });
 });

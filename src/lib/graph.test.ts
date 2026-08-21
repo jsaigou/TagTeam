@@ -120,6 +120,10 @@ describe("GRAPH shape", () => {
       doc: { kind: "text", text: "x" },
     });
   });
+
+  it("declares planScenario as the graph's deliverable", () => {
+    expect(typeof GRAPH.planScenario.deliver).toBe("function");
+  });
 });
 
 describe("createRunEngine", () => {
@@ -235,6 +239,27 @@ describe("createRunEngine", () => {
       (j: { status: string; step: string }) => j.step === "identifyTarget" && j.status === "superseded",
     );
     expect(firstJobCanceled || env.identifyTarget.calls.length === 2).toBe(true);
+  });
+
+  it("cancelRun emits a final snapshot with in-flight nodes canceled (UI never sits on a stale feed)", async () => {
+    const env = setup();
+    env.runEngine.startRun("s1", "book an appointment at Mejiro Dental Clinic");
+    await tick();
+    const run = env.runEngine.getRun("s1");
+    expect(run.jobs.find((j: { step: string }) => j.step === "identifyTarget")).toBeDefined();
+
+    const before = env.snapshots.length;
+    env.runEngine.cancelRun("s1", run.runId);
+
+    // The LAST broadcast marks the live nodes canceled — the jobs' own late
+    // terminal snapshots are discarded (the run is already dropped), so this
+    // notification is the UI's only signal.
+    const last = env.snapshots[env.snapshots.length - 1] as { jobs: Array<{ status: string }> };
+    expect(env.snapshots.length).toBeGreaterThan(before);
+    expect(last.jobs.every((j) => ["canceled", "done", "failed", "superseded", "skipped"].includes(j.status))).toBe(
+      true,
+    );
+    expect(env.runEngine.getRun("s1")).toBeNull();
   });
 });
 
@@ -445,5 +470,82 @@ describe("parseDocument (Phase 7 plan §7b.5 migration step 5)", () => {
     });
     expect(env.planScenario.calls).toHaveLength(1);
     expect(env.planScenario.calls[0]).toMatchObject({ docSummary: SEED_SUMMARY });
+  });
+});
+
+describe("deliver (planScenario's result rides the RunSnapshot)", () => {
+  const SCRIPT = { scenarioTitle: "Dental appointment", turns: [] };
+  const GLOSSARY = [{ id: "g1", word: "予約", definition: "appointment" }];
+  const RULES = [{ id: "r1", rule: "Open weekdays 9-17", kind: "hours", source: "https://a.example" }];
+
+  async function confirmAndExtract(env: ReturnType<typeof setup>, { failExtract = false } = {}) {
+    const run = env.runEngine.getRun("s1");
+    env.runEngine.resolveGate("s1", run.runId, "https://a.example");
+    await tick();
+    await tick();
+    if (failExtract) env.extractTargetRules.reject(new Error("scrape failed"));
+    else
+      env.extractTargetRules.resolve({
+        name: "Mejiro Dental Clinic",
+        url: "https://a.example",
+        rules: RULES,
+      });
+    await tick();
+    await tick();
+    await tick();
+  }
+
+  it("no result while the run is in flight; delivered once planScenario completes", async () => {
+    const env = setup();
+    await driveToGate(env);
+    expect(env.runEngine.getRun("s1").result).toBeUndefined();
+
+    await confirmAndExtract(env);
+    expect(env.runEngine.getRun("s1").result).toBeUndefined();
+
+    env.planScenario.resolve({ script: SCRIPT, glossary: GLOSSARY });
+    await tick();
+    await tick();
+
+    const finalRun = env.runEngine.getRun("s1");
+    expect(finalRun.result).toMatchObject({ step: "planScenario", script: SCRIPT, glossary: GLOSSARY });
+    // The confirmed target it was built from rides along (rules intact).
+    expect(finalRun.result.target).toMatchObject({ name: "Mejiro Dental Clinic", rules: RULES });
+
+    // …and the delivered result is on the broadcast snapshots too, from the
+    // moment of completion on.
+    const last = env.snapshots[env.snapshots.length - 1] as { result?: unknown };
+    expect(last.result).toMatchObject({ step: "planScenario" });
+  });
+
+  it("falls back to the confirmed candidate (empty rules) when extractTargetRules failed", async () => {
+    const env = setup();
+    await driveToGate(env);
+    await confirmAndExtract(env, { failExtract: true });
+
+    env.planScenario.resolve({ script: SCRIPT, glossary: GLOSSARY });
+    await tick();
+    await tick();
+
+    const finalRun = env.runEngine.getRun("s1");
+    expect(finalRun.result.target).toMatchObject({
+      name: "Mejiro Dental Clinic",
+      url: "https://a.example",
+      rules: [],
+    });
+  });
+
+  it("restating the objective (a fresh run) clears a previously delivered result", async () => {
+    const env = setup();
+    await driveToGate(env);
+    await confirmAndExtract(env);
+    env.planScenario.resolve({ script: SCRIPT, glossary: GLOSSARY });
+    await tick();
+    await tick();
+    expect(env.runEngine.getRun("s1").result).toBeDefined();
+
+    env.runEngine.startRun("s1", "actually, book it at the city office instead");
+    await tick();
+    expect(env.runEngine.getRun("s1").result).toBeUndefined();
   });
 });

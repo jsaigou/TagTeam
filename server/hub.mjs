@@ -315,7 +315,8 @@ export function attachHub(
       // Phase 7b — free-text turn classified into a fixed action (never a
       // free tool call) and background research with a user-confirmed gate.
       case "intent":
-        if (typeof msg.text === "string" && msg.text.trim()) void handleIntent(sessionId, msg.text);
+        if (typeof msg.text === "string" && msg.text.trim())
+          void handleIntent(sessionId, msg.text, msg.context);
         break;
       case "confirm": {
         if (typeof msg.runId !== "string") break;
@@ -333,8 +334,10 @@ export function attachHub(
 
   /** Classify free text into a fixed action; the model classifies, it never
    *  chooses what runs (Phase 7 plan §7b.4). No-ops if either dependency is
-   *  unwired (a hub not configured for Phase 7b). */
-  async function handleIntent(sessionId, text) {
+   *  unwired (a hub not configured for Phase 7b). `context` (the setup
+   *  screen's document/answers/settings — see RunContext in the contract)
+   *  seeds the run's ctx when the text states an objective. */
+  async function handleIntent(sessionId, text, context) {
     if (!runEngine || !classifyIntent) return;
     const current = latestRun.get(sessionId);
     const gateOpen = Boolean(current?.gate);
@@ -346,9 +349,12 @@ export function attachHub(
       return;
     }
     switch (result.intent) {
-      case "state_objective":
-        runEngine.startRun(sessionId, result.objective || text);
+      case "state_objective": {
+        const extra =
+          context && typeof context === "object" && !Array.isArray(context) ? context : undefined;
+        runEngine.startRun(sessionId, result.objective || text, extra);
         break;
+      }
       case "confirm":
         if (current?.gate) {
           const candidateId = current.gate.guessId ?? current.gate.candidates[0]?.id ?? null;

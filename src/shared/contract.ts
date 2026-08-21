@@ -311,11 +311,44 @@ export type TargetProfile = {
   rules: TargetRule[];
 };
 
+/** The `parseDocument` step's input, carried by a run's context — uploadId(s)
+ *  already in the server's ephemeral upload store, or a text description.
+ *  The image bytes themselves never enter the graph context. */
+export type RunDoc =
+  | { kind: "text"; text: string }
+  | { kind: "image"; uploadId: string; mimeType?: string }
+  | { kind: "images"; uploadIds: string[] };
+
+/** Setup-screen state seeded into a run's ctx — the fields no graph node
+ *  produces (see `startRun`'s `extra` in server/graph.mjs). Rides the
+ *  `intent` message when the user states their objective. */
+export type RunContext = {
+  doc?: RunDoc;
+  answers?: GroundingAnswer[];
+  settings?: CallSettings;
+  /** Voice preset key for the practice partner (server/prompts/bureaucrat.mjs). */
+  preset?: string;
+  /** Client-side DocSummary (src/lib/doc-parser.ts) fallback for when
+   *  parseDocument doesn't run or fails. Duck-typed server-side. */
+  docSummary?: Record<string, unknown>;
+};
+
+/** The run's deliverable once its deliver step completes — currently
+ *  planScenario's script + glossary plus the confirmed target. */
+export type RunResult = {
+  step: JobStep;
+  script: SimScript;
+  glossary: GlossaryEntry[];
+  target?: TargetProfile | null;
+};
+
 export type RunSnapshot = {
   runId: string;
   goal: string;
   jobs: JobSnapshot[];
   gate?: JobGate;
+  /** Present once the run's deliver step (planScenario) completes. */
+  result?: RunResult;
 };
 
 /** Client → server WebSocket messages (mirrors docs/architecture.md §9). */
@@ -344,9 +377,12 @@ export type WsClientMessage =
   | { type: "ping" }
   | {
       /** Phase 7b — free-text turn, classified server-side (server/intent.mjs)
-       *  into a fixed action; the model classifies, it never chooses. */
+       *  into a fixed action; the model classifies, it never chooses.
+       *  `context` seeds the run's ctx when the text states an objective
+       *  (setup-screen document/answers/settings — see RunContext). */
       type: "intent";
       text: string;
+      context?: RunContext;
     }
   | {
       /** Resolve an open gate. `candidateId: null` = none of these match. */

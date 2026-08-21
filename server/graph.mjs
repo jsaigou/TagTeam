@@ -122,6 +122,17 @@ export const GRAPH = {
       preset: ctx.preset,
       target: ctx.extractTargetRules ?? (ctx.confirmTarget && { ...ctx.confirmTarget, rules: [] }),
     }),
+    // The graph's deliverable: once this node completes, its result (plus the
+    // confirmed target it was built from) rides every RunSnapshot as
+    // `result`, so the setup screen can apply script + glossary and jump to
+    // the call. The selector runs against the run's ctx — the engine stays
+    // generic; WHAT gets delivered is graph data, same as deps/inputs.
+    deliver: (ctx) => ({
+      step: "planScenario",
+      ...(ctx.planScenario ?? {}),
+      target:
+        ctx.extractTargetRules ?? (ctx.confirmTarget ? { ...ctx.confirmTarget, rules: [] } : null),
+    }),
   },
 };
 
@@ -177,6 +188,7 @@ export function createRunEngine({ jobRunner, graph = GRAPH } = {}) {
       gate: run.gate
         ? { nodeId: run.gate.nodeId, candidates: run.gate.candidates, guessId: run.gate.guessId }
         : undefined,
+      result: run.result,
     };
   }
 
@@ -204,6 +216,9 @@ export function createRunEngine({ jobRunner, graph = GRAPH } = {}) {
         if (run.nodes[nodeId]?.job !== job) return;
         run.ctx[nodeId] = result;
         run.nodes[nodeId].status = "done";
+        if (typeof graph[nodeId]?.deliver === "function") {
+          run.result = graph[nodeId].deliver(run.ctx);
+        }
         notifyRun(run);
         tryAdvance(run);
       })
@@ -286,11 +301,12 @@ export function createRunEngine({ jobRunner, graph = GRAPH } = {}) {
   });
 
   // `extra` seeds ctx fields no graph node produces (docSummary/answers/
-  // settings/preset — the setup-screen document/grounding state, which lives
-  // client-side until slice 5 wires the intent-message UI — and `doc`, the
-  // parseDocument step's input: uploadId(s) already in the server's upload
-  // store, or a text description). Additive: every existing 2-arg call site
-  // (e.g. hub.mjs's `startRun(sessionId, objective)`) still works unchanged.
+  // settings/preset — the setup-screen document/grounding state, which the
+  // intent-message UI rides on the `intent` message's `context` field — and
+  // `doc`, the parseDocument step's input: uploadId(s) already in the
+  // server's upload store, or a text description). Additive: every existing
+  // 2-arg call site (e.g. hub.mjs's `startRun(sessionId, objective)`) still
+  // works unchanged.
   function startRun(runKey, goal, extra = {}) {
     if (runs.has(runKey)) jobRunner.cancelRun(runKey);
     const run = {
@@ -300,6 +316,7 @@ export function createRunEngine({ jobRunner, graph = GRAPH } = {}) {
       ctx: { goal, ...extra },
       nodes: {},
       gate: undefined,
+      result: undefined,
     };
     runs.set(runKey, run);
     notifyRun(run);
@@ -350,6 +367,15 @@ export function createRunEngine({ jobRunner, graph = GRAPH } = {}) {
     const run = runs.get(runKey);
     if (!run || run.runId !== runId) return false;
     jobRunner.cancelRun(runKey);
+    // Emit ONE final snapshot with the in-flight nodes marked canceled before
+    // dropping the run — the jobs' own terminal snapshots arrive AFTER
+    // runs.delete() and are discarded (no run to route them to), so without
+    // this a subscribed UI would sit on a stale "running" feed forever.
+    for (const node of Object.values(run.nodes)) {
+      if (!TERMINAL_STATUSES.has(node.status ?? "queued")) node.status = "canceled";
+    }
+    run.gate = undefined;
+    notifyRun(run);
     runs.delete(runKey);
     return true;
   }
