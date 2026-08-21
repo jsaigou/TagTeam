@@ -82,7 +82,8 @@ touch no real-app code. `pnpm dev` → `http://localhost:5173/demo/` and `/demo2
   `TTS_BASE_URL`, `TTS_API_KEY`, `TTS_MODEL`, optional `TTS_VOICE`/`TTS_LANGUAGE` (default `ja`) /
   `TTS_NORMALIZE` (default `1` — resample to 16 kHz mono WAV via ffmpeg; see SETUP.md §5d).
 - **Client-side (`VITE_` prefix, exposed to the browser):** `VITE_PRESENTER_URL`,
-  `VITE_LLM_MODEL`, optional `VITE_OPENCV_URL` (document scan engine; default docs.opencv.org),
+  `VITE_LLM_MODEL`, optional `VITE_OPENCV_URL` (document scan engine; default the
+  same-origin vendored `public/vendor/opencv.js`),
   `VITE_TTS_PROVIDER=perxona|byo` (must mirror server `TTS_PROVIDER` for BYO speech), optional
   `VITE_SILERO_VAD_URL`/`VITE_SILERO_VAD_WASM_URL` (voice-activated talk assets; default jsDelivr
   pinned to the installed `@ricky0123/vad-web`/`onnxruntime-web` — see SETUP.md §5e).

@@ -2,10 +2,12 @@
  * OpenCV.js document scanning: edge-detect the document in a camera frame and
  * perspective-crop it into a clean page.
  *
- * OpenCV.js (~8 MB) is loaded lazily on first use from `VITE_OPENCV_URL`
- * (default docs.opencv.org). It is never part of the app bundle. If it fails
- * to load, `scanImage` falls back to the un-cropped frame so the flow still
- * works without a network fetch.
+ * OpenCV.js (~10 MB) is loaded lazily on first use from `VITE_OPENCV_URL`
+ * (default: the same-origin vendored copy at /vendor/opencv.js — the official
+ * 4.10.0 build, self-hosted because docs.opencv.org sits behind bot protection
+ * and is an unsuitable runtime dependency). It is never part of the app bundle.
+ * If it fails to load, `scanImage` falls back to the un-cropped frame so the
+ * flow still works without the engine.
  */
 export type QuadPoint = { x: number; y: number };
 export type Quad = { points: [QuadPoint, QuadPoint, QuadPoint, QuadPoint] };
@@ -17,7 +19,9 @@ let cvPromise: Promise<CvLike> | null = null;
 export function getOpenCvUrl(): string {
   const fromEnv = (import.meta.env.VITE_OPENCV_URL as string | undefined)?.trim();
   if (fromEnv) return fromEnv;
-  return "https://docs.opencv.org/4.10.0/opencv.js";
+  // Same-origin vendored copy (public/vendor/opencv.js) — served by Vite in
+  // dev and by the Express static mount in prod.
+  return "/vendor/opencv.js";
 }
 
 /** Load OpenCV.js (lazy singleton). Resolves with the global `cv` namespace. */

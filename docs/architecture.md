@@ -341,11 +341,25 @@ straight to the call — or the cheat sheet when one exists. Scenarios are JSON 
 
 ## 12. Open questions
 
-- Per-org vs shared Connect identity for the event — confirm with Perxona.
-- `presentWithAudio` codec/format guarantees on real hardware — 16 kHz mono WAV accepted headless
-  and the BYO-TTS path now normalizes to that exact codec (Phase 5f); audibility on physical
-  speakers still wants a manual hardware pass.
-- Chatbot chat latency under conversation cadence (30 calls/min limit).
-- Whether OpenCV.js ships best as a vendored WASM or a CDN dependency (bundle size vs offline).
-  *Phase 2: lazy CDN load with `VITE_OPENCV_URL` override + raw-frame fallback; revisit vendoring
-  for fully-offline deployments.*
+All four original questions were resolved on 2026-08-21 (post–slice-6 review):
+
+- **Per-org vs shared Connect identity** — resolved: shared identity is the design. One
+  sponsor-provided Connect account (env-held credentials; browsers only ever receive
+  minted tokens) is correct for the event. Per-org credentials only become relevant if
+  the product goes multi-tenant afterwards.
+- **`presentWithAudio` on real hardware** — resolved: the codec guarantee is proven in
+  code (Phase 5f normalizes BYO TTS to the exact 16 kHz mono WAV the widget accepted
+  headless), and a local audible pass on 2026-08-21 confirmed Luna's guidance plays
+  through physical speakers via the production build. Audibility on the *event phones*
+  remains an event-day QA checklist item, not open engineering work.
+- **Chatbot latency / 30 calls-per-min** — resolved: dormant opt-in. The deployed app
+  runs the default `own-llm` brain; `NEXTTURN_PROVIDER=connect-chatbot` stays a
+  documented showcase path. Capacity math: one session at normal cadence is ~2–3
+  calls/min, so the 30/min cap only binds around ten concurrent active sessions
+  sharing one chatbot.
+- **OpenCV.js vendored vs CDN** — resolved: self-hosted. `public/vendor/opencv.js`
+  (official 4.10.0 build) is the same-origin default; `VITE_OPENCV_URL` still overrides
+  the host. docs.opencv.org turned out to sit behind bot protection (a bare HTTP fetch
+  receives a challenge page instead of the library), which settled the question
+  empirically. Fully-offline deployment remains out of scope — the presenter and LLM
+  paths are network-bound by design.

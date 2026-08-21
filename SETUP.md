@@ -175,9 +175,11 @@ Dev notes:
 - In local dev the join URL uses whatever host you reach the app on. A physical phone on your
   LAN needs a LAN-reachable address (e.g. `http://192.168.x.x:5173`, or a Tailscale hostname) —
   `localhost` will not reach your phone.
-- OpenCV.js (document edge-detect + crop) loads lazily from `VITE_OPENCV_URL` (default
-  docs.opencv.org) on first scan; set it to a vendored copy for offline use. If it can't load,
-  scans fall back to the un-cropped frame.
+- OpenCV.js (document edge-detect + crop) loads lazily on first scan from
+  `VITE_OPENCV_URL` — default is the same-origin vendored copy shipped in
+  `public/vendor/opencv.js` (official 4.10.0 build; self-hosted because
+  docs.opencv.org sits behind bot protection). Set the env var to override
+  the host. If it can't load, scans fall back to the un-cropped frame.
 
 ## 5b. Push-to-talk & real conversation (Phase 3)
 
