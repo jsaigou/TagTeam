@@ -29,18 +29,9 @@ Brief for the next agent (Claude Code). Everything here was verified live on
 
 ## Known next work
 
-1. **`cheatSheet` as a graph step** — the last declared Phase 7b migration.
-   `cheatSheet` exists in the `JobStep` union (`src/shared/contract.ts`) but has
-   no node in `server/graph.mjs` (comment marks it: "later slices add them here,
-   additively"). Migrate the client cheat-sheet generation
-   (`src/lib/cheat-sheet.ts`) server-side, following the `planScenario`/
-   `parseDocument` migration pattern; surface the result the way `planScenario`'s
-   `deliver` selector does (or a new deliver step); mirror `src/lib/graph.test.ts`
-   for tests.
-2. **Event-day QA (not code):** audibility on the event phones (Mac pass done).
-3. **Optional cleanup:** delete throwaway prod user
-   `audio-smoke-20260821@example.invalid` (password `smoke-pass-7b`) from the
-   better-auth DB if unwanted.
+None — the cheatSheet graph-step migration, prod smoke-user cleanup, and the
+phase 7c UI-usability merge are all done (2026-08-22). Event-day audibility QA
+was dropped by decision of the user.
 
 ## Workflow rules (user-directed — follow these)
 
