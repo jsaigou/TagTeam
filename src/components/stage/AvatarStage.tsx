@@ -13,15 +13,20 @@ import { cn } from "@/lib/utils";
  *  card sits LEFT and vertically centered (`md:pl-8`, `md:size-[min(36vmin,17rem)]`)
  *  while the screens reserve that lane and take the dominant share. Below md:
  *  a small top-anchored card (`pt-40`, `size-36`) with content stacked under it.
- *  Keep these numbers in sync with AvatarGuide's bubble anchor and the screens'
+ *  The Get Started hero (setup screen, panel closed) is avatar-free — the stage
+ *  is invisible there but keeps preloading. Keep these numbers in sync with
+ *  AvatarGuide's bubble anchor and the screens'
  *  `pl-[calc(3.5rem+min(36vmin,17rem))]` / `pt-[21rem]` reservations. */
 export function AvatarStage() {
   const { stageRef, session } = useAvatar();
   const { state } = useAppStore();
   const isCall = state.screen === "call";
+  /* QA round: the Get Started hero is avatar-free. The stage stays mounted
+     (the presenter keeps preloading) but nothing renders visibly. */
+  const isInvite = state.screen === "setup" && !state.setupOpen;
 
   return (
-    <div className="fixed inset-0 z-0">
+    <div className={cn("fixed inset-0 z-0", isInvite && "invisible")}>
       <div
         className={cn(
           "h-full w-full",

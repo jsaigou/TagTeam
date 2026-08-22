@@ -31,10 +31,6 @@ const STEPS: { key: SetupStep; label: string }[] = [
   { key: "scenario", label: "Scenario" },
 ];
 
-const INVITE_LINE = {
-  en: "こんにちは! I'm Luna — your practice-call assistant. I'll help you talk to Japanese offices with confidence. Tap Get started when you're ready.",
-};
-
 const GUIDES: Record<SetupStep, { en: string }> = {
   doc: {
     en: "Great! Show me the letter you need help with — or just describe the issue in your own words.",
@@ -207,7 +203,7 @@ export function SetupScreen() {
   } = useAppStore();
   const { setupOpen } = state;
   const catalog = useCatalog();
-  const { session, unlockAudio, showGuide, speakGuide, startEager, stopEager } = useAvatar();
+  const { session, unlockAudio, speakGuide } = useAvatar();
   /* Phase 7b slice 6 — the server-authoritative run: this screen's chat rides
      `sendIntent` (classify → maybe start a run), RunStatus renders the feed
      and gate, and the delivered scenario drops into the store below. */
@@ -227,13 +223,6 @@ export function SetupScreen() {
       return [...prev, entry];
     });
   }, []);
-  const handleShowGuide = useCallback(
-    (line: GuideLine) => {
-      showGuide(line);
-      appendChat({ role: "luna", text: line.en });
-    },
-    [showGuide, appendChat],
-  );
   const handleSpeakGuide = useCallback(
     (line: GuideLine) => {
       speakGuide(line);
@@ -326,11 +315,6 @@ export function SetupScreen() {
   const [analyzing, setAnalyzing] = useState(false);
   const launchedRef = useRef(false);
   const lastGuideStepRef = useRef<SetupStep | null>(null);
-  // Guards the invite line below against duplicate appends — the effect
-  // re-runs (StrictMode double-invoke, or any identity change on
-  // handleShowGuide/startEager/stopEager) every time `!setupOpen`, and used
-  // to append INVITE_LINE to `chat` again on each re-run.
-  const invitedRef = useRef(false);
 
   /* Launch the guide avatar (Luna / cc051_meeks by default) once the catalog is ready so
      it is present while inviting the user + guiding through setup. */
@@ -347,22 +331,14 @@ export function SetupScreen() {
       });
   }, [catalog, session, setError]);
 
-  /* Guide line: invite while the setup pop-up is closed, else per-step.
-     Before Get started, Luna does NOT speak — eager gestures only. */
+  /* Guide line per setup step while the panel is open. The invite screen has
+     no avatar, chat, or mic anymore (QA round) — Luna first appears when the
+     user presses Get started. */
   useEffect(() => {
-    if (!setupOpen) {
-      if (!invitedRef.current) {
-        invitedRef.current = true;
-        handleShowGuide(INVITE_LINE);
-      }
-      startEager();
-      return () => stopEager();
-    }
-    stopEager();
-    if (state.setupStep === lastGuideStepRef.current) return;
+    if (!setupOpen || state.setupStep === lastGuideStepRef.current) return;
     lastGuideStepRef.current = state.setupStep;
     handleSpeakGuide(GUIDES[state.setupStep]);
-  }, [setupOpen, state.setupStep, handleShowGuide, handleSpeakGuide, startEager, stopEager]);
+  }, [setupOpen, state.setupStep, handleSpeakGuide]);
 
   useEffect(() => {
     /* Bounce back to the doc step only if nothing has been parsed yet. `docSummary`
@@ -550,35 +526,30 @@ export function SetupScreen() {
     toCall,
   ]);
 
-  /* Invite state — Luna's card owns the left lane (AvatarStage); this column
-     fills the remaining width, stacked under the card below md. */
+  /* Invite state — a clean hero (QA round): a short explainer + one prominent
+     CTA. No avatar, chat, or mic here; the avatar lane reservations only
+     apply once the setup panel is open. */
   if (!setupOpen) {
     return (
-      <div className="flex min-h-svh flex-col items-center justify-start px-4 pb-6 pt-[21rem] md:flex-row md:items-center md:justify-center md:pl-[calc(3.5rem_+_min(36vmin,17rem))] md:pr-8 md:pt-6">
-        <div className="flex w-full max-w-lg flex-col items-center gap-3">
+      <div className="flex min-h-svh flex-col items-center justify-center px-4 pb-16">
+        <div className="flex w-full max-w-xl flex-col items-center gap-5 text-center">
+          <h1 className="text-3xl font-bold tracking-tight text-primary sm:text-4xl">
+            Practice your Japanese office calls
+          </h1>
+          <p className="max-w-md text-base leading-relaxed text-muted-foreground">
+            TagTeam rehearses phone calls with Japanese offices before you make
+            them. Upload a letter, answer a few questions, and an AI avatar
+            plays the staff member — practice the conversation, then walk in
+            with a cheat sheet.
+          </p>
           <Button
             size="lg"
             onClick={handleGetStarted}
-            className="gap-2 px-8 py-6 text-lg shadow-xl"
+            className="mt-2 gap-2 rounded-full px-10 py-7 text-lg shadow-xl"
           >
             <Sparkles className="size-5" />
             Get started
           </Button>
-          <p className="text-sm text-muted-foreground">
-            Meet Luna — your practice-call assistant.
-          </p>
-          <LunaChatPanel
-            messages={chat}
-            state={guideChat.state}
-            supported={guideChat.supported}
-            onStart={() => void guideChat.start()}
-            onStop={() => void guideChat.stop()}
-            onSend={sendChat}
-          />
-          <RunStatus />
-          {guideChat.error && (
-            <p className="max-w-xs text-center text-xs text-destructive">{guideChat.error}</p>
-          )}
           <PerxonaBadge />
         </div>
       </div>
