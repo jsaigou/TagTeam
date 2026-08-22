@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useAppStore } from "@/state/app-store";
 import { useAvatar } from "@/state/avatar-context";
+import { KaraokeText } from "@/components/KaraokeText";
 import { cn } from "@/lib/utils";
 
 /** Reading time for a guide line — comic bubbles linger ~55ms per character,
@@ -45,7 +46,10 @@ export function AvatarGuide() {
             session.isSpeaking ? "animate-pulse bg-accent" : "bg-primary/40",
           )}
         />
-        <p className="text-sm leading-relaxed text-foreground">{guide.en}</p>
+        <KaraokeText
+          text={guide.en}
+          className="text-sm leading-relaxed text-foreground"
+        />
         {/* Comic tail pointing down at Luna — over the card's center on
             desktop, centered on the narrow stacked layout. */}
         <span

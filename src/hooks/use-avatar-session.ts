@@ -1,5 +1,5 @@
 import type React from "react";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { getConnectToken } from "@/lib/api";
 import { isByoEnabled, synthesizeSpeech } from "@/lib/tts";
@@ -13,6 +13,7 @@ import {
   type PresenterEventName,
   type PresenterEventHandler,
 } from "./use-presenter";
+import { beginSpeech, endSpeech, wireSpeechKaraoke } from "./use-speech-karaoke";
 
 export interface LaunchParams {
   avatarId: string;
@@ -84,6 +85,13 @@ export function useAvatarSession(
     },
   });
 
+  /* Karaoke engine wiring (module singleton): every spoken line is announced
+     here and word-reveal progress rides PLAYING_SPEECH_TEXT / PERFORMANCE_END
+     events. */
+  useEffect(() => {
+    wireSpeechKaraoke({ subscribe: presenter.subscribe });
+  }, [presenter.subscribe]);
+
   const [isLaunching, setIsLaunching] = useState(false);
   const [launchError, setLaunchError] = useState<Error | null>(null);
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -110,6 +118,7 @@ export function useAvatarSession(
     async (content: string, options?: PresentOptions) => {
       // BYO TTS (Phase 5f): synthesize server-side and play the WAV instead of
       // Perxona's voice. Falls back to the built-in voice if synthesis fails.
+      beginSpeech(content);
       if (isByoEnabled()) {
         try {
           const wav = await synthesizeSpeech(content);
@@ -124,8 +133,10 @@ export function useAvatarSession(
   );
 
   const presentWithAudio = useCallback(
-    async (audio: ArrayBuffer, content: string, options?: PresentOptions) =>
-      presenter.presentWithAudio(audio, content, options),
+    async (audio: ArrayBuffer, content: string, options?: PresentOptions) => {
+      beginSpeech(content);
+      return presenter.presentWithAudio(audio, content, options);
+    },
     [presenter],
   );
 
@@ -138,6 +149,7 @@ export function useAvatarSession(
       try {
         // Resume AudioContext from this user-gesture click before synthesizing.
         await presenter.resumeAudio();
+        beginSpeech(message);
         const result = await presenter.present(message);
         if (result && !result.success) {
           throw new Error(
@@ -185,6 +197,7 @@ export function useAvatarSession(
   );
 
   const interrupt = useCallback(() => {
+    endSpeech();
     presenter.interruptPresentation();
   }, [presenter]);
 

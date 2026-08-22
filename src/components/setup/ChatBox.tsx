@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { Sparkles } from "lucide-react";
+import { KaraokeText } from "@/components/KaraokeText";
 import { cn } from "@/lib/utils";
 
 export type ChatEntry = {
@@ -49,7 +50,11 @@ export function ChatBox({ messages }: { messages: ChatEntry[] }) {
               <Sparkles className="mt-0.5 size-3.5 shrink-0 text-primary" />
             )}
             <span>
-              {m.text}
+              {m.role === "luna" ? (
+                <KaraokeText text={m.text} />
+              ) : (
+                m.text
+              )}
               {typeof m.count === "number" && m.count > 1 && (
                 <span className="ml-1.5 inline-flex items-center rounded-full bg-muted px-1.5 py-0.5 align-middle text-[10px] font-medium text-muted-foreground">
                   ×{m.count}

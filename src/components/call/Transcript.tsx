@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { User } from "lucide-react";
 import type { Turn } from "@/shared/contract";
+import { KaraokeText } from "@/components/KaraokeText";
 import { cn } from "@/lib/utils";
 
 type TranscriptProps = {
@@ -48,7 +49,8 @@ export function Transcript({ turns, activeTurnId }: TranscriptProps) {
                 </span>
               )}
             </div>
-            <p className="text-sm leading-relaxed">{turn.jp}</p>
+            {/* Karaoke reveal while the bureaucrat is speaking this line. */}
+            <KaraokeText text={turn.jp} className="text-sm leading-relaxed" />
             {turn.en && <p className="text-xs text-muted-foreground">{turn.en}</p>}
           </div>
         );
