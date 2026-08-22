@@ -33,7 +33,7 @@ export async function run({ goal }, { signal }) {
       { role: "user", content: text },
     ],
     // No maxTokens override — providers.mjs's 8192 default is deliberately
-    // generous because the deployed model (gemma4-mtp) is a reasoning model
+    // generous because the deployed model (gemma4-26b-a4b-nothink) is a reasoning model
     // that burns tokens on hidden reasoning_content before `content` (see
     // src/lib/llm.ts's identical note); a tight cap here returns empty text.
     { temperature: 0, responseFormat: { type: "json_object" }, signal },

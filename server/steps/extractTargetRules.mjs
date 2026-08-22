@@ -63,7 +63,7 @@ export const step = {
   lane: "llm",
   // 150s per the Phase 7 plan §7b.6 deadline model for llm-lane steps — this
   // one does a scrape THEN an llm call, and the deployed reasoning model
-  // (gemma4-mtp) genuinely needs the room (measured >90s against real
+  // (gemma4-26b-a4b-nothink) genuinely needs the room (measured >90s against real
   // SearXNG/Firecrawl/LLM homelab backends during this slice's smoke test).
   attemptMs: 150_000,
   label: (input) => `Reading up on ${input?.candidate?.name ?? "the office"}…`,

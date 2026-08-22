@@ -46,5 +46,5 @@ One click: **Get started → "Try the demo — book a dentist appointment" → S
 ## Built with
 
 - **Perxona Connect Kit** — the `<sv-presenter>` avatar Web Component (Connect tokens minted via a thin backend proxy; real avatar/scene/voice/motion catalogs).
-- **OpenAI-compatible LLM** (foundry `gemma4-mtp`) — document grounding, simulation script + glossary generation, cheat sheets.
+- **OpenAI-compatible LLM** (foundry `gemma4-26b-a4b-nothink`) — document grounding, simulation script + glossary generation, cheat sheets.
 - **React 19 + Vite + TypeScript + Tailwind CSS**.

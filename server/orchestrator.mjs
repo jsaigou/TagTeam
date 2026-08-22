@@ -180,7 +180,7 @@ export function createCallOrchestrator({ transcribeAudio, llmChat }) {
     const messages = buildNextTurnMessages(context, transcript);
     const payload = await llmChat(messages, {
       temperature: 0.6,
-      // Generous budget: reasoning models (e.g. gemma4-mtp) burn tokens on
+      // Generous budget: reasoning models (e.g. gemma4-26b-a4b-nothink) burn tokens on
       // reasoning before emitting `content` — a tight cap returns empty text.
       maxTokens: 8192,
       responseFormat: { type: "json_object" },

@@ -157,7 +157,7 @@ export async function chat(messages: ChatMessage[], options: ChatOptions = {}): 
     model: cfg.model,
     messages,
     temperature: options.temperature ?? 0.2,
-    // Generous budget: reasoning models (e.g. gemma4-mtp) burn tokens on
+    // Generous budget: reasoning models (e.g. gemma4-26b-a4b-nothink) burn tokens on
     // reasoning before emitting `content` — without this, content can come back
     // empty and structured output fails.
     max_tokens: 8192,

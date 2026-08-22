@@ -60,7 +60,7 @@ Brief for the next agent (Claude Code). Everything here was verified live on
 
 - **pnpm only**; Node >= 22.
 - Homelab LLM (`LLM_BASE_URL` on tailnet, model `gemma4-26b-a4b-nothink` — renamed from
-  `gemma4-mtp` on 2026-08-22; the thinking variant is `gemma4-26b-a4b`): 13–80 s per call;
+  `gemma4-26b-a4b-nothink` on 2026-08-22; the thinking variant is `gemma4-26b-a4b`): 13–80 s per call;
   the run engine's `llm` lane concurrency is 1, so a full pipeline takes minutes.
   Size smoke timeouts/watchdogs accordingly. Prod STT is hosted; local default is
   whisper-cpp (needs the model under `models/`).
