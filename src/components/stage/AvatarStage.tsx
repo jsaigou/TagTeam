@@ -1,6 +1,11 @@
 import { useAppStore } from "@/state/app-store";
 import { useAvatar } from "@/state/avatar-context";
 import { Button } from "@/components/ui/button";
+import {
+  DOORWAY_HEIGHT,
+  DOORWAY_LIFT,
+  DOORWAY_WIDTH,
+} from "@/components/setup/intro-timeline";
 import { cn } from "@/lib/utils";
 
 /** The assistant: a framed portrait card on the setup/cheat-sheet screens,
@@ -22,8 +27,17 @@ export function AvatarStage() {
   const { state } = useAppStore();
   const isCall = state.screen === "call";
   /* QA round: the Get Started hero is avatar-free. The stage stays mounted
-     (the presenter keeps preloading) but nothing renders visibly. */
-  const isInvite = state.screen === "setup" && !state.setupOpen;
+     (the presenter keeps preloading) but nothing renders visibly — until the
+     door intro runs, when the card reframes into the centered doorway hole
+     (same geometry as DoorsIntro) so Luna stands behind the doors. */
+  const isInvite =
+    state.screen === "setup" && !state.setupOpen && state.introPhase === "idle";
+  const doorway = state.screen === "setup" && state.introPhase === "running";
+  const doorwayStyle = {
+    width: DOORWAY_WIDTH,
+    height: DOORWAY_HEIGHT,
+    transform: `translateY(calc(-1 * ${DOORWAY_LIFT}))`,
+  };
 
   return (
     <div className={cn("fixed inset-0 z-0", isInvite && "invisible")}>
@@ -31,7 +45,9 @@ export function AvatarStage() {
         className={cn(
           "h-full w-full",
           !isCall &&
+            !doorway &&
             "flex items-start justify-center pt-40 md:items-center md:justify-start md:pl-8 md:pt-0",
+          doorway && "flex items-center justify-center",
         )}
       >
         <div
@@ -40,8 +56,10 @@ export function AvatarStage() {
             "relative overflow-hidden bg-card",
             isCall
               ? "h-full w-full"
-              : "size-36 rounded-2xl border border-border shadow-2xl md:size-[min(36vmin,17rem)]",
+              : !doorway &&
+                  "size-36 rounded-2xl border border-border shadow-2xl md:size-[min(36vmin,17rem)]",
           )}
+          style={doorway ? doorwayStyle : undefined}
         />
       </div>
 
@@ -49,7 +67,7 @@ export function AvatarStage() {
         <div
           className={cn(
             "pointer-events-none absolute inset-0 flex",
-            isCall
+            isCall || doorway
               ? "items-center justify-center"
               : "items-start justify-center pt-40 md:items-center md:justify-start md:pl-8 md:pt-0",
           )}
@@ -58,8 +76,9 @@ export function AvatarStage() {
           <div
             className={cn(
               "flex items-center justify-center",
-              !isCall && "size-36 md:size-[min(36vmin,17rem)]",
+              !isCall && !doorway && "size-36 md:size-[min(36vmin,17rem)]",
             )}
+            style={doorway ? doorwayStyle : undefined}
           >
           {session.loadError ? (
             <div className="pointer-events-auto flex flex-col items-center gap-2 rounded-xl border bg-card/90 p-6 text-center shadow-lg">

@@ -18,6 +18,8 @@ export type GuideLine = { en: string };
 const EAGER_MOTIONS = [
   "01KD2H5BX9MXDJA5T9QY83QYS3", // Female Greeting Wave Hand
 ];
+/** Luna's greeting wave for the Get Started door reveal. */
+export const GREETING_WAVE_MOTION = EAGER_MOTIONS[0];
 const EAGER_CADENCE_MS = 3400;
 
 type AvatarContextValue = {

@@ -3,7 +3,7 @@ import { Loader2, Mic, Send, Sparkles } from "lucide-react";
 import type { DocInput, GroundingAnswer, RoleId, RunContext } from "@/shared/contract";
 import type { ChatMessage } from "@/lib/llm";
 import { useAppStore, type SetupStep } from "@/state/app-store";
-import { useAvatar, type GuideLine } from "@/state/avatar-context";
+import { useAvatar, GREETING_WAVE_MOTION, type GuideLine } from "@/state/avatar-context";
 import { useSession } from "@/state/session-context";
 import { useCatalog } from "@/hooks/use-catalog";
 import { useGuideChat, type GuideChatState } from "@/hooks/use-guide-chat";
@@ -20,9 +20,11 @@ import { ReferenceSearch } from "./ReferenceSearch";
 import { PastCalls } from "./PastCalls";
 import { ChatBox, type ChatEntry } from "./ChatBox";
 import { RunStatus } from "./RunStatus";
+import { DoorsIntro } from "./DoorsIntro";
 import { PerxonaBadge } from "@/components/brand/PerxonaBadge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { unlockSfx } from "@/lib/sfx";
 import { cn } from "@/lib/utils";
 
 const STEPS: { key: SetupStep; label: string }[] = [
@@ -41,6 +43,11 @@ const GUIDES: Record<SetupStep, { en: string }> = {
   scenario: {
     en: "Almost there! Pick the office setting for your call — I'll play the staff member for you.",
   },
+};
+
+/** Luna's line when the doors open on her (Get Started door reveal). */
+const GREETING_LINE = {
+  en: "こんにちは! I'm Luna — your practice-call assistant. Let's get your call ready!",
 };
 
 /** Luna's persona for the setup-screen mic chat. Short, warm, actionable. */
@@ -189,6 +196,7 @@ export function SetupScreen() {
     state,
     setSetupStep,
     setSetupOpen,
+    setIntroPhase,
     setDoc,
     parsed,
     saveAnswers,
@@ -347,11 +355,29 @@ export function SetupScreen() {
   }, [state.docSummary, state.setupStep, setSetupStep]);
 
   const handleGetStarted = useCallback(() => {
-    setSetupOpen(true);
-    /* This click is a user gesture — enable audio. The guide effect speaks the
-       doc step line; unlockAudio itself never speaks. */
+    /* This click is a user gesture — enable audio (presenter speech + the
+       knock SFX), then run the door intro. The setup panel opens when it
+       finishes (or is skipped). */
     void unlockAudio().catch(() => {});
-  }, [setSetupOpen, unlockAudio]);
+    void unlockSfx();
+    setIntroPhase("running");
+  }, [setIntroPhase, unlockAudio]);
+
+  const handleIntroFinish = useCallback(
+    (skip: boolean) => {
+      /* A skip may land mid-greeting — don't let her keep talking over the
+         panel. */
+      if (skip) session.interrupt();
+      setIntroPhase("idle");
+      setSetupOpen(true);
+    },
+    [session, setIntroPhase, setSetupOpen],
+  );
+
+  const handleIntroReveal = useCallback(() => {
+    void session.playMotion(GREETING_WAVE_MOTION).catch(() => {});
+    handleSpeakGuide(GREETING_LINE);
+  }, [session, handleSpeakGuide]);
 
   const analyzeDoc = useCallback(
     async (doc: DocInput) => {
@@ -552,6 +578,9 @@ export function SetupScreen() {
           </Button>
           <PerxonaBadge />
         </div>
+        {state.introPhase === "running" && (
+          <DoorsIntro onFinish={handleIntroFinish} onReveal={handleIntroReveal} />
+        )}
       </div>
     );
   }

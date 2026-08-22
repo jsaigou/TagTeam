@@ -19,6 +19,9 @@ import { DEFAULT_CALL_SETTINGS } from "@/lib/coaching";
 
 export type Screen = "setup" | "call" | "cheat-sheet";
 export type SetupStep = "doc" | "grounding" | "scenario";
+/** QA round — the Get Started door intro (draw → knock → open → wave). While
+ *  running, AvatarStage reframes Luna into the centered doorway. */
+export type IntroPhase = "idle" | "running";
 export type ScenarioSelection = {
   avatarId: string;
   sceneId: string;
@@ -43,6 +46,7 @@ type AppState = {
   setupStep: SetupStep;
   /** Setup panel is a pop-up the avatar invites the user to open. */
   setupOpen: boolean;
+  introPhase: IntroPhase;
   doc: DocInput | null;
   summary: string | null;
   docSummary: DocSummary | null;
@@ -66,6 +70,7 @@ type Action =
   | { type: "SET_SCREEN"; screen: Screen }
   | { type: "SET_SETUP_STEP"; step: SetupStep }
   | { type: "SET_SETUP_OPEN"; open: boolean }
+  | { type: "SET_INTRO_PHASE"; phase: IntroPhase }
   | { type: "DOC_UPLOADED"; doc: DocInput }
   | { type: "PARSED"; summary: string; doc: DocSummary; questions: GroundingQuestion[] }
   | { type: "ANSWERS_SAVED"; answers: GroundingAnswer[] }
@@ -84,6 +89,7 @@ const initialState: AppState = {
   screen: "setup",
   setupStep: "doc",
   setupOpen: false,
+  introPhase: "idle",
   doc: null,
   summary: null,
   docSummary: null,
@@ -108,6 +114,8 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, setupStep: action.step, error: null };
     case "SET_SETUP_OPEN":
       return { ...state, setupOpen: action.open, error: null };
+    case "SET_INTRO_PHASE":
+      return { ...state, introPhase: action.phase };
     case "DOC_UPLOADED":
       return { ...state, doc: action.doc, error: null };
     case "PARSED":
@@ -162,6 +170,7 @@ type Store = {
   toSetup: () => void;
   setSetupStep: (step: SetupStep) => void;
   setSetupOpen: (open: boolean) => void;
+  setIntroPhase: (phase: IntroPhase) => void;
   toCall: () => void;
   toCheatSheet: () => void;
   reset: () => void;
@@ -190,6 +199,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       toSetup: () => dispatch({ type: "SET_SCREEN", screen: "setup" }),
       setSetupStep: (step) => dispatch({ type: "SET_SETUP_STEP", step }),
       setSetupOpen: (open) => dispatch({ type: "SET_SETUP_OPEN", open }),
+      setIntroPhase: (phase) => dispatch({ type: "SET_INTRO_PHASE", phase }),
       toCall: () => dispatch({ type: "SET_SCREEN", screen: "call" }),
       toCheatSheet: () => dispatch({ type: "SET_SCREEN", screen: "cheat-sheet" }),
       reset: () => dispatch({ type: "RESET" }),
