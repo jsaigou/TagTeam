@@ -214,10 +214,18 @@ export function SetupScreen() {
   const { run, sendIntent } = useSession();
 
   /* Persistent chat transcript — the comic bubble is transient, this never
-     loses a line. Every guide line (spoken or not) and every user turn lands here. */
+     loses a line. Every guide line (spoken or not) and every user turn lands
+     here; §7c.4 — an exact repeat of the LAST line bumps its ×N counter
+     instead of appending a duplicate bubble. */
   const [chat, setChat] = useState<ChatEntry[]>([]);
   const appendChat = useCallback((entry: ChatEntry) => {
-    setChat((prev) => [...prev, entry]);
+    setChat((prev) => {
+      const last = prev[prev.length - 1];
+      if (last && last.role === entry.role && last.text === entry.text) {
+        return [...prev.slice(0, -1), { ...last, count: (last.count ?? 1) + 1 }];
+      }
+      return [...prev, entry];
+    });
   }, []);
   const handleShowGuide = useCallback(
     (line: GuideLine) => {

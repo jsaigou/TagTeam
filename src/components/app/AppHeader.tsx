@@ -58,8 +58,10 @@ function ThemeToggle() {
   );
 }
 
-/** Hold-to-talk vs voice-activated (VAD) talk mode selector. */
-function TalkModeSelector() {
+/** Hold-to-talk vs voice-activated (VAD) talk mode selector. Lives here so it
+ *  can ride both Settings AND the primary surface (§7c.5) — the call screen
+ *  renders it right where the user talks. */
+export function TalkModeSelector({ compact = false }: { compact?: boolean } = {}) {
   const { talkMode, setTalkMode } = useTalkMode();
   return (
     <div className="flex items-center gap-1 rounded-lg border bg-muted/40 p-1">
@@ -73,14 +75,15 @@ function TalkModeSelector() {
             onClick={() => setTalkMode(mode)}
             aria-pressed={active}
             className={cn(
-              "flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm transition-colors",
+              "flex flex-1 items-center justify-center gap-1.5 rounded-md text-sm transition-colors",
+              compact ? "px-2 py-1 text-xs" : "px-3 py-1.5",
               active
                 ? "bg-primary text-primary-foreground"
                 : "text-muted-foreground hover:bg-accent",
             )}
           >
-            <Icon className="size-3.5" />
-            {mode === "ptt" ? "Hold to talk" : "Voice-activated"}
+            <Icon className={compact ? "size-3" : "size-3.5"} />
+            {mode === "ptt" ? (compact ? "Hold" : "Hold to talk") : compact ? "Voice" : "Voice-activated"}
           </button>
         );
       })}

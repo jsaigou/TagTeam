@@ -83,14 +83,56 @@ function GateCard({ run }: { run: RunSnapshot }) {
   );
 }
 
+/** One row in the run feed. */
+function JobRow({ job }: { job: JobSnapshot }) {
+  return (
+    <div className="flex items-start gap-2 text-xs">
+      <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center">
+        <JobIcon job={job} />
+      </span>
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span
+          className={cn(
+            "leading-tight",
+            job.status === "failed" && "text-destructive",
+            job.status === "done" && "text-muted-foreground",
+          )}
+        >
+          {job.label}
+        </span>
+        {job.detail && job.status === "running" && (
+          <span className="text-muted-foreground">{job.detail}</span>
+        )}
+        {job.error && job.status === "failed" && (
+          <span className="text-destructive">{job.error.message}</span>
+        )}
+        {typeof job.progress === "number" && job.status === "running" && (
+          <span className="mt-1 block h-1 w-full overflow-hidden rounded-full bg-border">
+            <span
+              className="block h-full rounded-full bg-primary transition-[width]"
+              style={{ width: `${Math.round(job.progress * 100)}%` }}
+            />
+          </span>
+        )}
+      </span>
+    </div>
+  );
+}
+
+const ACTIVE_STATUSES = new Set(["queued", "running", "needs_input"]);
+
 /** The server-authoritative run, visualized: one row per graph step (status +
  *  progress), the confirmTarget gate when it opens, and a cancel affordance.
- *  Presentational — applying the delivered scenario is SetupScreen's job. */
+ *  §7c.4 — settled steps collapse into an expandable section so the feed
+ *  shows only live work; Presentational — applying the delivered scenario is
+ *  SetupScreen's job. */
 export function RunStatus() {
   const { run, cancelRun } = useSession();
   if (!run) return null;
 
   const failed = run.jobs.some((j) => j.status === "failed");
+  const active = run.jobs.filter((j) => ACTIVE_STATUSES.has(j.status));
+  const settled = run.jobs.filter((j) => !ACTIVE_STATUSES.has(j.status));
 
   return (
     <div className="flex w-full flex-col gap-2 rounded-xl border bg-card/80 p-3">
@@ -113,40 +155,32 @@ export function RunStatus() {
         </button>
       </div>
 
-      <div className="flex flex-col gap-1">
-        {run.jobs.map((job) => (
-          <div key={job.id} className="flex items-start gap-2 text-xs">
-            <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center">
-              <JobIcon job={job} />
-            </span>
-            <span className="flex min-w-0 flex-1 flex-col">
-              <span
-                className={cn(
-                  "leading-tight",
-                  job.status === "failed" && "text-destructive",
-                  job.status === "done" && "text-muted-foreground",
-                )}
-              >
-                {job.label}
-              </span>
-              {job.detail && job.status === "running" && (
-                <span className="text-muted-foreground">{job.detail}</span>
-              )}
-              {job.error && job.status === "failed" && (
-                <span className="text-destructive">{job.error.message}</span>
-              )}
-              {typeof job.progress === "number" && job.status === "running" && (
-                <span className="mt-1 block h-1 w-full overflow-hidden rounded-full bg-border">
-                  <span
-                    className="block h-full rounded-full bg-primary transition-[width]"
-                    style={{ width: `${Math.round(job.progress * 100)}%` }}
-                  />
-                </span>
-              )}
-            </span>
+      {/* Live work always visible… */}
+      {active.length > 0 && (
+        <div className="flex flex-col gap-1">
+          {active.map((job) => (
+            <JobRow key={job.id} job={job} />
+          ))}
+        </div>
+      )}
+
+      {/* …finished work folds away (§7c.4). Auto-open while nothing else is
+          showing so a fully-settled run still explains itself. */}
+      {settled.length > 0 && active.length === 0 && (
+        <div className="flex flex-col gap-1">{settled.map((job) => <JobRow key={job.id} job={job} />)}</div>
+      )}
+      {settled.length > 0 && active.length > 0 && (
+        <details className="group">
+          <summary className="cursor-pointer select-none text-[11px] text-muted-foreground hover:text-foreground">
+            Earlier steps ({settled.length})
+          </summary>
+          <div className="mt-1 flex flex-col gap-1 border-l pl-3">
+            {settled.map((job) => (
+              <JobRow key={job.id} job={job} />
+            ))}
           </div>
-        ))}
-      </div>
+        </details>
+      )}
 
       {run.gate && <GateCard run={run} />}
 
