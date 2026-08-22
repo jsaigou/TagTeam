@@ -76,6 +76,13 @@ export function useGuideChat(options: GuideChatOptions) {
     if (busyRef.current) return;
     setError(null);
     const recording = await ptt.start();
+    if (!recording && ptt.error) {
+      // Mic never armed (permission denied, no device, …). Surface it —
+      // falling back to "idle" silently is what made the mic look dead.
+      setState("error");
+      setError(ptt.error);
+      return;
+    }
     setState(recording ? "listening" : "idle");
   }, [ptt]);
 
@@ -122,11 +129,12 @@ export function useGuideChat(options: GuideChatOptions) {
     const audio = await ptt.stop();
     if (!audio) {
       setState("idle");
-      // Nothing usable was captured — either the tap released before the mic
-      // finished arming, or the hold was shorter than MIN_RECORDING_MS.
-      // Silently no-op'ing here is exactly what made "Talk to Luna" look
-      // broken — say why nothing happened instead.
-      setError("That was too quick — hold the mic a little longer.");
+      // Nothing usable was captured — either the toggle was released before
+      // the mic finished arming, or the clip was shorter than
+      // MIN_RECORDING_MS. Say why nothing happened instead of silently
+      // no-op'ing (that silence is exactly what made "Talk to Luna" look
+      // broken in QA).
+      setError("That was too quick — tap the mic, speak, then tap it again.");
       return;
     }
     await submitAudio(audio);

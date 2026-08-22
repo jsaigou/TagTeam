@@ -68,7 +68,9 @@ function packToSelection(role: RoleId): { avatarId: string; sceneId: string; voi
   return { avatarId: pack.avatarId, sceneId: pack.sceneId, voiceId: pack.voiceId ?? DEFAULT_VOICE_ID };
 }
 
-/** Hold-to-talk mic that lets the user ask Luna a question on the main screen. */
+/** Click-to-toggle mic (QA fix): the hold-to-talk version read as a dead
+ *  button whenever it was tapped — a quick tap captured no audio and nothing
+ *  visibly happened. Now the first tap starts listening, the second sends. */
 function TalkToLunaButton({
   state,
   supported,
@@ -84,28 +86,33 @@ function TalkToLunaButton({
 }) {
   const thinking = state === "thinking";
   const listening = state === "listening";
+  const disabled = !supported || thinking;
   return (
     <button
       type="button"
-      onPointerDown={(e) => {
-        // Capture the pointer so a drag off the button (common on touch)
-        // still delivers pointerup/pointercancel HERE instead of wherever
-        // the finger ends up — without capture, that release could land on
-        // a different element and never call onStop, leaving the mic
-        // recording with no way to stop it.
-        e.currentTarget.setPointerCapture(e.pointerId);
-        onStart();
+      onClick={() => {
+        if (disabled) return;
+        if (listening) {
+          onStop();
+        } else {
+          onStart();
+        }
       }}
-      onPointerUp={onStop}
-      onPointerCancel={onStop}
-      disabled={!supported || thinking}
+      disabled={disabled}
+      title={
+        !supported
+          ? "Microphone unavailable"
+          : listening
+            ? "Tap again to send"
+            : undefined
+      }
       className={cn(
-        "flex select-none touch-none items-center justify-center gap-2 rounded-lg border font-semibold transition-colors",
+        "flex select-none items-center justify-center gap-2 rounded-lg border font-semibold transition-colors",
         compact ? "px-3 py-2 text-xs" : "px-4 py-2.5 text-sm",
         listening
           ? "border-destructive/40 bg-destructive/15 text-destructive"
           : "border-accent/40 bg-accent/15 text-accent hover:bg-accent/25",
-        (!supported || thinking) && "cursor-not-allowed opacity-50",
+        disabled && "cursor-not-allowed opacity-50",
       )}
     >
       {thinking ? (
@@ -115,13 +122,7 @@ function TalkToLunaButton({
       ) : (
         <Mic className={compact ? "size-3.5" : "size-4"} />
       )}
-      {listening
-        ? "Listening… release to ask"
-        : thinking
-          ? "Luna is thinking…"
-          : compact
-            ? "Talk to Luna"
-            : "Hold to talk to Luna"}
+      {listening ? "Listening… tap to send" : thinking ? "Luna is thinking…" : "Talk to Luna"}
     </button>
   );
 }
@@ -166,7 +167,7 @@ function LunaChatPanel({
               submit();
             }
           }}
-          placeholder="Ask Luna… or hold the mic"
+          placeholder="Ask Luna… or tap the mic"
           rows={1}
           className="min-h-9 resize-none"
         />
@@ -267,6 +268,16 @@ export function SetupScreen() {
     avatarSpeaking: session.isSpeaking,
     voiceTalkEnabled: setupOpen,
   });
+  /* Guide-chat failures (mic denied, STT/LLM errors, too-quick taps) land in
+     the transcript itself — QA showed the small red inline text was missed,
+     so nothing silently no-ops anymore. */
+  const lastErrorRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!guideChat.error || lastErrorRef.current === guideChat.error) return;
+    lastErrorRef.current = guideChat.error;
+    appendChat({ role: "luna", text: guideChat.error });
+  }, [guideChat.error, appendChat]);
+
   /* Run context seeding — the fields no graph node produces (see RunContext).
      Document pages are uploaded to the server's ephemeral store lazily on
      first objective and cached per DocInput identity, so restating the
