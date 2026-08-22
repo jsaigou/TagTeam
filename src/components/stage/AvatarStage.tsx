@@ -52,7 +52,15 @@ export function AvatarStage() {
   };
 
   return (
-    <div className={cn("fixed inset-0 z-0", isInvite && "invisible")}>
+    <div
+      className={cn(
+        "fixed inset-0 z-0",
+        /* opacity-0 alongside invisible: the presenter's render surface can
+           override inherited visibility once active — opacity cannot be
+           overridden from inside the subtree. */
+        isInvite && "invisible opacity-0 pointer-events-none",
+      )}
+    >
       <div
         className={cn(
           "h-full w-full",

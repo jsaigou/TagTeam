@@ -335,12 +335,16 @@ export function SetupScreen() {
   const launchedRef = useRef(false);
   const lastGuideStepRef = useRef<SetupStep | null>(null);
 
-  /* Launch the guide avatar (Luna / cc051_meeks by default) once the catalog is ready so
-     it is present while inviting the user + guiding through setup. */
+  /* Launch the guide avatar (Luna / cc051_meeks by default). QA round: NOT on
+     page load anymore — once the presenter activates, its render surface
+     overrides ancestor visibility and bled through the Get Started hero ~5s
+     in. Launch when the door intro starts instead: its ~7s run doubles as
+     asset-loading cover, so she waves in the doorway as the doors part.
+     Restores and delivered runs launch explicitly in their own flows. */
   useEffect(() => {
-    if (launchedRef.current || catalog.isLoading) return;
+    if (launchedRef.current || state.introPhase !== "running") return;
     const defaults = resolveDefaults(catalog.avatars, catalog.scenes, catalog.voices);
-    if (!defaults) return;
+    if (!defaults || catalog.isLoading) return;
     launchedRef.current = true;
     void session
       .launch(defaults)
@@ -348,7 +352,7 @@ export function SetupScreen() {
         launchedRef.current = false;
         setError(err instanceof Error ? err.message : "Failed to launch the presenter.");
       });
-  }, [catalog, session, setError]);
+  }, [catalog, state.introPhase, session, setError]);
 
   /* Guide line per setup step while the panel is open. The invite screen has
      no avatar, chat, or mic anymore (QA round) — Luna first appears when the
