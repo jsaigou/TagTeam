@@ -21,7 +21,17 @@ import { cn } from "@/lib/utils";
  *  The Get Started hero (setup screen, panel closed) is avatar-free — the stage
  *  is invisible there but keeps preloading. Keep these numbers in sync with
  *  AvatarGuide's bubble anchor and the screens'
- *  `pl-[calc(3.5rem+min(36vmin,17rem))]` / `pt-[21rem]` reservations. */
+ *  `pl-[calc(3.5rem+min(36vmin,17rem))]` / `pt-[21rem]` reservations.
+ *
+ *  Card centering calibration (QA round): the SDK has no camera pan, and the
+ *  guide avatar's render anchors at ~22.8% of the canvas width (measured
+ *  2026-08-08 against a full-screen window), so in the square card she reads
+ *  pushed left. The card shifts the canvas right by 27.2% so her anchor lands
+ *  mid-card, with a cover scale of ~1.545 (= 1 + 2 × 0.272) so scene pixels
+ *  still fill the card after the shift; expect a mild vertical crop. If the
+ *  guide avatar or default scene changes, re-measure and retune the two
+ *  arbitrary values below together: translate-x = (50 − anchor)%,
+ *  scale = 1 + 2 × translate/100. */
 export function AvatarStage() {
   const { stageRef, session } = useAvatar();
   const { state } = useAppStore();
@@ -33,6 +43,8 @@ export function AvatarStage() {
   const isInvite =
     state.screen === "setup" && !state.setupOpen && state.introPhase === "idle";
   const doorway = state.screen === "setup" && state.introPhase === "running";
+  /* Plain framed-portrait card (setup panel open / cheat sheet). */
+  const card = !isCall && !doorway;
   const doorwayStyle = {
     width: DOORWAY_WIDTH,
     height: DOORWAY_HEIGHT,
@@ -44,8 +56,7 @@ export function AvatarStage() {
       <div
         className={cn(
           "h-full w-full",
-          !isCall &&
-            !doorway &&
+          card &&
             "flex items-start justify-center pt-40 md:items-center md:justify-start md:pl-8 md:pt-0",
           doorway && "flex items-center justify-center",
         )}
@@ -56,8 +67,8 @@ export function AvatarStage() {
             "relative overflow-hidden bg-card",
             isCall
               ? "h-full w-full"
-              : !doorway &&
-                  "size-36 rounded-2xl border border-border shadow-2xl md:size-[min(36vmin,17rem)]",
+              : card &&
+                  "size-36 rounded-2xl border border-border shadow-2xl md:size-[min(36vmin,17rem)] [&>sv-presenter]:translate-x-[27.2%] [&>sv-presenter]:scale-[1.545]",
           )}
           style={doorway ? doorwayStyle : undefined}
         />
