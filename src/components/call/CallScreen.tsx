@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AudioLines, ChevronRight, Loader2, Mic, PhoneCall } from "lucide-react";
+import { AudioLines, ChevronRight, Loader2, Mic, PanelRight, PhoneCall } from "lucide-react";
 import type { HoldHelp, PlayerState, TapHelp, Turn } from "@/shared/contract";
 import { useAppStore } from "@/state/app-store";
 import { useAvatar } from "@/state/avatar-context";
@@ -10,6 +10,7 @@ import { useVoiceTalk } from "@/hooks/use-voice-talk";
 import { useTalkMode } from "@/state/talk-mode-context";
 import { setCallContext } from "@/lib/session-api";
 import { createScenario, updateScenario } from "@/lib/scenario-api";
+import { TalkModeSelector } from "@/components/app/AppHeader";
 import { pipeline } from "@/state/pipeline";
 import { DEFAULT_AVATAR_ID, DEFAULT_SCENE_ID, DEFAULT_VOICE_ID } from "@/lib/presets";
 import { Transcript } from "./Transcript";
@@ -54,11 +55,14 @@ export function CallScreen() {
   const [holdHelp, setHoldHelp] = useState<HoldHelp | null>(null);
   const [tapHelp, setTapHelp] = useState<TapHelp | null>(null);
   const [started, setStarted] = useState(false);
+  /* §7c.2 — the transcript aside is desktop-only (md+); below md this toggle
+     slides the same panel in as an overlay so the transcript is reachable on
+     phones/tablets instead of invisible. */
+  const [transcriptOpen, setTranscriptOpen] = useState(false);
   /* Phase 3 — adaptive conversation state. */
   const [adaptive, setAdaptive] = useState(false);
   const [userTurnActive, setUserTurnActive] = useState(false);
-  const [brainPhase, setBrainPhase] = useState<"idle" | "thinking">("idle");
-  const [conversationEnded, setConversationEnded] = useState(false);
+  const [brainPhase, setBrainPhase] = useState<"idle" | "thinking">("idle");  const [conversationEnded, setConversationEnded] = useState(false);
   const [conversationError, setConversationError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -283,10 +287,73 @@ export function CallScreen() {
     await submitUtterance(audio);
   }, [ptt, avatar, submitUtterance]);
 
+  /* §7c.5 — the mic accepts BOTH press-and-hold (phones) and click-to-toggle
+     + the Space hotkey (desktop): a release under CLICK_TOGGLE_MS latches the
+     mic on instead of stopping it, and the next click/Space releases. Holds
+     past the threshold behave exactly as before. */
+  const CLICK_TOGGLE_MS = 280;
+  const micPressAtRef = useRef(0);
+  const micLatchedRef = useRef(false);
+  const [micLatched, setMicLatched] = useState(false);
+  const setLatch = useCallback((value: boolean) => {
+    setMicLatched(value);
+    micLatchedRef.current = value;
+  }, []);
+
+  const handleMicPress = useCallback(() => {
+    if (micLatchedRef.current) {
+      setLatch(false);
+      void handlePTTUp();
+      return;
+    }
+    micPressAtRef.current = Date.now();
+    void handlePTTDown();
+  }, [handlePTTDown, handlePTTUp, setLatch]);
+
+  const handleMicRelease = useCallback(() => {
+    if (
+      !micLatchedRef.current &&
+      ptt.state === "recording" &&
+      Date.now() - micPressAtRef.current < CLICK_TOGGLE_MS
+    ) {
+      setLatch(true); // a quick tap = click-to-start; keep recording
+      return;
+    }
+    setLatch(false);
+    void handlePTTUp();
+  }, [handlePTTUp, ptt.state, setLatch]);
+
   /* Phase 6 — voice-activated talk (Silero VAD). The mic runs only while it's
      the user's turn AND the avatar is not speaking/thinking (echo guard). */
   const ended = playerState === "ended" || conversationEnded;
   const canStart = !started && !ended && Boolean(script);
+
+  /* Space mirrors the mic button — gated exactly like its render (user's turn,
+     call not over), ignored while typing and on auto-repeat. */
+  useEffect(() => {
+    const typing = (target: EventTarget | null) =>
+      target instanceof HTMLElement &&
+      target.closest("input, textarea, select, [contenteditable='true']");
+    const accept = () => showUserTurn && !ended;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.code !== "Space" || e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (typing(e.target) || !accept()) return;
+      e.preventDefault();
+      handleMicPress();
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.code !== "Space") return;
+      if (typing(e.target) || !accept()) return;
+      e.preventDefault();
+      handleMicRelease();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+    };
+  }, [showUserTurn, ended, handleMicPress, handleMicRelease]);
 
   const vadWindow =
     talkMode === "vad" &&
@@ -414,7 +481,7 @@ export function CallScreen() {
 
         {showUserTurn && !ended && (
           <div className="absolute inset-x-0 bottom-24 z-30 flex justify-center px-4">
-            <div className="flex w-[26rem] max-w-full flex-col gap-3 rounded-xl border bg-card/95 p-4 shadow-lg backdrop-blur">
+            <div className="flex w-full max-w-[26rem] flex-col gap-3 rounded-xl border bg-card/95 p-4 shadow-lg backdrop-blur">
               {brainPhase === "thinking" ? (
                 <div className="flex items-center gap-2 text-sm text-foreground">
                   <Loader2 className="size-4 animate-spin text-accent" />
@@ -464,14 +531,22 @@ export function CallScreen() {
                   </p>
                   <p className="flex items-center gap-2 text-sm text-foreground">
                     <span className="size-2 animate-pulse rounded-full bg-destructive" />
-                    Keep holding to speak — release when done.
+                    {micLatched
+                      ? "Recording hands-free — click the mic or press Space to send."
+                      : "Keep holding to speak — release when done."}
                   </p>
                 </>
               ) : (
                 <>
-                  <p className="text-xs font-medium uppercase tracking-wide text-primary">
-                    Your turn
-                  </p>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs font-medium uppercase tracking-wide text-primary">
+                      Your turn
+                    </p>
+                    {/* §7c.5 — talk mode on the primary surface, right where
+                        it takes effect (switching live re-evaluates the VAD
+                        window). */}
+                    <TalkModeSelector compact />
+                  </div>
                   {!adaptive && activeTurn?.speaker === "user" && activeTurn.jp && (
                     <p className="text-sm text-foreground">
                       Try: <span className="font-medium">{activeTurn.jp}</span>
@@ -487,10 +562,10 @@ export function CallScreen() {
                   )}
                   <button
                     type="button"
-                    onPointerDown={() => void handlePTTDown()}
-                    onPointerUp={() => void handlePTTUp()}
-                    onPointerLeave={() => void handlePTTUp()}
-                    onPointerCancel={() => void handlePTTUp()}
+                    onPointerDown={() => handleMicPress()}
+                    onPointerUp={() => handleMicRelease()}
+                    onPointerLeave={() => handleMicRelease()}
+                    onPointerCancel={() => handleMicRelease()}
                     disabled={!ptt.supported}
                     className={cn(
                       "flex select-none touch-none items-center justify-center gap-2 rounded-lg border border-accent/40 bg-accent/15 px-4 py-3 text-sm font-semibold text-accent transition-colors hover:bg-accent/25 active:bg-accent/30",
@@ -498,7 +573,7 @@ export function CallScreen() {
                     )}
                   >
                     <Mic className="size-4" />
-                    Hold to speak
+                    {micLatched ? "Click or press Space to send" : "Hold to speak"}
                   </button>
                   {conversationError && (
                     <p className="text-xs text-destructive">{conversationError}</p>
@@ -548,7 +623,24 @@ export function CallScreen() {
           onDismissTap={() => setTapHelp(null)}
         />
 
-        <aside className="absolute right-0 top-0 z-20 hidden h-full w-80 flex-col border-l bg-card/70 backdrop-blur md:flex">
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={() => setTranscriptOpen((open) => !open)}
+          aria-expanded={transcriptOpen}
+          aria-label="Toggle transcript"
+          title="Transcript"
+          className="absolute right-3 top-3 z-30 bg-card/70 backdrop-blur md:hidden"
+        >
+          <PanelRight className="size-4" />
+        </Button>
+
+        <aside
+          className={cn(
+            "absolute right-0 top-0 z-20 h-full w-80 max-w-full flex-col border-l bg-card/80 backdrop-blur md:flex",
+            transcriptOpen ? "flex" : "hidden",
+          )}
+        >
           <div className="flex items-center justify-between border-b px-4 py-2">
             <p className="text-sm font-medium text-primary">Transcript</p>
             {isSpeaking && (

@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Check, Loader2, Mic, Send, Sparkles } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Loader2, Mic, Send, Sparkles } from "lucide-react";
 import type { DocInput, GroundingAnswer, RoleId, RunContext } from "@/shared/contract";
 import type { ChatMessage } from "@/lib/llm";
 import { useAppStore, type SetupStep } from "@/state/app-store";
@@ -214,10 +214,18 @@ export function SetupScreen() {
   const { run, sendIntent } = useSession();
 
   /* Persistent chat transcript — the comic bubble is transient, this never
-     loses a line. Every guide line (spoken or not) and every user turn lands here. */
+     loses a line. Every guide line (spoken or not) and every user turn lands
+     here; §7c.4 — an exact repeat of the LAST line bumps its ×N counter
+     instead of appending a duplicate bubble. */
   const [chat, setChat] = useState<ChatEntry[]>([]);
   const appendChat = useCallback((entry: ChatEntry) => {
-    setChat((prev) => [...prev, entry]);
+    setChat((prev) => {
+      const last = prev[prev.length - 1];
+      if (last && last.role === entry.role && last.text === entry.text) {
+        return [...prev.slice(0, -1), { ...last, count: (last.count ?? 1) + 1 }];
+      }
+      return [...prev, entry];
+    });
   }, []);
   const handleShowGuide = useCallback(
     (line: GuideLine) => {
@@ -501,11 +509,6 @@ export function SetupScreen() {
     ],
   );
 
-  const stepIndex = useMemo(
-    () => STEPS.findIndex((s) => s.key === state.setupStep),
-    [state.setupStep],
-  );
-
   /* Phase 7b slice 6 — the run delivered a scenario: drop script + glossary
      into the store, launch the practice avatar, and move to the call. The
      selection is the user's pick when they made one, else the configured
@@ -610,36 +613,6 @@ export function SetupScreen() {
 
         <div className="mt-3">
           <RunStatus />
-        </div>
-
-        <div className="mt-4 flex items-center gap-1.5">
-          {STEPS.map((step, i) => {
-            const done = i < stepIndex;
-            const active = i === stepIndex;
-            return (
-              <div key={step.key} className="flex flex-1 items-center gap-1.5">
-                <div
-                  className={cn(
-                    "flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-[11px] font-medium",
-                    done && "border-primary bg-primary text-primary-foreground",
-                    active && "border-primary bg-primary/10 text-primary",
-                    !done && !active && "border-border text-muted-foreground",
-                  )}
-                >
-                  {done ? <Check className="size-3.5" /> : i + 1}
-                </div>
-                <span
-                  className={cn(
-                    "text-xs",
-                    active ? "font-medium text-foreground" : "text-muted-foreground",
-                  )}
-                >
-                  {step.label}
-                </span>
-                {i < STEPS.length - 1 && <div className="h-px flex-1 bg-border" />}
-              </div>
-            );
-          })}
         </div>
 
         <div className="mt-5">

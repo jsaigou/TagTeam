@@ -8,6 +8,7 @@ import { LoginScreen } from "@/components/auth/LoginScreen";
 import { AvatarStage } from "@/components/stage/AvatarStage";
 import { AvatarOverlay } from "@/components/stage/AvatarOverlay";
 import { AppHeader } from "@/components/app/AppHeader";
+import { AppFooter } from "@/components/app/AppFooter";
 import { CallHeaderControls } from "@/components/call/CallHeaderControls";
 import { SetupScreen } from "@/components/setup/SetupScreen";
 import { CallScreen } from "@/components/call/CallScreen";
@@ -46,6 +47,10 @@ function AppContent() {
             </div>
           ))}
       </div>
+
+      {/* §7c.1 — the missing app-level footer (Terms / Privacy / Attributions).
+          Never over the in-call stage. */}
+      {state.screen !== "call" && <AppFooter />}
     </div>
   );
 }

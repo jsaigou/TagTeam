@@ -5,10 +5,15 @@ import { cn } from "@/lib/utils";
 export type ChatEntry = {
   role: "luna" | "user";
   text: string;
+  /** §7c.4 — consecutive repeats of the same line collapse into one bubble
+   *  with this counter instead of spamming the transcript (Luna re-states a
+   *  step line, the same error twice, …). */
+  count?: number;
 };
 
-/** Persistent transcript of the setup-screen conversation with Luna. Unlike the
- *  transient comic bubble, entries here never disappear. */
+/** The persistent transcript of the setup-screen conversation with Luna.
+ *  Unlike the transient comic bubble, entries here never disappear — but
+ *  identical back-to-back lines are grouped rather than duplicated. */
 export function ChatBox({ messages }: { messages: ChatEntry[] }) {
   const endRef = useRef<HTMLDivElement>(null);
 
@@ -43,7 +48,14 @@ export function ChatBox({ messages }: { messages: ChatEntry[] }) {
             {m.role === "luna" && (
               <Sparkles className="mt-0.5 size-3.5 shrink-0 text-primary" />
             )}
-            <span>{m.text}</span>
+            <span>
+              {m.text}
+              {typeof m.count === "number" && m.count > 1 && (
+                <span className="ml-1.5 inline-flex items-center rounded-full bg-muted px-1.5 py-0.5 align-middle text-[10px] font-medium text-muted-foreground">
+                  ×{m.count}
+                </span>
+              )}
+            </span>
           </div>
         </div>
       ))}
