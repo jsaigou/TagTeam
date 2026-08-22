@@ -6,7 +6,6 @@ import {
   ScanLine,
   Smartphone,
   Trash2,
-  UploadCloud,
 } from "lucide-react";
 import type { DocInput, ImageDoc } from "@/shared/contract";
 import { useSession } from "@/state/session-context";
@@ -26,8 +25,10 @@ function toImageDoc(dataUrl: string, mimeType: string): ImageDoc {
   return { kind: "image", dataUrl, mimeType };
 }
 
-/** An equal-size square action tile in the doc-capture grid. */
-function ActionTile({
+/** A compact action pill in the doc-capture row. QA round: the old square
+ *  tiles were huge and pushed each other into a second row — these all fit
+ *  on one line, with the hint demoted to a tooltip. */
+function ActionButton({
   icon,
   label,
   hint,
@@ -45,16 +46,16 @@ function ActionTile({
       type="button"
       onClick={onClick}
       disabled={disabled}
+      title={hint}
       className={cn(
-        "flex aspect-square flex-col items-center justify-center gap-2 rounded-xl border bg-card text-center transition-colors",
+        "flex items-center gap-2 rounded-lg border bg-card px-3 py-2 text-sm font-medium transition-colors",
         disabled
           ? "cursor-not-allowed opacity-50"
           : "hover:border-primary/60 hover:bg-accent/20 active:bg-accent/30",
       )}
     >
-      <span className="rounded-full bg-secondary p-3 text-primary">{icon}</span>
-      <span className="px-2 text-sm font-medium leading-tight">{label}</span>
-      {hint && <span className="px-2 text-[11px] leading-tight text-muted-foreground">{hint}</span>}
+      <span className="rounded-full bg-secondary p-1.5 text-primary">{icon}</span>
+      {label}
     </button>
   );
 }
@@ -115,62 +116,50 @@ export function DocUpload({ onAnalyzed, busy }: DocUploadProps) {
   };
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="grid grid-cols-2 gap-2">
-        <ActionTile
-          icon={<ImagePlus className="size-6" />}
-          label="Upload a photo"
-          hint="From your device"
+    <div
+      className="flex flex-col gap-4"
+      onDragOver={(e) => {
+        e.preventDefault();
+        setDragging(true);
+      }}
+      onDragLeave={() => setDragging(false)}
+      onDrop={onDrop}
+    >
+      {/* One row of capture actions; the whole step doubles as the drop zone. */}
+      <div
+        className={cn(
+          "flex flex-wrap items-center gap-2 rounded-xl border border-dashed p-2 transition-colors",
+          dragging ? "border-ring bg-accent/20" : "border-border",
+        )}
+      >
+        <ActionButton
+          icon={<ImagePlus className="size-4" />}
+          label="Upload photo"
+          hint="From your device — or drop images anywhere in this box"
           onClick={() => inputRef.current?.click()}
         />
-        <ActionTile
-          icon={<Smartphone className="size-6" />}
-          label="Scan with smartphone"
+        <ActionButton
+          icon={<Smartphone className="size-4" />}
+          label="Scan with phone"
           hint="Camera + remote control"
           onClick={() => setPairOpen(true)}
         />
         {webcamAvailable && (
-          <ActionTile
-            icon={<Camera className="size-6" />}
+          <ActionButton
+            icon={<Camera className="size-4" />}
             label="Use webcam"
             hint="Desktop camera"
             onClick={() => setScanOpen(true)}
           />
         )}
         {scannerAvailable && (
-          <ActionTile
-            icon={<ScanLine className="size-6" />}
-            label="Scan"
+          <ActionButton
+            icon={<ScanLine className="size-4" />}
+            label="Scanner"
             hint="Document scanner"
             onClick={() => setScanOpen(true)}
           />
         )}
-        <div
-          role="button"
-          tabIndex={0}
-          onClick={() => inputRef.current?.click()}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") inputRef.current?.click();
-          }}
-          onDragOver={(e) => {
-            e.preventDefault();
-            setDragging(true);
-          }}
-          onDragLeave={() => setDragging(false)}
-          onDrop={onDrop}
-          className={cn(
-            "flex aspect-square cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed bg-card text-center transition-colors",
-            dragging ? "border-ring bg-accent/20" : "border-border",
-          )}
-        >
-          <span className="rounded-full bg-secondary p-3">
-            <UploadCloud className="size-6 text-primary" />
-          </span>
-          <span className="px-2 text-sm font-medium leading-tight">Drop photos here</span>
-          <span className="px-2 text-[11px] leading-tight text-muted-foreground">
-            Multiple pages are fine
-          </span>
-        </div>
       </div>
 
       {pages.length > 0 && (
