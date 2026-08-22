@@ -229,6 +229,8 @@ are keyed by session, independent of WS connections, and cleared when the room e
 | 3 — Real conversation | `/api/stt` (whisper.cpp), push-to-talk, `nextTurn` adaptive brain, listening/thinking | ✅ done — see below |
 | 4 — Coaching + showcase | emotion/intensity wiring, motion catalog browser, roles, difficulty/speed, target rules in cheat sheet, Perxona branding | ✅ done — see below |
 | 5 — Companion + persistence | in-app camera QR scanning, per-role avatar packs, scenario persistence, Connect Chatbot nextTurn, phone vocab picker, BYO TTS | ✅ done — see below |
+| 7b — client→server migration | background job runner, step graph + run engine, confirmTarget gate, planScenario/parseDocument/cheatSheet as graph steps, intent-message UI | ✅ done — see below |
+| 7c — UI usability | chrome cleanup (stepper removed, app footer, mobile transcript access), main-surface audio controls + chat cleanliness | ✅ done |
 
 **Phase 1 completed:** presenter layer at full 0.2.0 surface (`setListening/setThinking`,
 `present(text,{emotion,intensity})`, `presentWithAudio`, `muteAudio`, `updateCameraAngle`,
@@ -338,6 +340,16 @@ selection) and attaches the cheat sheet when the call finishes. The setup screen
 into the app store, relaunches the avatar with the stored selection (or the role's pack) and jumps
 straight to the call — or the cheat sheet when one exists. Scenarios are JSON blobs scoped by
 `userId`; ephemeral upload ids and Connect tokens are never stored.
+
+**Phase 7b completed (this round):** the client→server migration — a background job runner
+(`server/jobs.mjs`: lanes, deadlines, input-hash dedup), the step graph + run engine
+(`server/graph.mjs`), the `confirmTarget` gate with speculative execution + confirm-the-guess dedup,
+`planScenario`/`parseDocument`/`cheatSheet` migrated to server graph steps (the cheat sheet now
+generates speculatively during the call), and the intent-message UI (`intent` carries `RunContext`
+into `startRun`; `deliver` stamps `run.result` onto every `RunSnapshot`; `RunStatus` UI).
+
+**Phase 7c completed (this round):** UI usability — chrome cleanup (setup stepper removed, an app
+footer added, transcript reachable on mobile) and main-surface audio controls + chat cleanliness.
 
 ## 12. Open questions
 
