@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildCheatSheetContext, generateCheatSheet } from "./cheat-sheet";
+// @ts-expect-error server .mjs modules ship without type declarations
+import { buildCheatSheetContext as buildCheatSheetContextServer, isCheatSheet } from "../../server/cheat-sheet.mjs";
 import {
   CHEAT_SHEET_FIXTURE,
   CHEAT_SHEET_JSON,
@@ -111,5 +113,59 @@ describe("generateCheatSheet", () => {
         { config: TEST_CONFIG },
       ),
     ).rejects.toMatchObject({ kind: "invalid_response" });
+  });
+});
+
+describe("server port (server/cheat-sheet.mjs, §7b.5 migration step 7)", () => {
+  const REFERENCE = "川崎市 健康保険課 窓口 8:30-17:15";
+
+  it("buildCheatSheetContext matches the client builder's output exactly", () => {
+    const client = buildCheatSheetContext({
+      script: SIM_FIXTURE.script,
+      glossary: SIM_FIXTURE.glossary,
+      answers: ANSWERS,
+      reference: REFERENCE,
+    });
+    const server = buildCheatSheetContextServer({
+      script: SIM_FIXTURE.script,
+      glossary: SIM_FIXTURE.glossary,
+      answers: ANSWERS,
+      reference: REFERENCE,
+    });
+    expect(server).toBe(client);
+  });
+
+  it("buildCheatSheetContext omits the reference section when absent", () => {
+    const text = buildCheatSheetContextServer({
+      script: SIM_FIXTURE.script,
+      glossary: SIM_FIXTURE.glossary,
+      answers: [],
+    }) as string;
+    expect(text).not.toContain("【検索した参考情報（窓口の実態）】");
+  });
+
+  it("isCheatSheet accepts the fixture shape", () => {
+    expect(isCheatSheet(CHEAT_SHEET_FIXTURE)).toBe(true);
+  });
+
+  it("isCheatSheet rejects malformed sheets", () => {
+    expect(isCheatSheet({ goal: "just a goal" })).toBe(false);
+    expect(isCheatSheet(null)).toBe(false);
+    expect(
+      isCheatSheet({
+        goal: "g",
+        keyPhrases: [{ jp: "x", furigana: "", en: "y", when: "z" }],
+        practice: ["p"],
+      }),
+    ).toBe(false);
+    // A bad targetRule kind fails the sheet too.
+    expect(
+      isCheatSheet({
+        goal: "g",
+        keyPhrases: [],
+        practice: [],
+        targetRules: [{ id: "r1", rule: "r", source: "s", kind: "sometimes" }],
+      }),
+    ).toBe(false);
   });
 });

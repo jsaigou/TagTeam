@@ -25,8 +25,9 @@ import {
 import { isSimulationRaw, reconcileSimulation } from "../glossary.mjs";
 
 /** Render the confirmed `TargetProfile` as the same kind of free-text digest
- *  `buildSimulationContext`'s "【検索した参考情報】" section expects. */
-function buildReferenceDigest(target) {
+ *  `buildSimulationContext`'s "【検索した参考情報】" section expects. Exported
+ *  for steps/cheatSheet.mjs, whose user message carries the same digest. */
+export function buildReferenceDigest(target) {
   if (!target?.name) return undefined;
   const lines = ["【確認済みの窓口】", `名前: ${target.name}`];
   if (target.address) lines.push(`住所: ${target.address}`);

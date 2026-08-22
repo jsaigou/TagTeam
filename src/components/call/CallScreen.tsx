@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AudioLines, ChevronRight, Loader2, Mic, PhoneCall } from "lucide-react";
 import type { HoldHelp, PlayerState, TapHelp, Turn } from "@/shared/contract";
 import { useAppStore } from "@/state/app-store";
@@ -41,7 +41,7 @@ export function CallScreen() {
     [avatar.present, avatar.interrupt, avatar.subscribe],
   );
   const { player } = useScriptPlayer(playerDeps);
-  const { session, setPlayerState, setActiveTurn, onControl, onTurn, onPhase, sendPushToTalk } =
+  const { session, setPlayerState, setActiveTurn, onControl, onTurn, onPhase, sendPushToTalk, run } =
     useSession();
   const ptt = usePushToTalk();
   const { talkMode } = useTalkMode();
@@ -315,6 +315,25 @@ export function CallScreen() {
   }, [vadWindow, vad.start, vad.stop, avatar.setListening, submitUtterance]);
 
   const vadFallback = talkMode === "vad" && (!vad.supported || vad.state === "error");
+
+  /* Phase 7b slice 7 — the run's speculative cheatSheet node (server/graph.mjs)
+     delivered while the user rehearses: adopt it and attach it to the
+     persisted scenario so Finish navigates instantly. Once per runId — the
+     snapshot re-broadcasts on every job change. A null sheet (failed node) is
+     ignored without consuming the runId, and Finish's own generation stays as
+     the fallback for runs that never deliver one. */
+  const appliedSheetRunRef = useRef<string | null>(null);
+  useEffect(() => {
+    const result = run?.result;
+    if (!run || !result || appliedSheetRunRef.current === run.runId) return;
+    if (!result.cheatSheet) return;
+    appliedSheetRunRef.current = run.runId;
+    setCheatSheet(result.cheatSheet);
+    /* Attach the cheat sheet to the persisted scenario (Phase 5c). */
+    if (state.scenarioId) {
+      void updateScenario(state.scenarioId, { cheatSheet: result.cheatSheet }).catch(() => {});
+    }
+  }, [run, state.scenarioId, setCheatSheet]);
 
   const handleFinish = useCallback(async () => {
     if (!script) return;

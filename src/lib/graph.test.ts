@@ -54,6 +54,7 @@ function setup() {
   const research = controllableStep();
   const extractTargetRules = controllableStep();
   const planScenario = controllableStep();
+  const cheatSheet = controllableStep();
 
   const jobRunner = createJobRunner({
     steps: {
@@ -63,6 +64,7 @@ function setup() {
       research: { run: research.run, lane: "net" },
       extractTargetRules: { run: extractTargetRules.run, lane: "llm" },
       planScenario: { run: planScenario.run, lane: "llm" },
+      cheatSheet: { run: cheatSheet.run, lane: "llm" },
     },
   });
 
@@ -79,6 +81,7 @@ function setup() {
     research,
     extractTargetRules,
     planScenario,
+    cheatSheet,
     snapshots,
   };
 }
@@ -123,6 +126,13 @@ describe("GRAPH shape", () => {
 
   it("declares planScenario as the graph's deliverable", () => {
     expect(typeof GRAPH.planScenario.deliver).toBe("function");
+  });
+
+  it("declares cheatSheet as a speculative deliver step behind planScenario (§7b.5 step 7)", () => {
+    expect(GRAPH.cheatSheet.deps).toEqual(["planScenario"]);
+    expect(GRAPH.cheatSheet.step).toBe("cheatSheet");
+    expect(GRAPH.cheatSheet.speculative).toBe(true);
+    expect(typeof GRAPH.cheatSheet.deliver).toBe("function");
   });
 });
 
@@ -547,5 +557,118 @@ describe("deliver (planScenario's result rides the RunSnapshot)", () => {
     env.runEngine.startRun("s1", "actually, book it at the city office instead");
     await tick();
     expect(env.runEngine.getRun("s1").result).toBeUndefined();
+  });
+});
+
+describe("cheatSheet (Phase 7 plan §7b.5 migration step 7)", () => {
+  const SCRIPT = { scenarioTitle: "Dental appointment", turns: [] };
+  const GLOSSARY = [{ id: "g1", word: "予約", definition: "appointment" }];
+  const RULES = [{ id: "r1", rule: "Open weekdays 9-17", kind: "hours", source: "https://a.example" }];
+  const SHEET = {
+    goal: "Book a dental appointment.",
+    keyPhrases: [
+      { jp: "予約をお願いします", furigana: "よやくをおねがいします", en: "I'd like to book an appointment", when: "if they answer" },
+    ],
+    practice: ["Say the clinic name clearly"],
+  };
+
+  /** Drive past planScenario's completion so the speculative sheet node fires. */
+  async function drivePastPlan(env: ReturnType<typeof setup>, { failExtract = false } = {}) {
+    await driveToGate(env);
+    const run = env.runEngine.getRun("s1");
+    env.runEngine.resolveGate("s1", run.runId, "https://a.example");
+    await tick();
+    await tick();
+    if (failExtract) env.extractTargetRules.reject(new Error("scrape failed"));
+    else
+      env.extractTargetRules.resolve({
+        name: "Mejiro Dental Clinic",
+        url: "https://a.example",
+        rules: RULES,
+      });
+    await tick();
+    await tick();
+    await tick();
+    expect(env.planScenario.calls).toHaveLength(1);
+    env.planScenario.resolve({ script: SCRIPT, glossary: GLOSSARY });
+    await tick();
+    await tick();
+  }
+
+  it("starts speculatively the moment planScenario delivers, fed by its output", async () => {
+    const env = setup();
+    await drivePastPlan(env);
+
+    // The whole point of slice 7: the sheet is generated WHILE the user
+    // rehearses, at speculative priority so it can't delay Luna's blocking
+    // chat turns in the concurrency-1 llm lane.
+    expect(env.cheatSheet.calls).toHaveLength(1);
+    expect(env.cheatSheet.calls[0]).toMatchObject({
+      script: SCRIPT,
+      glossary: GLOSSARY,
+      target: { name: "Mejiro Dental Clinic", url: "https://a.example", rules: RULES },
+    });
+    const jobs = env.jobRunner.getJobs("s1");
+    expect(jobs.find((j: { step: string }) => j.step === "cheatSheet")).toMatchObject({
+      priority: "speculative",
+      status: "running",
+    });
+  });
+
+  it("never starts before planScenario completes (hard dep)", async () => {
+    const env = setup();
+    await driveToGate(env);
+    const run = env.runEngine.getRun("s1");
+    env.runEngine.resolveGate("s1", run.runId, "https://a.example");
+    await tick();
+    await tick();
+
+    // Even with everything else settled, an unfinished planScenario means no
+    // sheet input exists yet.
+    env.extractTargetRules.resolve({ name: "Mejiro Dental Clinic", url: "https://a.example", rules: RULES });
+    await tick();
+    await tick();
+    expect(env.cheatSheet.calls).toHaveLength(0);
+  });
+
+  it("merges its sheet into RunSnapshot.result without dropping the delivered scenario", async () => {
+    const env = setup();
+    await drivePastPlan(env);
+
+    const before = env.runEngine.getRun("s1").result;
+    expect(before).toMatchObject({ step: "planScenario", script: SCRIPT, glossary: GLOSSARY });
+
+    env.cheatSheet.resolve(SHEET);
+    await tick();
+    await tick();
+
+    const finalRun = env.runEngine.getRun("s1");
+    // Merge, not replace: script + glossary + target AND the sheet, in ONE snapshot.
+    expect(finalRun.result).toMatchObject({
+      script: SCRIPT,
+      glossary: GLOSSARY,
+      target: { name: "Mejiro Dental Clinic", rules: RULES },
+      cheatSheet: SHEET,
+    });
+
+    // …and on the broadcast snapshots too.
+    const last = env.snapshots[env.snapshots.length - 1] as { result?: { cheatSheet?: unknown } };
+    expect(last.result?.cheatSheet).toMatchObject(SHEET);
+  });
+
+  it("a failed sheet never fails the run nor disturbs the delivered scenario (Finish-time fallback stays)", async () => {
+    const env = setup();
+    await drivePastPlan(env);
+
+    env.cheatSheet.reject(new Error("LLM returned garbage"));
+    await tick();
+    await tick();
+    await tick();
+
+    const finalRun = env.runEngine.getRun("s1");
+    expect(finalRun.result).toMatchObject({ script: SCRIPT, glossary: GLOSSARY });
+    expect(finalRun.jobs.find((j: { step: string }) => j.step === "cheatSheet")).toMatchObject({
+      status: "failed",
+    });
   });
 });

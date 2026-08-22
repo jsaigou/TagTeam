@@ -333,13 +333,17 @@ export type RunContext = {
   docSummary?: Record<string, unknown>;
 };
 
-/** The run's deliverable once its deliver step completes — currently
- *  planScenario's script + glossary plus the confirmed target. */
+/** The run's deliverable once its deliver steps complete — planScenario's
+ *  script + glossary plus the confirmed target, and (once the speculative
+ *  cheatSheet node finishes, §7b.5 step 7) the ready-made cheat sheet. */
 export type RunResult = {
+  /** The latest deliver step to complete ("planScenario" or "cheatSheet"). */
   step: JobStep;
   script: SimScript;
   glossary: GlossaryEntry[];
   target?: TargetProfile | null;
+  /** Present once the speculative cheatSheet node completes during the call. */
+  cheatSheet?: CheatSheet | null;
 };
 
 export type RunSnapshot = {
@@ -347,7 +351,8 @@ export type RunSnapshot = {
   goal: string;
   jobs: JobSnapshot[];
   gate?: JobGate;
-  /** Present once the run's deliver step (planScenario) completes. */
+  /** Present once a run's deliver steps (planScenario, then cheatSheet)
+   *  complete; fields accumulate as each lands. */
   result?: RunResult;
 };
 

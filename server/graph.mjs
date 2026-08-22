@@ -50,10 +50,10 @@ function depsSatisfied(run, deps) {
 }
 
 /**
- * The confirmTarget sub-graph (Phase 7 plan §7b.3, slice "the confirmTarget
- * gate"). `cheatSheet`/`classifyIntent` are declared in the shared JobStep
- * union (src/shared/contract.ts) but have no graph node yet — later slices
- * add them here, additively, same as the rest of Phase 7b.
+ * The confirmTarget sub-graph (Phase 7 plan §7b.3). `classifyIntent` is
+ * declared in the shared JobStep union (src/shared/contract.ts) but is not a
+ * graph node — it's the hub's message classifier (server/intent.mjs), not a
+ * step. Later slices add further nodes additively, same as the rest of 7b.
  */
 export const GRAPH = {
   identifyTarget: {
@@ -133,6 +133,28 @@ export const GRAPH = {
       target:
         ctx.extractTargetRules ?? (ctx.confirmTarget ? { ...ctx.confirmTarget, rules: [] } : null),
     }),
+  },
+  cheatSheet: {
+    // Phase 7 plan §7b.5 migration step 7 — generated SPECULATIVELY while the
+    // user rehearses, so the sheet is ready before they press Finish instead
+    // of a fresh blocking LLM call at the end. `speculative` here means lane
+    // priority (behind Luna's blocking chat turns in the concurrency-1 llm
+    // lane), NOT gate-quarantine speculation: its hard dep is planScenario,
+    // which itself sits behind the confirmTarget gate, so nothing unconfirmed
+    // can reach it. A failed/canceled sheet never fails the run — the client
+    // keeps its Finish-time generation as fallback.
+    deps: ["planScenario"],
+    step: "cheatSheet",
+    speculative: true,
+    input: (ctx) => ({
+      script: ctx.planScenario?.script,
+      glossary: ctx.planScenario?.glossary,
+      answers: ctx.answers,
+      target: ctx.extractTargetRules ?? (ctx.confirmTarget && { ...ctx.confirmTarget, rules: [] }),
+    }),
+    // Merged into RunSnapshot.result alongside planScenario's delivery (see
+    // attachNode) so one snapshot carries script+glossary+target AND sheet.
+    deliver: (ctx) => ({ step: "cheatSheet", cheatSheet: ctx.cheatSheet ?? null }),
   },
 };
 
@@ -217,7 +239,11 @@ export function createRunEngine({ jobRunner, graph = GRAPH } = {}) {
         run.ctx[nodeId] = result;
         run.nodes[nodeId].status = "done";
         if (typeof graph[nodeId]?.deliver === "function") {
-          run.result = graph[nodeId].deliver(run.ctx);
+          // MERGE, not replace: multiple deliver steps (planScenario's
+          // script+glossary+target, cheatSheet's sheet) accumulate into one
+          // RunSnapshot.result. Later completions win per-field; a deliver
+          // step that never completes simply leaves the earlier fields in.
+          run.result = { ...run.result, ...graph[nodeId].deliver(run.ctx) };
         }
         notifyRun(run);
         tryAdvance(run);
@@ -268,7 +294,10 @@ export function createRunEngine({ jobRunner, graph = GRAPH } = {}) {
       if (def.kind === "gate") {
         openGate(run, nodeId, def);
       } else {
-        startNode(run, nodeId, def, { priority: "blocking" });
+        // A `speculative` node (e.g. cheatSheet) starts at speculative lane
+        // priority — it must never delay Luna's blocking chat turns in the
+        // concurrency-1 llm lane. Everything else is blocking.
+        startNode(run, nodeId, def, { priority: def.speculative ? "speculative" : "blocking" });
       }
     }
   }
