@@ -28,6 +28,14 @@ const STATUS_COLOR: Record<string, string> = {
   closed: "bg-destructive",
 };
 
+/** Human labels for the setup flow's internal step keys (the desktop
+ *  stepper chrome is gone — this keeps the phone's status card readable). */
+const SETUP_STEP_LABELS: Record<string, string> = {
+  doc: "Adding your document…",
+  grounding: "Setting your goal…",
+  scenario: "Picking the scenario…",
+};
+
 type SentPage = { uploadId: string; dataUrl: string };
 
 export function PhoneApp() {
@@ -245,9 +253,9 @@ export function PhoneApp() {
             <p className="text-sm text-foreground">
               {snapshot?.scriptTitle ?? snapshot?.summary ?? "Setting up the call…"}
             </p>
-            {snapshot?.screen === "setup" && (
+            {snapshot?.screen === "setup" && snapshot.setupStep && (
               <p className="text-xs text-muted-foreground">
-                Step: {snapshot.setupStep}
+                {SETUP_STEP_LABELS[snapshot.setupStep] ?? "Setting up the call…"}
               </p>
             )}
           </div>

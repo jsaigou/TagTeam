@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AudioLines, ChevronRight, Loader2, Mic, PhoneCall } from "lucide-react";
+import { AudioLines, ChevronRight, Loader2, Mic, PanelRight, PhoneCall } from "lucide-react";
 import type { HoldHelp, PlayerState, TapHelp, Turn } from "@/shared/contract";
 import { useAppStore } from "@/state/app-store";
 import { useAvatar } from "@/state/avatar-context";
@@ -54,6 +54,10 @@ export function CallScreen() {
   const [holdHelp, setHoldHelp] = useState<HoldHelp | null>(null);
   const [tapHelp, setTapHelp] = useState<TapHelp | null>(null);
   const [started, setStarted] = useState(false);
+  /* §7c.2 — the transcript aside is desktop-only (md+); below md this toggle
+     slides the same panel in as an overlay so the transcript is reachable on
+     phones/tablets instead of invisible. */
+  const [transcriptOpen, setTranscriptOpen] = useState(false);
   /* Phase 3 — adaptive conversation state. */
   const [adaptive, setAdaptive] = useState(false);
   const [userTurnActive, setUserTurnActive] = useState(false);
@@ -414,7 +418,7 @@ export function CallScreen() {
 
         {showUserTurn && !ended && (
           <div className="absolute inset-x-0 bottom-24 z-30 flex justify-center px-4">
-            <div className="flex w-[26rem] max-w-full flex-col gap-3 rounded-xl border bg-card/95 p-4 shadow-lg backdrop-blur">
+            <div className="flex w-full max-w-[26rem] flex-col gap-3 rounded-xl border bg-card/95 p-4 shadow-lg backdrop-blur">
               {brainPhase === "thinking" ? (
                 <div className="flex items-center gap-2 text-sm text-foreground">
                   <Loader2 className="size-4 animate-spin text-accent" />
@@ -548,7 +552,24 @@ export function CallScreen() {
           onDismissTap={() => setTapHelp(null)}
         />
 
-        <aside className="absolute right-0 top-0 z-20 hidden h-full w-80 flex-col border-l bg-card/70 backdrop-blur md:flex">
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={() => setTranscriptOpen((open) => !open)}
+          aria-expanded={transcriptOpen}
+          aria-label="Toggle transcript"
+          title="Transcript"
+          className="absolute right-3 top-3 z-30 bg-card/70 backdrop-blur md:hidden"
+        >
+          <PanelRight className="size-4" />
+        </Button>
+
+        <aside
+          className={cn(
+            "absolute right-0 top-0 z-20 h-full w-80 max-w-full flex-col border-l bg-card/80 backdrop-blur md:flex",
+            transcriptOpen ? "flex" : "hidden",
+          )}
+        >
           <div className="flex items-center justify-between border-b px-4 py-2">
             <p className="text-sm font-medium text-primary">Transcript</p>
             {isSpeaking && (
