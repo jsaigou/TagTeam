@@ -565,10 +565,16 @@ export function SetupScreen() {
 
   /* Invite state — a clean hero (QA round): a short explainer + one prominent
      CTA. No avatar, chat, or mic here; the avatar lane reservations only
-     apply once the setup panel is open. */
+     apply once the setup panel is open. While the door intro runs the hero
+     hides entirely so the doorway reveals Luna (stage z-0), not this copy. */
   if (!setupOpen) {
     return (
-      <div className="flex min-h-svh flex-col items-center justify-center px-4 pb-16">
+      <div
+        className={cn(
+          "flex min-h-svh flex-col items-center justify-center px-4 pb-16",
+          state.introPhase === "running" && "invisible",
+        )}
+      >
         <div className="flex w-full max-w-xl flex-col items-center gap-5 text-center">
           <h1 className="text-3xl font-bold tracking-tight text-primary sm:text-4xl">
             Practice your Japanese office calls

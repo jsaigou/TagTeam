@@ -20,6 +20,9 @@ export function AvatarGuide() {
   const { guide, session, clearGuide } = useAvatar();
   const { state } = useAppStore();
   const isCall = state.screen === "call";
+  /* During the door intro Luna stands in the centered doorway, not the left
+     lane — anchor the bubble above the doorway instead. */
+  const isIntro = state.screen === "setup" && state.introPhase === "running";
 
   /* Auto-dismiss after a reading-time delay; restart on every new line. */
   useEffect(() => {
@@ -36,7 +39,9 @@ export function AvatarGuide() {
         "pointer-events-none absolute z-20 flex justify-center px-4",
         isCall
           ? "inset-x-0 bottom-6"
-          : "left-1/2 top-[10.5rem] -translate-x-1/2 -translate-y-full md:left-[calc(2rem_+_min(18vmin,8.5rem))] md:top-1/2 md:-translate-x-10 md:-translate-y-[calc(50%_+_min(18vmin,8.5rem)_+_1.5rem)]",
+          : isIntro
+            ? "inset-x-0 top-24"
+            : "left-1/2 top-[10.5rem] -translate-x-1/2 -translate-y-full md:left-[calc(2rem_+_min(18vmin,8.5rem))] md:top-1/2 md:-translate-x-10 md:-translate-y-[calc(50%_+_min(18vmin,8.5rem)_+_1.5rem)]",
       )}
     >
       <div className="pointer-events-auto relative flex max-w-md items-start gap-2.5 rounded-2xl rounded-bl-sm border border-border bg-card/95 px-5 py-3.5 shadow-xl backdrop-blur">

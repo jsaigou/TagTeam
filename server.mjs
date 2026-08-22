@@ -238,7 +238,13 @@ app.all("/api/auth/*splat", async (req, res) => {
   }
 });
 
-app.use(express.json());
+// Global JSON body parser. The limit MUST sit above the largest route-level
+// intent (/api/stt and /api/audio accept 15 MB of base64 WAV — real spoken
+// utterances are typically 0.3–2 MB): with the express default (100 KB) the
+// global parser 413s long before a route's own bigger parser runs, which is
+// exactly what silently killed push-to-talk STT in production for weeks
+// (short dev clips squeaked under 100 KB; real sentences never do).
+app.use(express.json({ limit: "25mb" }));
 
 /** Express middleware: require a valid session, else 401. Attaches req.user. */
 async function requireAuth(req, res, next) {
@@ -736,9 +742,18 @@ app.delete(
 );
 
 // Static frontend (production build). Dev uses Vite with a /api proxy.
+// index.html is served no-store: hashed asset filenames handle caching, and a
+// stale shell referencing purged chunks is worse than one extra revalidation.
 if (existsSync(DIST_DIR)) {
-  app.use(express.static(DIST_DIR));
+  app.use(
+    express.static(DIST_DIR, {
+      setHeaders(res, filePath) {
+        if (filePath.endsWith(".html")) res.setHeader("Cache-Control", "no-store");
+      },
+    }),
+  );
   app.get(/^\/(?!api\/).*/, (_req, res) => {
+    res.setHeader("Cache-Control", "no-store");
     res.sendFile(path.join(DIST_DIR, "index.html"));
   });
 }
