@@ -9,6 +9,7 @@ import { useCatalog } from "@/hooks/use-catalog";
 import { useGuideChat, type GuideChatState } from "@/hooks/use-guide-chat";
 import { resolveDefaults } from "@/lib/presets";
 import { DEFAULT_VOICE_ID } from "@/lib/presets";
+import { PANEL_HEADER_CLEAR, PANEL_TOP } from "@/lib/avatar-window";
 import { CALL_ROLES } from "@/lib/coaching";
 import { getScenario } from "@/lib/scenario-api";
 import { uploadPage } from "@/lib/session-api";
@@ -600,16 +601,23 @@ export function SetupScreen() {
     );
   }
 
-  /* Setup pop-up — centered in the viewport (Luna keeps only her top-right
-     corner window now). Below xl the content starts under her window; from xl
-     up it centers fully with the corner card floating beside it. */
+  /* Setup card — wide (~80% of the viewport) and starting high so Luna's
+     corner window clips its top-right corner: she reads as part of the panel
+     instead of floating in distant whitespace. Geometry comes from
+     src/lib/avatar-window.ts (PANEL_TOP / PANEL_HEADER_CLEAR). */
   return (
     <>
-      <div className="flex min-h-svh flex-col items-center justify-start px-4 pb-6 pt-[calc(3.75rem_+_min(36vmin,13rem)_+_1.5rem)] xl:justify-center xl:pt-6">
-      {/* pt above mirrors CONTENT_CLEARANCE (src/lib/avatar-window.ts) so the
-          panel starts under Luna's corner window; from xl up it centers. */}
-      <div className="w-full max-w-2xl overflow-y-auto rounded-2xl border bg-card/90 p-5 shadow-xl backdrop-blur-md sm:p-6 max-h-[calc(100svh-22.5rem)] xl:max-h-[calc(100svh-3rem)]">
-        <div className="flex flex-col gap-1.5">
+      <div
+        className="flex min-h-svh flex-col items-center justify-start px-4 pb-6"
+        style={{ paddingTop: PANEL_TOP }}
+      >
+      <div className="w-full max-w-[80%] overflow-y-auto rounded-2xl border bg-card/90 p-5 shadow-xl backdrop-blur-md sm:p-6 max-h-[calc(100svh-16rem)]">
+        {/* Header row keeps right of Luna's footprint while the card top is
+            still under her window. */}
+        <div
+          className="flex flex-col gap-1.5"
+          style={{ paddingRight: PANEL_HEADER_CLEAR }}
+        >
           <div className="flex flex-col gap-1.5">
             <h2 className="text-xl font-semibold text-primary">How can I help?</h2>
             <p className="text-sm text-muted-foreground">

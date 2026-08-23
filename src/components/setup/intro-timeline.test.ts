@@ -3,25 +3,55 @@ import { describe, expect, it } from "vitest";
 import {
   computeIntro,
   DOOR_MAX_DEG,
-  DRAW_OUTER_MS,
-  DRAW_SPLIT_MS,
-  DRAW_SPLIT_START,
+  DRAW_END_MS,
   FADE_START,
   INTRO_END,
   KNOCK_1_AT,
   KNOCK_2_AT,
   OPEN_START,
   REVEAL_START,
+  STROKE_INDEX,
+  STROKE_SPANS,
+  STROKES,
   TEXTURE_MS,
   TEXTURE_START,
 } from "./intro-timeline";
+
+describe("stroke plan", () => {
+  it("draws strictly one stroke at a time — each starts only when the previous ends", () => {
+    for (let i = 1; i < STROKE_SPANS.length; i++) {
+      const prev = STROKE_SPANS[i - 1];
+      const cur = STROKE_SPANS[i];
+      expect(cur.start).toBeGreaterThanOrEqual(prev.start + prev.dur);
+    }
+  });
+
+  it("outlines first (casing) and splits last, per leaf", () => {
+    expect(STROKES[0].key).toBe("casing");
+    const order = STROKES.map((s) => s.key);
+    expect(order.indexOf("splitL")).toBeGreaterThan(order.indexOf("panelL2"));
+    expect(order.indexOf("splitR")).toBeGreaterThan(order.indexOf("panelR2"));
+    // Left leaf completes before the right leaf begins.
+    expect(order.indexOf("hingeR")).toBeGreaterThan(order.indexOf("splitL"));
+  });
+
+  it("gives longer strokes proportionally more time", () => {
+    for (const span of STROKE_SPANS) {
+      const weight = STROKES[STROKES.findIndex((s) => s.key === span.key)].weight;
+      expect(span.dur / weight).toBeCloseTo(
+        STROKE_SPANS[0].dur / STROKES[0].weight,
+        5,
+      );
+    }
+  });
+});
 
 describe("computeIntro", () => {
   it("starts fully closed and undrawn", () => {
     const f = computeIntro(0);
     expect(f.phase).toBe("draw");
-    expect(f.drawOuter).toBe(0);
-    expect(f.drawSplit).toBe(0);
+    expect(f.strokes.every((s) => s === 0)).toBe(true);
+    expect(f.inked).toBe(0);
     expect(f.texture).toBe(0);
     expect(f.doorDeg).toBe(0);
     expect(f.jamb).toBe(0);
@@ -29,17 +59,10 @@ describe("computeIntro", () => {
     expect(f.knocks).toBe(0);
   });
 
-  it("fades the dark interior in with the outline draw, fully dark before the split", () => {
-    expect(computeIntro(DRAW_OUTER_MS).jamb).toBeCloseTo(1, 5);
-    for (let t = DRAW_OUTER_MS; t < TEXTURE_START; t += 100) {
-      expect(computeIntro(t).jamb).toBeCloseTo(1, 5);
-    }
-  });
-
   it("finishes fully open, textured, faded out, both knocks fired — the skip target", () => {
     const f = computeIntro(INTRO_END + 5000);
-    expect(f.drawOuter).toBe(1);
-    expect(f.drawSplit).toBe(1);
+    expect(f.strokes.every((s) => s === 1)).toBe(true);
+    expect(f.inked).toBe(1);
     expect(f.texture).toBe(1);
     expect(f.doorDeg).toBe(DOOR_MAX_DEG);
     expect(f.jamb).toBe(0);
@@ -47,26 +70,15 @@ describe("computeIntro", () => {
     expect(f.knocks).toBe(2);
   });
 
-  it("draws the outer shape first, monotonically, before the split starts", () => {
-    let prev = -1;
-    for (let t = 0; t <= DRAW_OUTER_MS; t += 50) {
-      const draw = computeIntro(t).drawOuter;
-      expect(draw).toBeGreaterThanOrEqual(prev);
-      prev = draw;
-    }
-    expect(computeIntro(DRAW_OUTER_MS).drawOuter).toBe(1);
-    for (let t = 0; t < DRAW_SPLIT_START; t += 100) {
-      expect(computeIntro(t).drawSplit).toBe(0);
+  it("has exactly one stroke mid-draw at any moment (single hand)", () => {
+    for (let t = 1; t < DRAW_END_MS; t += 25) {
+      const active = computeIntro(t).strokes.filter((p) => p > 0 && p < 1);
+      expect(active.length).toBeLessThanOrEqual(1);
     }
   });
 
-  it("completes the center split before the texture beat begins", () => {
-    expect(computeIntro(DRAW_SPLIT_START + DRAW_SPLIT_MS).drawSplit).toBe(1);
-    for (let t = DRAW_SPLIT_START; t <= DRAW_SPLIT_START + DRAW_SPLIT_MS; t += 50) {
-      const split = computeIntro(t).drawSplit;
-      expect(split).toBeGreaterThanOrEqual(0);
-      expect(split).toBeLessThanOrEqual(1);
-    }
+  it("completes every stroke before the texture beat begins", () => {
+    expect(computeIntro(DRAW_END_MS).strokes.every((s) => s === 1)).toBe(true);
     expect(computeIntro(TEXTURE_START - 1).phase).toBe("draw");
     expect(computeIntro(TEXTURE_START).phase).toBe("texture");
   });
@@ -107,5 +119,17 @@ describe("computeIntro", () => {
     expect(nearEnd.opacity).toBeLessThan(0.05);
     expect(nearEnd.opacity).toBeGreaterThan(0);
     expect(computeIntro(INTRO_END).opacity).toBe(0);
+  });
+
+  it("exposes a plan index for every stroke key DoorsIntro renders", () => {
+    const keys = [
+      "casing",
+      "hingeL", "topL", "bottomL", "panelL1", "panelL2", "splitL",
+      "hingeR", "topR", "bottomR", "panelR1", "panelR2", "splitR",
+    ];
+    for (const key of keys) {
+      expect(STROKE_INDEX[key]).toBeDefined();
+      expect(STROKE_SPANS[STROKE_INDEX[key]].key).toBe(key);
+    }
   });
 });

@@ -3,6 +3,7 @@ import {
   computeIntro,
   INTRO_END,
   REVEAL_START,
+  STROKE_INDEX,
   type IntroFrame,
 } from "./intro-timeline";
 import {
@@ -42,25 +43,30 @@ const inkStyle = (texture: number): CSSProperties => ({
   stroke: ink(texture),
 });
 
-/** One door leaf: a hinged div that draws itself in as line art (outer edges
- *  first, then the center-split seam), settles into walnut + brass with 3D
- *  bevels, then swings open around its outer edge. */
+/** One door leaf: a hinged div that draws itself in as line art — one stroke
+ *  at a time, like a human hand (hinge edge → top → bottom → panel moldings →
+ *  center split), settles into walnut + brass with 3D bevels, then swings open
+ *  around its outer edge. `strokes` is the shared per-stroke progress array
+ *  from the intro frame; each path reads its own plan entry. */
 function Leaf({
   side,
   deg,
-  drawOuter,
-  drawSplit,
+  strokes,
   texture,
   flashing,
 }: {
   side: "left" | "right";
   deg: number;
-  drawOuter: number;
-  drawSplit: number;
+  strokes: number[];
   texture: number;
   flashing: boolean;
 }) {
   const left = side === "left";
+  const sfx = left ? "L" : "R";
+  const at = (key: string): number => {
+    const p = strokes[STROKE_INDEX[key + sfx]];
+    return 1 - (p ?? 0);
+  };
   return (
     <div
       className="absolute top-0 h-full w-1/2 will-change-transform"
@@ -124,14 +130,14 @@ function Leaf({
       >
         <g {...strokeAttrs} style={inkStyle(texture)}>
           {/* Outer edges: hinge side, top, bottom. */}
-          <path d={left ? "M2 2 L2 258" : "M98 2 L98 258"} strokeDashoffset={Math.max(0, 1 - drawOuter)} />
-          <path d="M2 2 L98 2" strokeDashoffset={Math.max(0, 1 - drawOuter)} />
-          <path d="M2 258 L98 258" strokeDashoffset={Math.max(0, 1 - drawOuter)} />
-          {/* Routed panel moldings ride the outer pass. */}
-          <rect x={left ? 14 : 16} y="26" width="70" height="88" rx="3" strokeDashoffset={Math.max(0, 1 - drawOuter)} />
-          <rect x={left ? 14 : 16} y="132" width="70" height="98" rx="3" strokeDashoffset={Math.max(0, 1 - drawOuter)} />
+          <path d={left ? "M2 2 L2 258" : "M98 2 L98 258"} strokeDashoffset={at("hinge")} />
+          <path d="M2 2 L98 2" strokeDashoffset={at("top")} />
+          <path d="M2 258 L98 258" strokeDashoffset={at("bottom")} />
+          {/* Routed panel moldings. */}
+          <rect x={left ? 14 : 16} y="26" width="70" height="88" rx="3" strokeDashoffset={at("panel1")} />
+          <rect x={left ? 14 : 16} y="132" width="70" height="98" rx="3" strokeDashoffset={at("panel2")} />
           {/* Center split — the seam that parts from its sibling, drawn last. */}
-          <path d={left ? "M98 2 L98 258" : "M2 2 L2 258"} strokeDashoffset={Math.max(0, 1 - drawSplit)} />
+          <path d={left ? "M98 2 L98 258" : "M2 2 L2 258"} strokeDashoffset={at("split")} />
         </g>
       </svg>
     </div>
@@ -228,21 +234,20 @@ export function DoorsIntro({
       <Leaf
         side="left"
         deg={frame.doorDeg}
-        drawOuter={frame.drawOuter}
-        drawSplit={frame.drawSplit}
+        strokes={frame.strokes}
         texture={frame.texture}
         flashing={flashing}
       />
       <Leaf
         side="right"
         deg={frame.doorDeg}
-        drawOuter={frame.drawOuter}
-        drawSplit={frame.drawSplit}
+        strokes={frame.strokes}
         texture={frame.texture}
         flashing={flashing}
       />
 
-      {/* Casing line art over the hole; it never rotates. */}
+      {/* Casing line art over the hole; it never rotates. Drawn FIRST — the
+          outline before any detail, like a hand sketching the frame. */}
       <svg
         className="pointer-events-none absolute inset-0 z-10 h-full w-full"
         viewBox="0 0 200 260"
@@ -251,7 +256,9 @@ export function DoorsIntro({
         <g
           {...strokeAttrs}
           style={{ ...inkStyle(frame.texture), strokeWidth: 5 }}
-          strokeDashoffset={Math.max(0, 1 - frame.drawOuter)}
+          strokeDashoffset={
+            1 - (frame.strokes[STROKE_INDEX.casing] ?? 0)
+          }
         >
           <rect x="3" y="3" width="194" height="254" />
         </g>
