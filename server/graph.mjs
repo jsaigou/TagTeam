@@ -120,6 +120,7 @@ export const GRAPH = {
       answers: ctx.answers,
       settings: ctx.settings,
       preset: ctx.preset,
+      goal: ctx.goal,
       target: ctx.extractTargetRules ?? (ctx.confirmTarget && { ...ctx.confirmTarget, rules: [] }),
     }),
     // The graph's deliverable: once this node completes, its result (plus the
@@ -261,6 +262,21 @@ export function createRunEngine({ jobRunner, graph = GRAPH } = {}) {
 
   function openGate(run, nodeId, def) {
     const candidates = def.candidates(run.ctx);
+    // An empty candidate list can never be confirmed — opening the gate would
+    // strand the run forever (the only button is "None of these", which
+    // hard-fails it). Fail the node immediately with actionable copy.
+    if (candidates.length === 0) {
+      run.nodes[nodeId] = {
+        status: "failed",
+        label: def.label ?? nodeId,
+        error: {
+          message:
+            "No web results to confirm — restate your objective with more detail, or add a document.",
+        },
+      };
+      notifyRun(run);
+      return;
+    }
     const guessId = candidates[0]?.id;
     run.gate = { nodeId, candidates, guessId };
     run.nodes[nodeId] = { status: "needs_input", label: def.label ?? nodeId };

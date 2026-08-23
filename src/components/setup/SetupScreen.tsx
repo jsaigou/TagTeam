@@ -271,11 +271,13 @@ function LunaChatPanel({
   onSend: (text: string) => void;
 }) {
   const [draft, setDraft] = useState("");
-  const thinking = state === "thinking";
 
   const submit = () => {
     const text = draft.trim();
-    if (!text || thinking) return;
+    // Never gated on `thinking`: turns are queued server-side of the hook, so
+    // messages typed while Luna thinks wait their turn instead of vanishing
+    // (the old drop-on-busy read as a dead Send button).
+    if (!text) return;
     onSend(text);
     setDraft("");
   };
@@ -301,7 +303,7 @@ function LunaChatPanel({
         <Button
           size="icon"
           onClick={submit}
-          disabled={!draft.trim() || thinking}
+          disabled={!draft.trim()}
           aria-label="Send to Luna"
           title="Send"
         >

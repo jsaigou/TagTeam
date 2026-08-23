@@ -364,8 +364,22 @@ export function attachHub(
       case "reject":
         if (current?.gate) runEngine.resolveGate(sessionId, current.runId, null);
         break;
+      case "provide_url": {
+        // A URL with nothing in flight IS the objective — the user points at
+        // the office's webpage from the start instead of restating a task.
+        // Mid-run (or gate open) it stays a no-op: the guide chat handles it.
+        const runDelivered = Boolean(current?.result);
+        if (!current || runDelivered) {
+          const extra =
+            context && typeof context === "object" && !Array.isArray(context)
+              ? context
+              : undefined;
+          runEngine.startRun(sessionId, text, extra);
+        }
+        break;
+      }
       default:
-        // provide_url / question / other: no job in this slice — the guide
+        // question / other: no job in this slice — the guide
         // chat's normal LLM turn (client-side, unrelated to this hub) handles it.
         break;
     }

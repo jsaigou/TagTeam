@@ -27,9 +27,17 @@ beforeEach(() => {
 });
 
 describe("planScenario run()", () => {
-  it("rejects a missing docSummary before calling the LLM", async () => {
-    await expect(run({ answers: ANSWERS }, ctx)).rejects.toThrow(/Document summary is missing/);
-    expect(llmChat).not.toHaveBeenCalled();
+  it("synthesizes a docSummary for document-less (URL-only) runs and calls the LLM", async () => {
+    llmChat.mockResolvedValue(chatResult(SIM_JSON));
+    const result = await run(
+      { answers: ANSWERS, goal: "https://ward.example/nenkin", target: { name: "Ward Office" } },
+      ctx,
+    );
+    expect(result.script.turns[0].speaker).toBe("bureaucrat");
+    const [messages] = llmChat.mock.calls[0];
+    const userMsg = messages.find((m: { role: string }) => m.role === "user").content;
+    expect(userMsg).toContain("なし"); // synthesized documentType
+    expect(userMsg).toContain("Ward Office"); // agency from confirmed target
   });
 
   it("builds a script + glossary from a valid LLM reply", async () => {

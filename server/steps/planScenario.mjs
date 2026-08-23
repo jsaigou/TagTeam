@@ -48,13 +48,17 @@ function parseJsonContent(content) {
   return JSON.parse(text);
 }
 
-/** @param {{ docSummary?: object, answers?: Array, settings?: object, preset?: string, target?: object }} input */
-export async function run({ docSummary, answers, settings, preset, target }, { signal, report }) {
+/** @param {{ docSummary?: object, answers?: Array, settings?: object, preset?: string, target?: object, goal?: string }} input */
+export async function run({ docSummary, answers, settings, preset, target, goal }, { signal, report }) {
+  // Document-less runs are first-class now (URL-only or spoken objectives):
+  // synthesize the context block the sim prompt expects from what we DO know.
   if (!docSummary) {
-    throw Object.assign(
-      new Error("Document summary is missing — please go back and re-upload the document."),
-      { status: 400 },
-    );
+    docSummary = {
+      documentType: "なし（書類なし・ウェブページ／口頭の用件）",
+      issuingAgency: target?.name ?? "",
+      purpose: goal || target?.name || "市区役所への電話",
+      keyFields: [],
+    };
   }
 
   const voice = VOICE_PRESETS[preset] ?? VOICE_PRESETS[DEFAULT_VOICE_PRESET];

@@ -45,6 +45,11 @@ export function useGuideChat(options: GuideChatOptions) {
   const [error, setError] = useState<string | null>(null);
   const busyRef = useRef(false);
   const [voiceSession, setVoiceSession] = useState(false);
+  /* Serialized turn queue: text sent while a turn is running is queued, not
+     dropped — the homelab LLM legitimately takes 40–80s per reply, and
+     silently eating everything typed during that window read as a dead send
+     button. */
+  const queueRef = useRef<Promise<void>>(Promise.resolve());
 
   /* Shared LLM turn: build the guide context for `input` and hand the reply back. */
   const runTurn = useCallback(async (input: string) => {
@@ -71,12 +76,21 @@ export function useGuideChat(options: GuideChatOptions) {
     }
   }, []);
 
-  /* STT → Luna turn. Claims busyRef BEFORE the STT await so a concurrent
-     utterance/text send can't start a second overlapping turn. */
+  /* Chain a turn onto the queue. runTurn handles its own errors, but the
+     chain itself must never reject (that would poison every later turn). */
+  const enqueueTurn = useCallback((input: string) => {
+    const trimmed = input.trim();
+    if (!trimmed) return;
+    queueRef.current = queueRef.current
+      .then(() => runTurn(trimmed))
+      .catch(() => {});
+  }, [runTurn]);
+
+  /* STT → Luna turn. The queue serializes turns, so an utterance transcribed
+     while a previous turn is still running waits its turn instead of being
+     dropped. */
   const submitAudio = useCallback(
     async (audio: VoiceTalkResult) => {
-      if (busyRef.current) return;
-      busyRef.current = true;
       try {
         const { text } = await transcribeAudio({
           audioBase64: audio.audioBase64,
@@ -85,24 +99,25 @@ export function useGuideChat(options: GuideChatOptions) {
         });
         const trimmed = text.trim();
         if (trimmed) optionsRef.current.onUserInput?.(trimmed);
-        await runTurn(text);
+        enqueueTurn(text);
       } catch (err) {
-        busyRef.current = false;
         setState("error");
         setError(
           err instanceof Error ? err.message : "Sorry — I couldn't hear that. Please try again.",
         );
       }
     },
-    [runTurn],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
   );
 
-  /* Talk button: press to open a voice-activated session, press again to stop. */
+  /* Talk button: press to open a voice-activated session, press again to stop.
+     Safe even mid-turn — capture auto-pauses while turns run and queued
+     utterances are handled in order. */
   const startVoice = useCallback(() => {
-    if (busyRef.current) return;
     setError(null);
     setVoiceSession(true);
-    setState("listening");
+    setState((s) => (s === "thinking" ? s : "listening"));
   }, []);
 
   const stopVoice = useCallback(() => {
@@ -136,11 +151,9 @@ export function useGuideChat(options: GuideChatOptions) {
 
   const sendText = useCallback(
     (text: string) => {
-      if (busyRef.current) return;
-      if (!text.trim()) return;
-      void runTurn(text);
+      enqueueTurn(text);
     },
-    [runTurn],
+    [enqueueTurn],
   );
 
   const clearError = useCallback(() => setError(null), []);
