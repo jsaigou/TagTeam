@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { usePushToTalk, type PushToTalkResult } from "@/hooks/use-push-to-talk";
-import { useVoiceTalk } from "@/hooks/use-voice-talk";
-import { useTalkMode } from "@/state/talk-mode-context";
+import { useVoiceTalk, type VoiceTalkResult } from "@/hooks/use-voice-talk";
 import { transcribeAudio } from "@/lib/session-api";
 import { chat, type ChatMessage } from "@/lib/llm";
 
@@ -19,33 +17,34 @@ export type GuideChatOptions = {
   /** STT language override (default "en" — the guide speaks English). */
   language?: string;
   /** True while Luna's own voice is audibly playing (`session.isSpeaking`).
-   *  Gates voice-activated talk so it doesn't transcribe her own speech —
-   *  same echo guard as the in-call VAD window (CallScreen.tsx). */
+   *  Pauses capture so the VAD doesn't transcribe her own speech (echo
+   *  guard); capture resumes automatically when she finishes. */
   avatarSpeaking?: boolean;
-  /** Only run voice-activated talk while true (e.g. the setup panel is open).
-   *  Defaults to true — pass false to keep VAD off on a pre-interaction
-   *  screen even when the user's talk-mode preference is "vad". */
-  voiceTalkEnabled?: boolean;
+  /** Pre-roll audio kept before detected speech onset (ms), so the start of
+   *  an utterance — e.g. a word barging in right as listening arms — is
+   *  never clipped. */
+  preRollMs?: number;
 };
 
+/** How long before speech onset the rolling buffer keeps audio. */
+const DEFAULT_PRE_ROLL_MS = 700;
+
 /**
- * Mic → Luna on the setup screen (Phase 6 follow-up). Captures speech with
- * either hold-to-talk (`usePushToTalk`) or, when the user's talk-mode
- * preference is "vad", hands-free Silero VAD (`useVoiceTalk`) — same choice
- * as the in-call mic. Either path transcribes via `/api/stt`, asks the LLM
- * (`/api/llm`) with the guide persona + current-setup context, and hands the
- * reply back to `onReply` for `speakGuide`. Self-contained — no orchestrator.
+ * Mic → Luna on the setup screen. The Talk BUTTON owns the mic: pressing it
+ * starts a voice-activated (Silero VAD) session; speak and Luna submits
+ * automatically when you pause — no second tap. Press again to stop. While a
+ * session is active the mic keeps living across turns: it pauses during
+ * STT/LLM processing and while Luna speaks (echo guard), then re-arms.
  */
 export function useGuideChat(options: GuideChatOptions) {
   const optionsRef = useRef(options);
   optionsRef.current = options;
 
-  const ptt = usePushToTalk();
   const vad = useVoiceTalk();
-  const { talkMode } = useTalkMode();
   const [state, setState] = useState<GuideChatState>("idle");
   const [error, setError] = useState<string | null>(null);
   const busyRef = useRef(false);
+  const [voiceSession, setVoiceSession] = useState(false);
 
   /* Shared LLM turn: build the guide context for `input` and hand the reply back. */
   const runTurn = useCallback(async (input: string) => {
@@ -72,33 +71,10 @@ export function useGuideChat(options: GuideChatOptions) {
     }
   }, []);
 
-  const start = useCallback(async () => {
-    if (busyRef.current) return;
-    setError(null);
-    const recording = await ptt.start();
-    if (!recording && ptt.error) {
-      // Mic never armed (permission denied, no device, …). Surface it —
-      // falling back to "idle" silently is what made the mic look dead.
-      setState("error");
-      setError(ptt.error);
-      return;
-    }
-    setState(recording ? "listening" : "idle");
-  }, [ptt]);
-
-  const cancel = useCallback(() => {
-    ptt.cancel();
-    setState("idle");
-  }, [ptt]);
-
-  /* Shared by both capture paths: transcribe a finished clip, then run it as
-     a Luna turn. Claims busyRef BEFORE the STT await, not just inside
-     runTurn — otherwise there's a window (during transcribeAudio) where
-     busyRef still reads false and a concurrent sendText()/VAD utterance can
-     slip through and start a second turn, whose stale rejection later
-     overwrites this one's error state. */
+  /* STT → Luna turn. Claims busyRef BEFORE the STT await so a concurrent
+     utterance/text send can't start a second overlapping turn. */
   const submitAudio = useCallback(
-    async (audio: PushToTalkResult) => {
+    async (audio: VoiceTalkResult) => {
       if (busyRef.current) return;
       busyRef.current = true;
       try {
@@ -109,9 +85,6 @@ export function useGuideChat(options: GuideChatOptions) {
         });
         const trimmed = text.trim();
         if (trimmed) optionsRef.current.onUserInput?.(trimmed);
-        // runTurn re-claims (already-true) busyRef and releases it in its
-        // own `finally` — the claim above and this hand-off never leave a
-        // gap because nothing awaits in between.
         await runTurn(text);
       } catch (err) {
         busyRef.current = false;
@@ -124,40 +97,34 @@ export function useGuideChat(options: GuideChatOptions) {
     [runTurn],
   );
 
-  const stop = useCallback(async () => {
+  /* Talk button: press to open a voice-activated session, press again to stop. */
+  const startVoice = useCallback(() => {
     if (busyRef.current) return;
-    const audio = await ptt.stop();
-    if (!audio) {
-      setState("idle");
-      // Nothing usable was captured — either the toggle was released before
-      // the mic finished arming, or the clip was shorter than
-      // MIN_RECORDING_MS. Say why nothing happened instead of silently
-      // no-op'ing (that silence is exactly what made "Talk to Luna" look
-      // broken in QA).
-      setError("That was too quick — tap the mic, speak, then tap it again.");
-      return;
-    }
-    await submitAudio(audio);
-  }, [ptt, submitAudio]);
+    setError(null);
+    setVoiceSession(true);
+    setState("listening");
+  }, []);
 
-  /* Voice-activated talk (Silero VAD), gated the same way as the in-call VAD
-     window: only while it's the setup screen's turn to listen — talk mode is
-     "vad", the caller says it's an OK time to listen, Luna isn't already
-     replying, and Luna isn't currently speaking (echo guard). Push-to-talk
-     stays wired regardless, same as the call screen keeps a PTT fallback. */
-  const thinking = state === "thinking";
-  const vadActive =
-    talkMode === "vad" &&
-    (options.voiceTalkEnabled ?? true) &&
-    !thinking &&
-    !options.avatarSpeaking;
+  const stopVoice = useCallback(() => {
+    setVoiceSession(false);
+    if (!busyRef.current) setState("idle");
+  }, []);
+
+  /* Capture runs only while the session is open AND it's the user's turn:
+     paused during STT/LLM processing and while Luna is speaking (echo
+     guard), automatically re-armed when both clear. */
+  const captureActive =
+    voiceSession && !busyRef.current && !(options.avatarSpeaking ?? false);
 
   useEffect(() => {
-    if (!vadActive) {
+    if (!captureActive) {
       void vad.stop();
       return;
     }
-    void vad.start({ onUtterance: (audio) => void submitAudio(audio) });
+    void vad.start({
+      preRollMs: options.preRollMs ?? DEFAULT_PRE_ROLL_MS,
+      onUtterance: (audio) => void submitAudio(audio),
+    });
     return () => {
       void vad.stop();
     };
@@ -165,7 +132,7 @@ export function useGuideChat(options: GuideChatOptions) {
        object, which changes identity every render (same pattern as the
        in-call VAD window in CallScreen.tsx). */
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [vadActive, vad.start, vad.stop, submitAudio]);
+  }, [captureActive, vad.start, vad.stop, submitAudio]);
 
   const sendText = useCallback(
     (text: string) => {
@@ -179,15 +146,16 @@ export function useGuideChat(options: GuideChatOptions) {
   const clearError = useCallback(() => setError(null), []);
 
   return {
-    supported: ptt.supported,
+    supported: vad.supported,
     state,
     error,
-    start,
-    stop,
-    cancel,
+    /** True while the Talk-button voice session is open (mic may be briefly
+     *  paused by the echo guard / processing — the UI should still read as
+     *  "in talk mode"). */
+    voiceSessionActive: voiceSession,
+    startVoice,
+    stopVoice,
     sendText,
     clearError,
-    /** True while talk mode is "vad" and the mic is hands-free-listening. */
-    voiceTalkActive: vadActive && vad.state !== "error",
   };
 }

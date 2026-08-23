@@ -54,9 +54,15 @@ describe("computeIntro", () => {
     expect(f.inked).toBe(0);
     expect(f.texture).toBe(0);
     expect(f.doorDeg).toBe(0);
-    expect(f.jamb).toBe(0);
+    expect(f.jamb).toBe(1);
     expect(f.opacity).toBe(1);
     expect(f.knocks).toBe(0);
+  });
+
+  it("holds the opaque backing through the whole draw, fading only as doors open", () => {
+    for (let t = 1; t < OPEN_START; t += 200) {
+      expect(computeIntro(t).jamb).toBe(1);
+    }
   });
 
   it("finishes fully open, textured, faded out, both knocks fired — the skip target", () => {

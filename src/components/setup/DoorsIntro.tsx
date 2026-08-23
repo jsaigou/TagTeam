@@ -228,8 +228,10 @@ export function DoorsIntro({
         if (e.key === "Enter" || e.key === " ") finish(true);
       }}
     >
-      {/* Dark jamb behind the leaves — hides the stage until the doors part. */}
-      <div className="absolute inset-0 bg-[#171009]" style={{ opacity: frame.jamb }} />
+      {/* Opaque backing matching the page background — hides the avatar
+          (and her loading state) behind the doorway from frame zero, while
+          the strokes trace themselves on top of it. */}
+      <div className="absolute inset-0 bg-background" style={{ opacity: frame.jamb }} />
 
       <Leaf
         side="left"

@@ -40,7 +40,7 @@ export function useVoiceTalk() {
     return Boolean(navigator.mediaDevices?.getUserMedia);
   }, []);
 
-  const start = useCallback(async (opts: { onUtterance: (audio: VoiceTalkResult) => void }) => {
+  const start = useCallback(async (opts: { onUtterance: (audio: VoiceTalkResult) => void; preRollMs?: number }) => {
     if (activeRef.current || vadRef.current?.listening) return;
     activeRef.current = true;
     onUtteranceRef.current = opts.onUtterance;
@@ -55,6 +55,9 @@ export function useVoiceTalk() {
           startOnLoad: false,
           baseAssetPath: vadBaseAssetPath(),
           onnxWASMBasePath: vadWasmBasePath(),
+          /* Pre-roll: keep this much audio before detected speech onset so
+             the first word (e.g. a barge-in) is never clipped. */
+          preSpeechPadMs: opts.preRollMs,
           onSpeechStart: () => setState("speaking"),
           onSpeechEnd: (audio) => {
             setState("listening");

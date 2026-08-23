@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Loader2, Mic, Send, Sparkles } from "lucide-react";
+import { CheckCircle2, Loader2, Mic, SearchX, Send, Sparkles } from "lucide-react";
 import type { DocInput, GroundingAnswer, RoleId, RunContext } from "@/shared/contract";
+import { streamSearchReference } from "@/lib/api";
 import type { ChatMessage } from "@/lib/llm";
 import { useAppStore, type SetupStep } from "@/state/app-store";
 import { useAvatar, GREETING_WAVE_MOTION, type GuideLine } from "@/state/avatar-context";
@@ -9,7 +10,13 @@ import { useCatalog } from "@/hooks/use-catalog";
 import { useGuideChat, type GuideChatState } from "@/hooks/use-guide-chat";
 import { resolveDefaults } from "@/lib/presets";
 import { DEFAULT_VOICE_ID } from "@/lib/presets";
-import { PANEL_HEADER_CLEAR, PANEL_TOP } from "@/lib/avatar-window";
+import {
+  AVATAR_WINDOW_RIGHT,
+  AVATAR_WINDOW_SIZE,
+  AVATAR_WINDOW_TOP,
+  PANEL_HEADER_CLEAR,
+  PANEL_TOP,
+} from "@/lib/avatar-window";
 import { CALL_ROLES } from "@/lib/coaching";
 import { getScenario } from "@/lib/scenario-api";
 import { uploadPage } from "@/lib/session-api";
@@ -51,15 +58,22 @@ const GREETING_LINE = {
   en: "Hi! I'm Luna — your practice-call assistant. Let's get your call ready!",
 };
 
-/** Luna's persona for the setup-screen mic chat. Short, warm, actionable. */
+/** Luna's persona for the setup-screen mic chat. Short, warm, actionable.
+ *  Task-first, NOT document-first: the user may have a letter, a URL, an
+ *  address or just a photo of a sign. When they state their task she says she
+ *  will search for it and asks for anything that could refine that search. */
 const LUNA_GUIDE_SYSTEM: string = [
   "You are Luna, a friendly English-speaking guide inside the TagTeam app, which helps",
   "non-native residents prepare for Japanese bureaucracy phone calls. You appear during",
   "app setup, on the main screen.",
+  "The user's task can be anything — a paper letter, a webpage URL, a street address, or a photo of a sign.",
+  "Never assume they have a document, and never ask them to upload one.",
+  "When the user tells you their task, briefly acknowledge it and say you will try searching for it now,",
+  "then invite them to share any extra information — like a letter, webpage, address, or sign — that could help refine the search.",
   "Keep replies to 1-3 short, plain, warm, actionable sentences. No lists unless asked.",
-  "Refer to the current setup step and the user's document if relevant.",
-  "Never invent specific office hours or rules — if asked about a particular office, suggest",
-  "researching it or asking the staff directly. Gently steer off-topic questions back to setup.",
+  "Refer to the current setup step if relevant.",
+  "Never invent specific office hours or rules — real facts come from searching, not guessing.",
+  "Gently steer off-topic questions back to the task.",
 ].join(" ");
 
 /** Resolve a stored role back to its curated avatar/scene/voice selection. */
@@ -69,31 +83,40 @@ function packToSelection(role: RoleId): { avatarId: string; sceneId: string; voi
   return { avatarId: pack.avatarId, sceneId: pack.sceneId, voiceId: pack.voiceId ?? DEFAULT_VOICE_ID };
 }
 
-/** Click-to-toggle mic (QA fix): the hold-to-talk version read as a dead
- *  button whenever it was tapped — a quick tap captured no audio and nothing
- *  visibly happened. Now the first tap starts listening, the second sends. */
-function TalkToLunaButton({
+/** The Talk button: tap once and just speak — a voice-activated (VAD) mic
+ *  session opens, detects when you pause, and submits on its own. Tap again
+ *  to stop. Active mode glows so it's obvious the mic is live. */
+function TalkButton({
   state,
   supported,
   onStart,
   onStop,
-  compact,
 }: {
   state: GuideChatState;
   supported: boolean;
   onStart: () => void;
   onStop: () => void;
-  compact?: boolean;
 }) {
   const thinking = state === "thinking";
   const listening = state === "listening";
   const disabled = !supported || thinking;
+  /* Active talk mode reads as a live, glowing control — bigger text plus a
+     soft accent glow on both the button and its label. */
+  const glow = listening
+    ? {
+        boxShadow:
+          "0 0 18px 2px color-mix(in srgb, var(--accent) 55%, transparent), 0 0 4px 1px color-mix(in srgb, var(--accent) 40%, transparent)",
+      }
+    : undefined;
+  const labelGlow = listening
+    ? { textShadow: "0 0 10px color-mix(in srgb, var(--accent) 80%, transparent)" }
+    : undefined;
   return (
     <button
       type="button"
       onClick={() => {
         if (disabled) return;
-        if (listening) {
+        if (state === "listening") {
           onStop();
         } else {
           onStart();
@@ -104,36 +127,137 @@ function TalkToLunaButton({
         !supported
           ? "Microphone unavailable"
           : listening
-            ? "Tap again to send"
-            : undefined
+            ? "Listening — tap to stop"
+            : "Tap, then just speak"
       }
+      style={glow}
       className={cn(
-        "flex select-none items-center justify-center gap-2 rounded-lg border font-semibold transition-colors",
-        compact ? "px-3 py-2 text-xs" : "px-4 py-2.5 text-sm",
+        "flex select-none items-center justify-center gap-2 rounded-lg border font-semibold transition-all",
+        listening ? "px-5 py-3 text-base sm:text-lg" : "px-4 py-2.5 text-sm",
         listening
-          ? "border-destructive/40 bg-destructive/15 text-destructive"
+          ? "border-accent/60 bg-accent/20 text-accent"
           : "border-accent/40 bg-accent/15 text-accent hover:bg-accent/25",
         disabled && "cursor-not-allowed opacity-50",
       )}
     >
       {thinking ? (
-        <Loader2 className={cn("animate-spin", compact ? "size-3.5" : "size-4")} />
+        <Loader2 className="size-4 animate-spin" />
       ) : listening ? (
-        <span className="size-2 animate-pulse rounded-full bg-destructive" />
+        <span className="size-3 animate-pulse rounded-full bg-destructive" />
       ) : (
-        <Mic className={compact ? "size-3.5" : "size-4"} />
+        <Mic className="size-4" />
       )}
-      {listening ? "Listening… tap to send" : thinking ? "Luna is thinking…" : "Talk to Luna"}
+      <span style={labelGlow}>
+        {listening ? "Listening…" : thinking ? "Luna is thinking…" : "Talk"}
+      </span>
     </button>
   );
 }
 
-/** Persistent chat with Luna — transcript + text input + mic. The comic bubble
- *  is transient; this panel keeps every line. */
+/** Live status of the chat-triggered web search: what's being searched and
+ *  what has been found so far, as a single updating line in the chat panel. */
+type ChatSearch = {
+  query: string;
+  hits: number;
+  pagesRead: number;
+  status: "searching" | "done" | "error";
+};
+
+function SearchStatusLine({ search }: { search: ChatSearch }) {
+  return (
+    <div
+      className={cn(
+        "flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border px-3 py-2 text-xs",
+        search.status === "error"
+          ? "border-destructive/40 bg-destructive/5 text-destructive"
+          : "border-accent/30 bg-accent/5 text-muted-foreground",
+      )}
+    >
+      {search.status === "searching" ? (
+        <Loader2 className="size-3.5 shrink-0 animate-spin text-accent" />
+      ) : search.status === "done" ? (
+        <CheckCircle2 className="size-3.5 shrink-0 text-accent" />
+      ) : (
+        <SearchX className="size-3.5 shrink-0" />
+      )}
+      <span>
+        {search.status === "done"
+          ? "Searched"
+          : search.status === "error"
+            ? "Search failed"
+            : "Searching"}{" "}
+        for <span className="font-medium text-foreground">“{search.query}”</span>
+      </span>
+      {search.hits > 0 && (
+        <span className="text-accent">
+          — {search.hits} result{search.hits === 1 ? "" : "s"} found
+          {search.pagesRead > 0 ? `, ${search.pagesRead} page${search.pagesRead === 1 ? "" : "s"} read` : ""}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/** Papers appearing one by one in front of Luna while she searches — the
+ *  visual of her working through reference material. Purely decorative. */
+function SearchPapersOverlay() {
+  const papers = [
+    { left: "12%", top: "18%", rot: "-14deg", delay: 0 },
+    { left: "46%", top: "34%", rot: "9deg", delay: 0.4 },
+    { left: "24%", top: "52%", rot: "-4deg", delay: 0.8 },
+    { left: "56%", top: "12%", rot: "16deg", delay: 1.2 },
+    { left: "38%", top: "64%", rot: "-20deg", delay: 1.6 },
+  ];
+  return (
+    <div
+      aria-hidden
+      className="pointer-events-none fixed z-30 overflow-hidden rounded-2xl"
+      style={{
+        top: AVATAR_WINDOW_TOP,
+        right: AVATAR_WINDOW_RIGHT,
+        width: AVATAR_WINDOW_SIZE,
+        height: AVATAR_WINDOW_SIZE,
+      }}
+    >
+      <style>{`
+        @keyframes tt-paper-in {
+          0% { opacity: 0; transform: translate(-80%, -130%) rotate(-50deg); }
+          70% { opacity: 1; }
+          100% { opacity: 1; transform: translate(0, 0) rotate(var(--rot)); }
+        }
+        @keyframes tt-paper-float {
+          0%, 100% { transform: translate(0, 0) rotate(var(--rot)); }
+          50% { transform: translate(0, -7px) rotate(calc(var(--rot) + 3deg)); }
+        }
+      `}</style>
+      {papers.map((p, i) => (
+        <div
+          key={i}
+          className="absolute rounded-[3px] shadow-md ring-1 ring-black/10"
+          style={{
+            left: p.left,
+            top: p.top,
+            width: "32%",
+            height: "22%",
+            ["--rot" as string]: p.rot,
+            background:
+              "linear-gradient(to bottom, #fff 0%, #f7f5f0 100%)",
+            backgroundImage:
+              "repeating-linear-gradient(to bottom, transparent 0 5px, rgba(0,0,0,.09) 5px 6px), linear-gradient(to bottom, #fff 0%, #f7f5f0 100%)",
+            animation: `tt-paper-in .55s ease-out ${p.delay}s both, tt-paper-float 2.8s ease-in-out ${p.delay + 0.55}s infinite`,
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+/** Persistent chat with Luna — transcript + text input + Talk mic. */
 function LunaChatPanel({
   messages,
   state,
   supported,
+  search,
   onStart,
   onStop,
   onSend,
@@ -141,6 +265,7 @@ function LunaChatPanel({
   messages: ChatEntry[];
   state: GuideChatState;
   supported: boolean;
+  search: ChatSearch | null;
   onStart: () => void;
   onStop: () => void;
   onSend: (text: string) => void;
@@ -158,6 +283,7 @@ function LunaChatPanel({
   return (
     <div className="flex w-full flex-col gap-2">
       <ChatBox messages={messages} />
+      {search && <SearchStatusLine search={search} />}
       <div className="flex items-end gap-2">
         <Textarea
           value={draft}
@@ -168,7 +294,7 @@ function LunaChatPanel({
               submit();
             }
           }}
-          placeholder="Ask Luna… or tap the mic"
+          placeholder="Tell Luna your task… or tap Talk"
           rows={1}
           className="min-h-9 resize-none"
         />
@@ -181,13 +307,7 @@ function LunaChatPanel({
         >
           <Send className="size-4" />
         </Button>
-        <TalkToLunaButton
-          state={state}
-          supported={supported}
-          onStart={onStart}
-          onStop={onStop}
-          compact
-        />
+        <TalkButton state={state} supported={supported} onStart={onStart} onStop={onStop} />
       </div>
     </div>
   );
@@ -208,6 +328,7 @@ export function SetupScreen() {
     restoreScenario,
     setError,
     setBusy,
+    setReference,
     toCall,
     toCheatSheet,
   } = useAppStore();
@@ -264,11 +385,8 @@ export function SetupScreen() {
     buildContext: buildGuideContext,
     // Echo guard: don't listen while Luna is speaking.
     avatarSpeaking: session.isSpeaking,
-    // The mic must never listen before "Talk to Luna" is pressed — QA found
-    // hands-free VAD on this screen confusing (the button read as a no-op
-    // while the mic was already live). Voice-activated talk stays available
-    // in the call itself; here it's push-to-talk only.
-    voiceTalkEnabled: false,
+    // Pre-roll so the start of an utterance is never clipped.
+    preRollMs: 700,
   });
   /* Guide-chat failures (mic denied, STT/LLM errors, too-quick taps) land in
      the transcript itself — QA showed the small red inline text was missed,
@@ -318,9 +436,40 @@ export function SetupScreen() {
     return context;
   }, [state.answers, state.settings, state.docSummary, state.doc]);
 
+  /* Chat-triggered research: when the user tells Luna their task, she says
+     she'll search for it — and we actually do, streaming hits/pages into a
+     live status line in the chat panel while papers pile up in front of her.
+     The digest lands in the app reference store so it grounds the scenario
+     exactly like the manual Research step. */
+  const [chatSearch, setChatSearch] = useState<ChatSearch | null>(null);
+  const chatSearchCloseRef = useRef<(() => void) | null>(null);
+  const startChatSearch = useCallback(
+    (rawQuery: string) => {
+      const query = rawQuery.trim();
+      // Too short to be a meaningful search (e.g. "yes", "thanks").
+      if (query.length < 6) return;
+      chatSearchCloseRef.current?.();
+      setChatSearch({ query, hits: 0, pagesRead: 0, status: "searching" });
+      chatSearchCloseRef.current = streamSearchReference(query, {
+        onHits: (_q, results) =>
+          setChatSearch((s) => (s ? { ...s, hits: results.length } : s)),
+        onPage: (event) =>
+          setChatSearch((s) => (s ? { ...s, pagesRead: event.index } : s)),
+        onDone: (result) => {
+          setReference(result.digest);
+          setChatSearch((s) => (s ? { ...s, status: "done" } : s));
+        },
+        onError: () => setChatSearch((s) => (s ? { ...s, status: "error" } : s)),
+      });
+    },
+    [setReference],
+  );
+  useEffect(() => () => chatSearchCloseRef.current?.(), []);
+
   const sendChat = useCallback(
     (text: string) => {
       appendChat({ role: "user", text });
+      startChatSearch(text);
       /* Server side: classify the turn; a stated objective starts a run
          seeded with the setup-screen context. Upload failures must not eat
          the message — fall back to an unseeded intent. */
@@ -331,7 +480,7 @@ export function SetupScreen() {
          the hub only acts on the intents it owns (objective/confirm/reject). */
       guideChat.sendText(text);
     },
-    [appendChat, buildRunContext, sendIntent, guideChat],
+    [appendChat, buildRunContext, sendIntent, guideChat, startChatSearch],
   );
   const [analyzing, setAnalyzing] = useState(false);
   const launchedRef = useRef(false);
@@ -620,7 +769,7 @@ export function SetupScreen() {
           style={{ paddingRight: PANEL_HEADER_CLEAR }}
         >
           <div className="flex flex-col gap-1.5">
-            <h2 className="text-xl font-semibold text-primary">How can I help?</h2>
+            <h2 className="text-xl font-semibold text-primary">Getting ready for your call</h2>
             <p className="text-sm text-muted-foreground">
               Three quick steps, then we connect you with the ward office.
             </p>
@@ -634,8 +783,9 @@ export function SetupScreen() {
           messages={chat}
           state={guideChat.state}
           supported={guideChat.supported}
-          onStart={() => void guideChat.start()}
-          onStop={() => void guideChat.stop()}
+          search={chatSearch}
+          onStart={() => guideChat.startVoice()}
+          onStop={() => guideChat.stopVoice()}
           onSend={sendChat}
         />
 
@@ -687,6 +837,9 @@ export function SetupScreen() {
         <PastCalls onRestore={(id) => void handleRestore(id)} busy={state.busy} />
       </div>
       </div>
+
+      {/* Papers pile up in front of Luna while she researches the task. */}
+      {chatSearch?.status === "searching" && <SearchPapersOverlay />}
 
       {/* The corner door reveal plays over the live, centered UI. */}
       {state.introPhase === "running" && (

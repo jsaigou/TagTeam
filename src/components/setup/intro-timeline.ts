@@ -111,7 +111,7 @@ export function computeIntro(t: number): IntroFrame {
       inked: 0,
       texture: 0,
       doorDeg: 0,
-      jamb: 0,
+      jamb: 1,
       opacity: 1,
       knocks: 0,
     };
@@ -154,12 +154,13 @@ export function computeIntro(t: number): IntroFrame {
     texture:
       t <= TEXTURE_START ? 0 : clamp01((t - TEXTURE_START) / TEXTURE_MS),
     doorDeg: t <= OPEN_START ? 0 : easeInOut(openP) * DOOR_MAX_DEG,
-    /* The dark interior fades in WITH the outline draw (not before it), so the
-       line art is visible drawing itself over the avatar — a solid slab from
-       frame zero would hide the whole stroke animation. */
+    /* OPAQUE from frame zero — it hides the avatar behind the doorway for the
+       whole draw, matching the page background so the region reads as blank
+       space until the traced outline lands on it. Fades only as the leaves
+       part. */
     jamb:
       t <= OPEN_START
-        ? easeInOut(clamp01(t / DRAW_END_MS))
+        ? 1
         : 1 - easeInOut(openP),
     opacity: t < FADE_START ? 1 : 1 - easeInOut(clamp01((t - FADE_START) / FADE_MS)),
     knocks: t >= KNOCK_2_AT ? 2 : t >= KNOCK_1_AT ? 1 : 0,
