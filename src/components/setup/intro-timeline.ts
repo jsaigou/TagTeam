@@ -69,7 +69,7 @@ export function computeIntro(t: number): IntroFrame {
       drawSplit: 0,
       texture: 0,
       doorDeg: 0,
-      jamb: 1,
+      jamb: 0,
       opacity: 1,
       knocks: 0,
     };
@@ -104,7 +104,13 @@ export function computeIntro(t: number): IntroFrame {
     texture:
       t <= TEXTURE_START ? 0 : clamp01((t - TEXTURE_START) / TEXTURE_MS),
     doorDeg: t <= OPEN_START ? 0 : easeInOut(openP) * DOOR_MAX_DEG,
-    jamb: t <= OPEN_START ? 1 : 1 - easeInOut(openP),
+    /* The dark interior fades in WITH the outline draw (not before it), so the
+       line art is visible drawing itself over the avatar — a solid slab from
+       frame zero would hide the whole stroke animation. */
+    jamb:
+      t <= OPEN_START
+        ? easeInOut(clamp01(t / DRAW_OUTER_MS))
+        : 1 - easeInOut(openP),
     opacity: t < FADE_START ? 1 : 1 - easeInOut(clamp01((t - FADE_START) / FADE_MS)),
     knocks: t >= KNOCK_2_AT ? 2 : t >= KNOCK_1_AT ? 1 : 0,
   };

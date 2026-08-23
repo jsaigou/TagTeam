@@ -47,7 +47,7 @@ const GUIDES: Record<SetupStep, { en: string }> = {
 
 /** Luna's line when the doors open on her (Get Started door reveal). */
 const GREETING_LINE = {
-  en: "こんにちは! I'm Luna — your practice-call assistant. Let's get your call ready!",
+  en: "Hi! I'm Luna — your practice-call assistant. Let's get your call ready!",
 };
 
 /** Luna's persona for the setup-screen mic chat. Short, warm, actionable. */

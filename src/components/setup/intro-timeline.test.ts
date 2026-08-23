@@ -24,9 +24,16 @@ describe("computeIntro", () => {
     expect(f.drawSplit).toBe(0);
     expect(f.texture).toBe(0);
     expect(f.doorDeg).toBe(0);
-    expect(f.jamb).toBe(1);
+    expect(f.jamb).toBe(0);
     expect(f.opacity).toBe(1);
     expect(f.knocks).toBe(0);
+  });
+
+  it("fades the dark interior in with the outline draw, fully dark before the split", () => {
+    expect(computeIntro(DRAW_OUTER_MS).jamb).toBeCloseTo(1, 5);
+    for (let t = DRAW_OUTER_MS; t < TEXTURE_START; t += 100) {
+      expect(computeIntro(t).jamb).toBeCloseTo(1, 5);
+    }
   });
 
   it("finishes fully open, textured, faded out, both knocks fired — the skip target", () => {
