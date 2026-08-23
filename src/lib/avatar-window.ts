@@ -1,8 +1,8 @@
 /** Luna's home window — a square, rounded portrait card pinned to the
  *  top-right corner just below the app header. Single source of truth shared
  *  by AvatarStage (card placement), DoorsIntro (the reveal overlay covers this
- *  exact rect, so the doors dissolve onto her with no repositioning jump),
- *  AvatarGuide (bubble anchor) and the screens' narrow-viewport paddings.
+ *  exact rect, so the doors dissolve onto her with no repositioning jump) and
+ *  the setup panel (PANEL_TOP overlap).
  *
  *  Plain CSS length strings so consumers drop them into inline styles or
  *  calc(). Tailwind arbitrary classes that mirror these values (e.g. content

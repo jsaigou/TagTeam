@@ -6,7 +6,6 @@ import { useAuth } from "@/hooks/use-auth";
 import { isPhoneJoinUrl } from "@/lib/session-utils";
 import { LoginScreen } from "@/components/auth/LoginScreen";
 import { AvatarStage } from "@/components/stage/AvatarStage";
-import { AvatarOverlay } from "@/components/stage/AvatarOverlay";
 import { AppHeader } from "@/components/app/AppHeader";
 import { AppFooter } from "@/components/app/AppFooter";
 import { CallHeaderControls } from "@/components/call/CallHeaderControls";
@@ -23,8 +22,6 @@ function AppContent() {
       {/* Luna lives in her top-right corner window; the door intro reveals
           her there, and the call screen expands the stage full-screen. */}
       <AvatarStage />
-      {/* Floating avatar UI on top of the screens (guide bubble). */}
-      <AvatarOverlay />
 
       <AppHeader
         onHome={toSetup}

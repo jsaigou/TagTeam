@@ -262,12 +262,13 @@ export function SetupScreen() {
     onThinkingChange: (thinking) => session.setThinking(thinking),
     onUserInput: (text) => appendChat({ role: "user", text }),
     buildContext: buildGuideContext,
-    // Echo guard: don't listen while Luna is speaking. Only listen
-    // hands-free once the setup panel is open (not on the pre-interaction
-    // invite screen), same spirit as the in-call VAD window only running
-    // once the call has started.
+    // Echo guard: don't listen while Luna is speaking.
     avatarSpeaking: session.isSpeaking,
-    voiceTalkEnabled: setupOpen && state.introPhase === "idle",
+    // The mic must never listen before "Talk to Luna" is pressed — QA found
+    // hands-free VAD on this screen confusing (the button read as a no-op
+    // while the mic was already live). Voice-activated talk stays available
+    // in the call itself; here it's push-to-talk only.
+    voiceTalkEnabled: false,
   });
   /* Guide-chat failures (mic denied, STT/LLM errors, too-quick taps) land in
      the transcript itself — QA showed the small red inline text was missed,
