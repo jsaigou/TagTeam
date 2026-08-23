@@ -131,8 +131,12 @@ once on an empty/malformed reply (reasoning models burn the budget).
 
 ## Guide avatar (Luna)
 
-- Luna (avatar id `cc051_meeks`, `src/lib/presets.ts`) is ALWAYS on screen (`AvatarStage`, fixed
-  full-screen background) and assists the user through setup with speech bubbles (`AvatarGuide`) +
+- Luna (avatar id `cc051_meeks`, `src/lib/presets.ts`) is ALWAYS on screen as a square rounded
+  card pinned TOP-RIGHT below the header (`AvatarStage`; geometry shared via
+  `src/lib/avatar-window.ts`), expanding full-screen only during the call. Get Started plays a
+  corner door intro (`DoorsIntro.tsx` + pure `intro-timeline.ts`: draw outer → split line →
+  walnut/brass texture + knocks → swing open → silent wave → fade); Luna's greeting fires only
+  AFTER the fade completes. She assists through setup with speech bubbles (`AvatarGuide`) +
   spoken English guidance. She is the assistant, not the brand — the app has a persistent
   `AppHeader` (wordmark, Help/Settings, theme, user badge).
 - `resumeAudioPlayback` needs a trusted user gesture: the Get-started / Start-call click calls

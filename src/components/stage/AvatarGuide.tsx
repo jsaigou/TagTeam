@@ -1,6 +1,11 @@
-import { useEffect } from "react";
+import { useEffect, type ReactNode } from "react";
 import { useAppStore } from "@/state/app-store";
 import { useAvatar } from "@/state/avatar-context";
+import {
+  AVATAR_WINDOW_RIGHT,
+  AVATAR_WINDOW_SIZE,
+  AVATAR_WINDOW_TOP,
+} from "@/lib/avatar-window";
 import { KaraokeText } from "@/components/KaraokeText";
 import { cn } from "@/lib/utils";
 
@@ -10,19 +15,48 @@ function readingTime(text: string): number {
   return Math.min(8000, Math.max(2500, text.length * 55));
 }
 
-/** A comic-style speech bubble from Luna (the guide). It pops in near her
- *  portrait, auto-dismisses after a readable interval, and is purely transient
- *  — the persistent copy lives in the setup-screen chat transcript.
- *  Non-call anchoring mirrors AvatarStage's card: desktop bubble sits above
- *  the left, vertically-centered card (tail over the card's center); below md
- *  it sits above the small top-anchored card. */
+/** The comic bubble body — placement-specific tail handled by the caller. */
+function Bubble({
+  children,
+  tail,
+  speaking,
+}: {
+  children: ReactNode;
+  tail: "up" | "right";
+  speaking: boolean;
+}) {
+  return (
+    <div className="pointer-events-auto relative flex max-w-sm items-start gap-2.5 rounded-2xl rounded-bl-sm border border-border bg-card/95 px-5 py-3.5 shadow-xl backdrop-blur">
+      <span
+        className={cn(
+          "mt-1 size-2 shrink-0 rounded-full",
+          speaking ? "animate-pulse bg-accent" : "bg-primary/40",
+        )}
+      />
+      {children}
+      {/* Comic tail pointing at Luna. */}
+      <span
+        className={cn(
+          "absolute h-0 w-0",
+          tail === "right"
+            ? "-right-2 top-1/2 -translate-y-1/2 border-y-8 border-l-8 border-y-transparent border-l-card/95"
+            : "-top-2 right-10 border-x-8 border-b-8 border-x-transparent border-b-card/95",
+        )}
+      />
+    </div>
+  );
+}
+
+/** A comic-style speech bubble from Luna (the guide). It pops in beside her
+ *  corner window, auto-dismisses after a readable interval, and is purely
+ *  transient — the persistent copy lives in the setup-screen chat transcript.
+ *  Anchoring mirrors AvatarStage's card: desktop (md+) floats the bubble LEFT
+ *  of the top-right window (tail pointing right at her); below md it sits
+ *  just under the window (tail pointing up). */
 export function AvatarGuide() {
   const { guide, session, clearGuide } = useAvatar();
   const { state } = useAppStore();
   const isCall = state.screen === "call";
-  /* During the door intro Luna stands in the centered doorway, not the left
-     lane — anchor the bubble above the doorway instead. */
-  const isIntro = state.screen === "setup" && state.introPhase === "running";
 
   /* Auto-dismiss after a reading-time delay; restart on every new line. */
   useEffect(() => {
@@ -33,39 +67,40 @@ export function AvatarGuide() {
 
   if (!guide) return null;
 
-  return (
-    <div
-      className={cn(
-        "pointer-events-none absolute z-20 flex justify-center px-4",
-        isCall
-          ? "inset-x-0 bottom-6"
-          : isIntro
-            ? "inset-x-0 top-24"
-            : "left-1/2 top-[10.5rem] -translate-x-1/2 -translate-y-full md:left-[calc(2rem_+_min(18vmin,8.5rem))] md:top-1/2 md:-translate-x-10 md:-translate-y-[calc(50%_+_min(18vmin,8.5rem)_+_1.5rem)]",
-      )}
-    >
-      <div className="pointer-events-auto relative flex max-w-md items-start gap-2.5 rounded-2xl rounded-bl-sm border border-border bg-card/95 px-5 py-3.5 shadow-xl backdrop-blur">
-        <span
-          className={cn(
-            "mt-1 size-2 shrink-0 rounded-full",
-            session.isSpeaking ? "animate-pulse bg-accent" : "bg-primary/40",
-          )}
-        />
-        <KaraokeText
-          text={guide.en}
-          className="text-sm leading-relaxed text-foreground"
-        />
-        {/* Comic tail pointing down at Luna — over the card's center on
-            desktop, centered on the narrow stacked layout. */}
-        <span
-          className={cn(
-            "absolute h-0 w-0 border-x-8 border-t-8 border-x-transparent",
-            isCall ? "left-8" : "left-1/2 -translate-x-1/2 md:left-8 md:translate-x-0",
-            "-bottom-2",
-            "border-t-card/95",
-          )}
-        />
+  if (isCall) {
+    return (
+      <div className="pointer-events-none absolute inset-x-0 bottom-6 z-20 flex justify-center px-4">
+        <Bubble tail="up" speaking={session.isSpeaking}>
+          <KaraokeText text={guide.en} className="text-sm leading-relaxed text-foreground" />
+        </Bubble>
       </div>
-    </div>
+    );
+  }
+
+  return (
+    <>
+      {/* md+: left of the corner window, vertically centered on it. */}
+      <div
+        className="pointer-events-none absolute z-20 hidden md:block"
+        style={{
+          top: `calc(${AVATAR_WINDOW_TOP} + (${AVATAR_WINDOW_SIZE}) / 2)`,
+          right: `calc(${AVATAR_WINDOW_RIGHT} + ${AVATAR_WINDOW_SIZE} + 0.75rem)`,
+          transform: "translateY(-50%)",
+        }}
+      >
+        <Bubble tail="right" speaking={session.isSpeaking}>
+          <KaraokeText text={guide.en} className="text-sm leading-relaxed text-foreground" />
+        </Bubble>
+      </div>
+      {/* Below md: tucked under the window, hugging the right edge. */}
+      <div
+        className="pointer-events-none absolute inset-x-0 z-20 flex justify-end pr-3 md:hidden"
+        style={{ top: `calc(${AVATAR_WINDOW_TOP} + ${AVATAR_WINDOW_SIZE} + 0.5rem)` }}
+      >
+        <Bubble tail="up" speaking={session.isSpeaking}>
+          <KaraokeText text={guide.en} className="text-sm leading-relaxed text-foreground" />
+        </Bubble>
+      </div>
+    </>
   );
 }

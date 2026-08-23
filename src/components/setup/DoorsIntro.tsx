@@ -1,20 +1,34 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import {
   computeIntro,
-  DOORWAY_HEIGHT,
-  DOORWAY_LIFT,
-  DOORWAY_WIDTH,
   INTRO_END,
   REVEAL_START,
   type IntroFrame,
 } from "./intro-timeline";
+import {
+  AVATAR_WINDOW_RIGHT,
+  AVATAR_WINDOW_SIZE,
+  AVATAR_WINDOW_TOP,
+} from "@/lib/avatar-window";
 import { playKnock } from "@/lib/sfx";
 
-const INK = "#2c2118";
+/** Line-art ink: pure brand color while drawing, warming into a dark walnut
+ *  groove as the material transition completes. */
+const ink = (texture: number): string =>
+  `color-mix(in srgb, var(--primary) ${Math.round((1 - texture) * 100)}%, #2b1a10)`;
 
-const strokeProps = {
+const WALNUT = "linear-gradient(168deg, #6e4a30 0%, #593a2a 55%, #452b21 100%)";
+const BRASS = "radial-gradient(circle at 35% 30%, #e6c37a 0%, #c89b4a 45%, #8a6a2f 100%)";
+
+/** Bevel lighting: shadow along the hinge side, highlight catching light on
+ *  the leading (split) edge — mirrored per leaf. */
+const bevelShadow = (left: boolean): string =>
+  left
+    ? "inset 5px 0 9px rgba(0,0,0,.5), inset -4px 0 7px rgba(255,255,255,.16), inset 0 3px 5px rgba(255,255,255,.08), inset 0 -4px 7px rgba(0,0,0,.4)"
+    : "inset -5px 0 9px rgba(0,0,0,.5), inset 4px 0 7px rgba(255,255,255,.16), inset 0 3px 5px rgba(255,255,255,.08), inset 0 -4px 7px rgba(0,0,0,.4)";
+
+const strokeAttrs = {
   fill: "none",
-  stroke: INK,
   strokeLinecap: "round",
   strokeLinejoin: "round",
   /** The leaf SVGs stretch non-uniformly to the doorway box; keep the ink at
@@ -24,19 +38,26 @@ const strokeProps = {
   strokeDasharray: 1,
 } as const;
 
-/** One door leaf: a hinged div (wood fill + line art) that draws itself in,
- *  solidifies, then swings open around its outer edge. */
+const inkStyle = (texture: number): CSSProperties => ({
+  stroke: ink(texture),
+});
+
+/** One door leaf: a hinged div that draws itself in as line art (outer edges
+ *  first, then the center-split seam), settles into walnut + brass with 3D
+ *  bevels, then swings open around its outer edge. */
 function Leaf({
   side,
   deg,
-  draw,
-  fill,
+  drawOuter,
+  drawSplit,
+  texture,
   flashing,
 }: {
   side: "left" | "right";
   deg: number;
-  draw: number;
-  fill: number;
+  drawOuter: number;
+  drawSplit: number;
+  texture: number;
   flashing: boolean;
 }) {
   const left = side === "left";
@@ -50,45 +71,86 @@ function Leaf({
         backfaceVisibility: "hidden",
       }}
     >
+      {/* Walnut material, fading in over the flat line art. */}
       <div
         className="absolute inset-0"
         style={{
-          background: "linear-gradient(180deg, #8a5a33 0%, #7a4a2b 100%)",
-          opacity: fill,
+          background: WALNUT,
+          opacity: texture,
           filter: flashing ? "brightness(1.35)" : undefined,
           transition: "filter 90ms ease-out",
         }}
       />
+      {/* 3D bevel edges. */}
+      <div
+        className="absolute inset-0"
+        style={{ opacity: texture, boxShadow: bevelShadow(left) }}
+      />
+      {/* Brass knob plate beside the split… */}
+      <div
+        className="absolute rounded-full"
+        style={{
+          opacity: texture,
+          [left ? "right" : "left"]: "8%",
+          top: "46%",
+          width: "11%",
+          aspectRatio: "1",
+          background: BRASS,
+          boxShadow:
+            "0 1px 3px rgba(0,0,0,.55), inset 0 1px 1px rgba(255,255,255,.5)",
+        }}
+      />
+      {/* …and brass hinges on the frame edge. */}
+      {[0.14, 0.68].map((y) => (
+        <div
+          key={y}
+          className="absolute"
+          style={{
+            opacity: texture,
+            [left ? "left" : "right"]: "3.5%",
+            top: `${y * 100}%`,
+            width: "4.5%",
+            height: "10%",
+            borderRadius: 2,
+            background: BRASS,
+            boxShadow: "inset 0 1px 1px rgba(255,255,255,.4)",
+          }}
+        />
+      ))}
       <svg
         className="absolute inset-0 h-full w-full"
         viewBox="0 0 100 260"
         preserveAspectRatio="none"
       >
-        <g {...strokeProps} strokeDashoffset={Math.max(0, 1 - draw)}>
-          <path d={left ? "M2 2 L2 258" : "M98 2 L98 258"} />
-          <path d="M2 2 L98 2" />
-          <path d="M2 258 L98 258" />
-          {/* Center split — the edge that parts from its sibling. */}
-          <path d={left ? "M98 2 L98 258" : "M2 2 L2 258"} />
-          <rect x={left ? 14 : 16} y="26" width="70" height="88" rx="3" />
-          <rect x={left ? 14 : 16} y="132" width="70" height="98" rx="3" />
-          <circle cx={left ? 89 : 11} cy="128" r="3.5" />
+        <g {...strokeAttrs} style={inkStyle(texture)}>
+          {/* Outer edges: hinge side, top, bottom. */}
+          <path d={left ? "M2 2 L2 258" : "M98 2 L98 258"} strokeDashoffset={Math.max(0, 1 - drawOuter)} />
+          <path d="M2 2 L98 2" strokeDashoffset={Math.max(0, 1 - drawOuter)} />
+          <path d="M2 258 L98 258" strokeDashoffset={Math.max(0, 1 - drawOuter)} />
+          {/* Routed panel moldings ride the outer pass. */}
+          <rect x={left ? 14 : 16} y="26" width="70" height="88" rx="3" strokeDashoffset={Math.max(0, 1 - drawOuter)} />
+          <rect x={left ? 14 : 16} y="132" width="70" height="98" rx="3" strokeDashoffset={Math.max(0, 1 - drawOuter)} />
+          {/* Center split — the seam that parts from its sibling, drawn last. */}
+          <path d={left ? "M98 2 L98 258" : "M2 2 L2 258"} strokeDashoffset={Math.max(0, 1 - drawSplit)} />
         </g>
       </svg>
     </div>
   );
 }
 
-/** Full-screen Get Started takeover: a double door draws itself, gets knocked,
- *  swings open onto Luna waving, then the facade fades into the setup panel.
- *  Any pointer/key input skips straight to the end. */
+/** The Get Started reveal: a double door draws itself over Luna's corner
+ *  window (exactly the avatar-window rect — the stage sits behind it),
+ *  solidifies into walnut + brass, gets knocked, swings open onto Luna waving,
+ *  then fades away. Only then does SetupScreen start her greeting. Tapping or
+ *  pressing Enter/Space on the door skips straight to the end; the rest of
+ *  the screen stays live underneath. */
 export function DoorsIntro({
   onFinish,
   onReveal,
 }: {
   /** Sequence finished (`skip` = user dismissed it early). */
   onFinish: (skip: boolean) => void;
-  /** Doors are open — wave and greet (fires once per run). */
+  /** Doors are open — wave silently (fires once per run). */
   onReveal: () => void;
 }) {
   const [frame, setFrame] = useState<IntroFrame>(() => computeIntro(0));
@@ -145,55 +207,55 @@ export function DoorsIntro({
     <div
       role="button"
       tabIndex={0}
-      aria-label="The door is opening — tap to skip"
-      className="fixed inset-0 z-50 cursor-pointer select-none outline-none"
-      style={{ opacity: frame.opacity }}
+      aria-label="Luna's door is opening — tap to skip"
+      className="fixed z-50 cursor-pointer select-none overflow-hidden rounded-2xl outline-none"
+      style={{
+        top: AVATAR_WINDOW_TOP,
+        right: AVATAR_WINDOW_RIGHT,
+        width: AVATAR_WINDOW_SIZE,
+        height: AVATAR_WINDOW_SIZE,
+        opacity: frame.opacity,
+        boxShadow: "0 12px 32px rgba(0,0,0,.35)",
+      }}
       onPointerDown={() => finish(true)}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") finish(true);
       }}
     >
-      {/* Facade wall with a doorway hole: the hole div's huge box-shadow paints
-          the wall everywhere except the hole, which stays see-through so the
-          stage behind shows once the leaves part. */}
-      <div
-        className="absolute left-1/2 top-1/2"
-        style={{
-          width: DOORWAY_WIDTH,
-          height: DOORWAY_HEIGHT,
-          transform: `translate(-50%, -50%) translateY(calc(-1 * ${DOORWAY_LIFT}))`,
-          boxShadow: "0 0 0 200vmax #241b15",
-        }}
+      {/* Dark jamb behind the leaves — hides the stage until the doors part. */}
+      <div className="absolute inset-0 bg-[#171009]" style={{ opacity: frame.jamb }} />
+
+      <Leaf
+        side="left"
+        deg={frame.doorDeg}
+        drawOuter={frame.drawOuter}
+        drawSplit={frame.drawSplit}
+        texture={frame.texture}
+        flashing={flashing}
+      />
+      <Leaf
+        side="right"
+        deg={frame.doorDeg}
+        drawOuter={frame.drawOuter}
+        drawSplit={frame.drawSplit}
+        texture={frame.texture}
+        flashing={flashing}
+      />
+
+      {/* Casing line art over the hole; it never rotates. */}
+      <svg
+        className="pointer-events-none absolute inset-0 z-10 h-full w-full"
+        viewBox="0 0 200 260"
+        preserveAspectRatio="none"
       >
-        {/* Dark jamb behind the leaves — hides the stage until the doors part. */}
-        <div className="absolute inset-0 bg-[#171009]" style={{ opacity: frame.jamb }} />
-
-        <Leaf
-          side="left"
-          deg={frame.doorDeg}
-          draw={frame.draw}
-          fill={frame.fill}
-          flashing={flashing}
-        />
-        <Leaf
-          side="right"
-          deg={frame.doorDeg}
-          draw={frame.draw}
-          fill={frame.fill}
-          flashing={flashing}
-        />
-
-        {/* Casing line art over the hole; it never rotates. */}
-        <svg
-          className="pointer-events-none absolute inset-0 z-10 h-full w-full"
-          viewBox="0 0 200 260"
-          preserveAspectRatio="none"
+        <g
+          {...strokeAttrs}
+          style={{ ...inkStyle(frame.texture), strokeWidth: 5 }}
+          strokeDashoffset={Math.max(0, 1 - frame.drawOuter)}
         >
-          <g {...strokeProps} strokeWidth={6} strokeDashoffset={Math.max(0, 1 - frame.draw)}>
-            <rect x="3" y="3" width="194" height="254" />
-          </g>
-        </svg>
-      </div>
+          <rect x="3" y="3" width="194" height="254" />
+        </g>
+      </svg>
     </div>
   );
 }

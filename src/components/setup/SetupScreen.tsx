@@ -266,7 +266,7 @@ export function SetupScreen() {
     // invite screen), same spirit as the in-call VAD window only running
     // once the call has started.
     avatarSpeaking: session.isSpeaking,
-    voiceTalkEnabled: setupOpen,
+    voiceTalkEnabled: setupOpen && state.introPhase === "idle",
   });
   /* Guide-chat failures (mic denied, STT/LLM errors, too-quick taps) land in
      the transcript itself — QA showed the small red inline text was missed,
@@ -354,14 +354,15 @@ export function SetupScreen() {
       });
   }, [catalog, state.introPhase, session, setError]);
 
-  /* Guide line per setup step while the panel is open. The invite screen has
-     no avatar, chat, or mic anymore (QA round) — Luna first appears when the
-     user presses Get started. */
+  /* Guide line per setup step while the panel is open. Dialogue stays silent
+     until the door intro has fully faded (or been skipped) — Luna's greeting
+     is the first thing you hear, then the per-step lines take over. */
   useEffect(() => {
-    if (!setupOpen || state.setupStep === lastGuideStepRef.current) return;
+    if (!setupOpen || state.introPhase !== "idle") return;
+    if (state.setupStep === lastGuideStepRef.current) return;
     lastGuideStepRef.current = state.setupStep;
     handleSpeakGuide(GUIDES[state.setupStep]);
-  }, [setupOpen, state.setupStep, handleSpeakGuide]);
+  }, [setupOpen, state.introPhase, state.setupStep, handleSpeakGuide]);
 
   useEffect(() => {
     /* Bounce back to the doc step only if nothing has been parsed yet. `docSummary`
@@ -371,28 +372,30 @@ export function SetupScreen() {
 
   const handleGetStarted = useCallback(() => {
     /* This click is a user gesture — enable audio (presenter speech + the
-       knock SFX), then run the door intro. The setup panel opens when it
-       finishes (or is skipped). */
+       knock SFX), then run the door intro. The centered main UI appears
+       immediately; the door plays over Luna's corner window on top of it. */
     void unlockAudio().catch(() => {});
     void unlockSfx();
     setIntroPhase("running");
-  }, [setIntroPhase, unlockAudio]);
+    setSetupOpen(true);
+  }, [setIntroPhase, setSetupOpen, unlockAudio]);
 
   const handleIntroFinish = useCallback(
     (skip: boolean) => {
-      /* A skip may land mid-greeting — don't let her keep talking over the
-         panel. */
+      /* A skip may land mid-wave — don't let her keep gesturing over the UI. */
       if (skip) session.interrupt();
       setIntroPhase("idle");
-      setSetupOpen(true);
+      /* Dialogue triggers only after the door fade completes (a skip counts
+         as dismissal — no greeting; the step guide picks up instead). */
+      if (!skip) handleSpeakGuide(GREETING_LINE);
     },
-    [session, setIntroPhase, setSetupOpen],
+    [session, setIntroPhase, handleSpeakGuide],
   );
 
   const handleIntroReveal = useCallback(() => {
+    /* Wave silently while the doors hold open — speech waits for the fade. */
     void session.playMotion(GREETING_WAVE_MOTION).catch(() => {});
-    handleSpeakGuide(GREETING_LINE);
-  }, [session, handleSpeakGuide]);
+  }, [session]);
 
   const analyzeDoc = useCallback(
     async (doc: DocInput) => {
@@ -568,17 +571,11 @@ export function SetupScreen() {
   ]);
 
   /* Invite state — a clean hero (QA round): a short explainer + one prominent
-     CTA. No avatar, chat, or mic here; the avatar lane reservations only
-     apply once the setup panel is open. While the door intro runs the hero
-     hides entirely so the doorway reveals Luna (stage z-0), not this copy. */
+     CTA. Get started opens the centered main UI and plays the corner door
+     intro over it; the hero itself never coexists with the intro. */
   if (!setupOpen) {
     return (
-      <div
-        className={cn(
-          "flex min-h-svh flex-col items-center justify-center px-4 pb-16",
-          state.introPhase === "running" && "invisible",
-        )}
-      >
+      <div className="flex min-h-svh flex-col items-center justify-center px-4 pb-16">
         <div className="flex w-full max-w-xl flex-col items-center gap-5 text-center">
           <h1 className="text-3xl font-bold tracking-tight text-primary sm:text-4xl">
             Practice your Japanese office calls
@@ -599,18 +596,19 @@ export function SetupScreen() {
           </Button>
           <PerxonaBadge />
         </div>
-        {state.introPhase === "running" && (
-          <DoorsIntro onFinish={handleIntroFinish} onReveal={handleIntroReveal} />
-        )}
       </div>
     );
   }
 
-  /* Setup pop-up — the dominant panel in the content lane (the avatar keeps
-     the left lane; below md the panel stacks under the card). */
+  /* Setup pop-up — centered in the viewport (Luna keeps only her top-right
+     corner window now). Below xl the content starts under her window; from xl
+     up it centers fully with the corner card floating beside it. */
   return (
-    <div className="flex min-h-svh flex-col items-center justify-start px-4 pb-6 pt-[21rem] md:flex-row md:items-center md:justify-center md:pl-[calc(3.5rem_+_min(36vmin,17rem))] md:pr-8 md:pt-6">
-      <div className="w-full max-w-2xl overflow-y-auto rounded-2xl border bg-card/90 p-5 shadow-xl backdrop-blur-md sm:p-6 max-h-[calc(100svh-22.5rem)] md:max-h-[calc(100svh-3rem)]">
+    <>
+      <div className="flex min-h-svh flex-col items-center justify-start px-4 pb-6 pt-[calc(3.75rem_+_min(36vmin,13rem)_+_1.5rem)] xl:justify-center xl:pt-6">
+      {/* pt above mirrors CONTENT_CLEARANCE (src/lib/avatar-window.ts) so the
+          panel starts under Luna's corner window; from xl up it centers. */}
+      <div className="w-full max-w-2xl overflow-y-auto rounded-2xl border bg-card/90 p-5 shadow-xl backdrop-blur-md sm:p-6 max-h-[calc(100svh-22.5rem)] xl:max-h-[calc(100svh-3rem)]">
         <div className="flex flex-col gap-1.5">
           <div className="flex flex-col gap-1.5">
             <h2 className="text-xl font-semibold text-primary">How can I help?</h2>
@@ -679,6 +677,12 @@ export function SetupScreen() {
 
         <PastCalls onRestore={(id) => void handleRestore(id)} busy={state.busy} />
       </div>
-    </div>
+      </div>
+
+      {/* The corner door reveal plays over the live, centered UI. */}
+      {state.introPhase === "running" && (
+        <DoorsIntro onFinish={handleIntroFinish} onReveal={handleIntroReveal} />
+      )}
+    </>
   );
 }
