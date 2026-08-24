@@ -234,10 +234,19 @@ function openAiCompatibleResponse(payload) {
 /**
  * OpenAI-compatible chat completion against the configured provider. Returns a
  * payload shaped like the OpenAI Chat Completions response.
+ *
+ * Transient upstream failures (429/5xx, dropped connections) are retried with
+ * short backoff: the homelab proxy serializes concurrent completions (guide
+ * chat + intent classification race on every message), and one 502 blip used
+ * to surface verbatim in Luna's chat as a dead end. Auth errors and caller
+ * aborts are never retried. `fetchImpl` is injectable for tests.
  */
+const LLM_RETRY_STATUSES = new Set([429, 500, 502, 503, 504]);
+const LLM_RETRY_DELAYS_MS = [750, 2000];
+
 export async function llmChat(
   messages,
-  { model, temperature = 0.2, responseFormat, maxTokens = 8192, signal } = {},
+  { model, temperature = 0.2, responseFormat, maxTokens = 8192, signal, fetchImpl } = {},
 ) {
   if (!config.llm.apiKey) {
     throw Object.assign(new Error("LLM is not configured. Set LLM_API_KEY (and LLM_BASE_URL / LLM_MODEL) in .env — see SETUP.md."), { status: 501 });
@@ -259,7 +268,7 @@ export async function llmChat(
       model: model || config.llm.model,
       max_tokens: maxTokens,
       messages: messages.filter((m) => m.role !== "system"),
-      ...(system ? { system } : {}),
+      ...(system ? { system: system } : {}),
     };
     if (responseFormat) {
       body.output_config = { format: { type: "json_schema", schema: responseFormat.json_schema?.schema ?? responseFormat } };
@@ -276,25 +285,44 @@ export async function llmChat(
     if (responseFormat) body.response_format = responseFormat;
   }
 
-  // Always cap at 120s per attempt; an external `signal` (e.g. the
-  // orchestrator's overall retry-loop deadline) can additionally cut it
-  // short, but never extend it.
-  const attemptCap = AbortSignal.timeout(120_000);
-  const res = await fetch(url, {
-    method: "POST",
-    headers,
-    body: JSON.stringify(body),
-    signal: signal ? AbortSignal.any([attemptCap, signal]) : attemptCap,
-  });
-  if (!res.ok) {
-    const detail = await res.text().catch(() => "");
-    throw Object.assign(new Error(`LLM request failed (${res.status})`), {
-      status: 502,
-      payload: { error: (detail || "LLM upstream error").slice(0, 500) },
-    });
+  const doFetch = fetchImpl ?? fetch;
+  let lastErr;
+  for (let attempt = 0; attempt <= LLM_RETRY_DELAYS_MS.length; attempt++) {
+    // Always cap at 120s per attempt; an external `signal` (e.g. the
+    // orchestrator's overall retry-loop deadline) can additionally cut it
+    // short, but never extend it.
+    const attemptCap = AbortSignal.timeout(120_000);
+    try {
+      const res = await doFetch(url, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
+        signal: signal ? AbortSignal.any([attemptCap, signal]) : attemptCap,
+      });
+      if (res.ok) {
+        const payload = await res.json();
+        return openAiCompatibleResponse(payload);
+      }
+      const detail = await res.text().catch(() => "");
+      lastErr = Object.assign(new Error(`LLM request failed (${res.status})`), {
+        status: 502,
+        payload: { error: (detail || "LLM upstream error").slice(0, 500) },
+        transient: LLM_RETRY_STATUSES.has(res.status),
+      });
+    } catch (err) {
+      // A caller abort is final; a network drop before any response is not —
+      // treat it like a transient upstream failure.
+      if (signal?.aborted || err?.name === "AbortError") throw err;
+      lastErr = Object.assign(new Error(`LLM request failed: ${err?.message ?? err}`), {
+        status: 502,
+        payload: { error: "LLM upstream error" },
+        transient: true,
+      });
+    }
+    if (!lastErr.transient || attempt === LLM_RETRY_DELAYS_MS.length) break;
+    await new Promise((r) => setTimeout(r, LLM_RETRY_DELAYS_MS[attempt]));
   }
-  const payload = await res.json();
-  return openAiCompatibleResponse(payload);
+  throw lastErr;
 }
 
 // ── BYO TTS (Phase 5f) ─────────────────────────────────────────────────────
