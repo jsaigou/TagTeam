@@ -44,7 +44,11 @@ export function AvatarStage() {
   return (
     <div
       className={cn(
-        "fixed inset-0 z-0",
+        /* In front of the screens' content wrapper (App.tsx `relative z-10`)
+           so she clips OVER the setup panel; on the call screen she drops to
+           z-0 — there the full-screen stage IS the background. Still below
+           the papers overlay (z-30) and the door intro (z-50). */
+        isCall ? "fixed inset-0 z-0" : "fixed inset-0 z-20",
         /* opacity-0 alongside invisible: the presenter's render surface can
            override inherited visibility once active — opacity cannot be
            overridden from inside the subtree. */
@@ -57,7 +61,7 @@ export function AvatarStage() {
           "relative overflow-hidden bg-card",
           isCall
             ? "h-full w-full"
-            : "absolute rounded-2xl border border-border shadow-2xl [&>sv-presenter]:h-full [&>sv-presenter]:w-full [&>sv-presenter]:translate-x-[27.2%] [&>sv-presenter]:scale-[1.545]",
+            : "absolute rounded-2xl border-[3px] border-border shadow-2xl [&>sv-presenter]:h-full [&>sv-presenter]:w-full [&>sv-presenter]:translate-x-[27.2%] [&>sv-presenter]:scale-[1.545]",
         )}
         style={isCall ? undefined : windowStyle}
       />
