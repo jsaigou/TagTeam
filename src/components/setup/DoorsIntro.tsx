@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import { forwardRef, useCallback, useEffect, useRef, useState } from "react";
 import {
   computeIntro,
   INTRO_END,
   REVEAL_START,
-  STROKE_INDEX,
+  STROKE_SPANS,
+  STROKES,
   type IntroFrame,
 } from "./intro-timeline";
 import {
@@ -13,13 +14,9 @@ import {
 } from "@/lib/avatar-window";
 import { playKnock } from "@/lib/sfx";
 
-/** Line-art ink: pure brand color while drawing, warming into a dark walnut
- *  groove as the material transition completes. */
-const ink = (texture: number): string =>
-  `color-mix(in srgb, var(--primary) ${Math.round((1 - texture) * 100)}%, #2b1a10)`;
-
 const WALNUT = "linear-gradient(168deg, #6e4a30 0%, #593a2a 55%, #452b21 100%)";
-const BRASS = "radial-gradient(circle at 35% 30%, #e6c37a 0%, #c89b4a 45%, #8a6a2f 100%)";
+const BRASS =
+  "radial-gradient(circle at 35% 30%, #e6c37a 0%, #c89b4a 45%, #8a6a2f 100%)";
 
 /** Bevel lighting: shadow along the hinge side, highlight catching light on
  *  the leading (split) edge — mirrored per leaf. */
@@ -28,128 +25,98 @@ const bevelShadow = (left: boolean): string =>
     ? "inset 5px 0 9px rgba(0,0,0,.5), inset -4px 0 7px rgba(255,255,255,.16), inset 0 3px 5px rgba(255,255,255,.08), inset 0 -4px 7px rgba(0,0,0,.4)"
     : "inset -5px 0 9px rgba(0,0,0,.5), inset 4px 0 7px rgba(255,255,255,.16), inset 0 3px 5px rgba(255,255,255,.08), inset 0 -4px 7px rgba(0,0,0,.4)";
 
-const strokeAttrs = {
-  fill: "none",
-  strokeLinecap: "round",
-  strokeLinejoin: "round",
-  /** The leaf SVGs stretch non-uniformly to the doorway box; keep the ink at
-   *  a constant pixel width regardless. */
-  vectorEffect: "non-scaling-stroke",
-  pathLength: 1,
-  strokeDasharray: 1,
-} as const;
-
-const inkStyle = (texture: number): CSSProperties => ({
-  stroke: ink(texture),
-});
-
-/** One door leaf: a hinged div that draws itself in as line art — one stroke
- *  at a time, like a human hand (hinge edge → top → bottom → panel moldings →
- *  center split), settles into walnut + brass with 3D bevels, then swings open
- *  around its outer edge. `strokes` is the shared per-stroke progress array
- *  from the intro frame; each path reads its own plan entry. */
-function Leaf({
-  side,
-  deg,
-  strokes,
-  texture,
-  flashing,
-}: {
+interface LeafProps {
   side: "left" | "right";
-  deg: number;
-  strokes: number[];
-  texture: number;
-  flashing: boolean;
-}) {
+  /** The wood/brass group whose opacity rides the material beat (target B). */
+  textureRef: React.RefObject<HTMLDivElement | null>;
+}
+
+/** One hinged door leaf. Invisible while the ink draws (the line art lives in
+ *  a single shared SVG above the leaves); its wood layers fade in with the
+ *  material beat, then the whole leaf swings around its hinge edge. The root
+ *  transform is driven imperatively by the rAF loop (see DoorsIntro). */
+const Leaf = forwardRef<HTMLDivElement, LeafProps>(function Leaf(
+  { side, textureRef },
+  ref,
+) {
   const left = side === "left";
-  const sfx = left ? "L" : "R";
-  const at = (key: string): number => {
-    const p = strokes[STROKE_INDEX[key + sfx]];
-    return 1 - (p ?? 0);
-  };
   return (
     <div
-      className="absolute top-0 h-full w-1/2 will-change-transform"
+      ref={ref}
+      className="absolute will-change-transform"
       style={{
-        left: left ? 0 : "50%",
+        top: "9%",
+        height: "85%",
+        [left ? "left" : "right"]: "9%",
+        width: "41%",
         transformOrigin: left ? "left center" : "right center",
-        transform: `perspective(1100px) rotateY(${(left ? -1 : 1) * deg}deg)`,
         backfaceVisibility: "hidden",
       }}
     >
-      {/* Walnut material, fading in over the flat line art. */}
-      <div
-        className="absolute inset-0"
-        style={{
-          background: WALNUT,
-          opacity: texture,
-          filter: flashing ? "brightness(1.35)" : undefined,
-          transition: "filter 90ms ease-out",
-        }}
-      />
-      {/* 3D bevel edges. */}
-      <div
-        className="absolute inset-0"
-        style={{ opacity: texture, boxShadow: bevelShadow(left) }}
-      />
-      {/* Brass knob plate beside the split… */}
-      <div
-        className="absolute rounded-full"
-        style={{
-          opacity: texture,
-          [left ? "right" : "left"]: "8%",
-          top: "46%",
-          width: "11%",
-          aspectRatio: "1",
-          background: BRASS,
-          boxShadow:
-            "0 1px 3px rgba(0,0,0,.55), inset 0 1px 1px rgba(255,255,255,.5)",
-        }}
-      />
-      {/* …and brass hinges on the frame edge. */}
-      {[0.14, 0.68].map((y) => (
+      {/* Everything that fades in with the material transition (target B). */}
+      <div ref={textureRef} className="absolute inset-0" style={{ opacity: 0 }}>
+        <div className="absolute inset-0" style={{ background: WALNUT }} />
         <div
-          key={y}
-          className="absolute"
+          className="absolute inset-0"
+          style={{ boxShadow: bevelShadow(left) }}
+        />
+        {/* Routed panel outline in the wood. */}
+        <div
+          className="absolute rounded-sm"
           style={{
-            opacity: texture,
-            [left ? "left" : "right"]: "3.5%",
-            top: `${y * 100}%`,
-            width: "4.5%",
-            height: "10%",
-            borderRadius: 2,
-            background: BRASS,
-            boxShadow: "inset 0 1px 1px rgba(255,255,255,.4)",
+            left: "14%",
+            right: "14%",
+            top: "9%",
+            height: "46%",
+            border: "2px solid rgba(0,0,0,.35)",
+            boxShadow: "inset 0 1px 2px rgba(255,255,255,.12)",
           }}
         />
-      ))}
-      <svg
-        className="absolute inset-0 h-full w-full"
-        viewBox="0 0 100 260"
-        preserveAspectRatio="none"
-      >
-        <g {...strokeAttrs} style={inkStyle(texture)}>
-          {/* Outer edges: hinge side, top, bottom. */}
-          <path d={left ? "M2 2 L2 258" : "M98 2 L98 258"} strokeDashoffset={at("hinge")} />
-          <path d="M2 2 L98 2" strokeDashoffset={at("top")} />
-          <path d="M2 258 L98 258" strokeDashoffset={at("bottom")} />
-          {/* Routed panel moldings. */}
-          <rect x={left ? 14 : 16} y="26" width="70" height="88" rx="3" strokeDashoffset={at("panel1")} />
-          <rect x={left ? 14 : 16} y="132" width="70" height="98" rx="3" strokeDashoffset={at("panel2")} />
-          {/* Center split — the seam that parts from its sibling, drawn last. */}
-          <path d={left ? "M98 2 L98 258" : "M2 2 L2 258"} strokeDashoffset={at("split")} />
-        </g>
-      </svg>
+        {/* Brass knob beside the split… */}
+        <div
+          className="absolute rounded-full"
+          style={{
+            [left ? "right" : "left"]: "6%",
+            top: "68%",
+            width: "11%",
+            aspectRatio: "1",
+            background: BRASS,
+            boxShadow:
+              "0 1px 3px rgba(0,0,0,.55), inset 0 1px 1px rgba(255,255,255,.5)",
+          }}
+        />
+        {/* …and brass hinges on the frame edge. */}
+        {[0.12, 0.62].map((y) => (
+          <div
+            key={y}
+            className="absolute"
+            style={{
+              [left ? "left" : "right"]: "3%",
+              top: `${y * 100}%`,
+              width: "5%",
+              height: "9%",
+              borderRadius: 2,
+              background: BRASS,
+              boxShadow: "inset 0 1px 1px rgba(255,255,255,.4)",
+            }}
+          />
+        ))}
+      </div>
     </div>
   );
-}
+});
 
-/** The Get Started reveal: a double door draws itself over Luna's corner
- *  window (exactly the avatar-window rect — the stage sits behind it),
- *  solidifies into walnut + brass, gets knocked, swings open onto Luna waving,
- *  then fades away. Only then does SetupScreen start her greeting. Tapping or
- *  pressing Enter/Space on the door skips straight to the end; the rest of
- *  the screen stays live underneath. */
+/** The Get Started reveal (ported from /demo3): a double door draws itself
+ *  over Luna's corner window (exactly the avatar-window rect — the stage sits
+ *  behind it) like a human hand — one continuous stroke at a time, longest
+ *  first, ~1s total — settles into walnut + brass, gets knocked, swings open
+ *  onto Luna waving, then fades away. Only then does SetupScreen start her
+ *  greeting. Tapping or pressing Enter/Space on the door skips straight to
+ *  the end; the rest of the screen stays live underneath.
+ *
+ *  Per-frame values are pushed to the DOM imperatively (refs, no React
+ *  re-render per frame) so the stroke-dashoffset animation never stutters;
+ *  React state is reserved for the knock flash. */
 export function DoorsIntro({
   onFinish,
   onReveal,
@@ -159,7 +126,6 @@ export function DoorsIntro({
   /** Doors are open — wave silently (fires once per run). */
   onReveal: () => void;
 }) {
-  const [frame, setFrame] = useState<IntroFrame>(() => computeIntro(0));
   const [flashing, setFlashing] = useState(false);
   const startRef = useRef<number | null>(null);
   const rafRef = useRef(0);
@@ -167,6 +133,14 @@ export function DoorsIntro({
   const revealedRef = useRef(false);
   const doneRef = useRef(false);
   const flashTimerRef = useRef(0);
+  const stageRef = useRef<HTMLDivElement | null>(null);
+  const jambRef = useRef<HTMLDivElement | null>(null);
+  const lineArtRef = useRef<SVGGElement | null>(null);
+  const strokeRefs = useRef<(SVGPathElement | null)[]>([]);
+  const leafLRef = useRef<HTMLDivElement | null>(null);
+  const leafRRef = useRef<HTMLDivElement | null>(null);
+  const texLRef = useRef<HTMLDivElement | null>(null);
+  const texRRef = useRef<HTMLDivElement | null>(null);
 
   const finish = useCallback(
     (skip: boolean) => {
@@ -180,11 +154,34 @@ export function DoorsIntro({
   );
 
   useEffect(() => {
+    const applyFrame = (f: IntroFrame) => {
+      STROKE_SPANS.forEach((_, i) => {
+        const el = strokeRefs.current[i];
+        if (!el) return;
+        const p = f.strokes[i];
+        /* Round caps would leave a dot at offset 1 — hide untouched strokes. */
+        el.style.visibility = p <= 0 ? "hidden" : "visible";
+        el.style.strokeDashoffset = String(1 - p);
+      });
+      if (lineArtRef.current) lineArtRef.current.style.opacity = String(1 - f.texture);
+      for (const [leaf, tex] of [
+        [leafLRef.current, texLRef.current],
+        [leafRRef.current, texRRef.current],
+      ] as const) {
+        if (!leaf) continue;
+        const left = leaf === leafLRef.current;
+        leaf.style.transform = `perspective(1100px) rotateY(${(left ? -1 : 1) * f.doorDeg}deg)`;
+        if (tex) tex.style.opacity = String(f.texture);
+      }
+      if (jambRef.current) jambRef.current.style.opacity = String(f.jamb);
+      if (stageRef.current) stageRef.current.style.opacity = String(f.opacity);
+    };
+
     const tick = (now: number) => {
       if (startRef.current === null) startRef.current = now;
       const t = now - startRef.current;
       const next = computeIntro(t);
-      setFrame(next);
+      applyFrame(next);
       if (next.knocks > knocksRef.current) {
         knocksRef.current = next.knocks;
         playKnock();
@@ -211,6 +208,7 @@ export function DoorsIntro({
 
   return (
     <div
+      ref={stageRef}
       role="button"
       tabIndex={0}
       aria-label="Luna's door is opening — tap to skip"
@@ -220,7 +218,7 @@ export function DoorsIntro({
         right: AVATAR_WINDOW_RIGHT,
         width: AVATAR_WINDOW_SIZE,
         height: AVATAR_WINDOW_SIZE,
-        opacity: frame.opacity,
+        opacity: 1,
         boxShadow: "0 12px 32px rgba(0,0,0,.35)",
       }}
       onPointerDown={() => finish(true)}
@@ -229,42 +227,50 @@ export function DoorsIntro({
       }}
     >
       {/* Opaque backing matching the page background — hides the avatar
-          (and her loading state) behind the doorway from frame zero, while
-          the strokes trace themselves on top of it. */}
-      <div className="absolute inset-0 bg-background" style={{ opacity: frame.jamb }} />
+          (and her loading state) behind the doorway from frame zero; fades
+          only as the leaves part (driven imperatively). */}
+      <div ref={jambRef} className="absolute inset-0 bg-background" />
 
-      <Leaf
-        side="left"
-        deg={frame.doorDeg}
-        strokes={frame.strokes}
-        texture={frame.texture}
-        flashing={flashing}
-      />
-      <Leaf
-        side="right"
-        deg={frame.doorDeg}
-        strokes={frame.strokes}
-        texture={frame.texture}
-        flashing={flashing}
-      />
+      <Leaf ref={leafLRef} side="left" textureRef={texLRef} />
+      <Leaf ref={leafRRef} side="right" textureRef={texRRef} />
 
-      {/* Casing line art over the hole; it never rotates. Drawn FIRST — the
-          outline before any detail, like a hand sketching the frame. */}
+      {/* The single-hand ink pass (target A): ONE shared square viewBox at
+          uniform scale, paths only (no <rect> dash quirks), dashoffset driven
+          imperatively per frame. Knock flash brightens the fresh walnut via
+          a CSS filter on the leaves' container below. */}
       <svg
+        viewBox="0 0 400 400"
         className="pointer-events-none absolute inset-0 z-10 h-full w-full"
-        viewBox="0 0 200 260"
-        preserveAspectRatio="none"
       >
         <g
-          {...strokeAttrs}
-          style={{ ...inkStyle(frame.texture), strokeWidth: 5 }}
-          strokeDashoffset={
-            1 - (frame.strokes[STROKE_INDEX.casing] ?? 0)
-          }
+          ref={lineArtRef}
+          fill="none"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={4}
+          stroke="var(--primary)"
+          style={{ filter: flashing ? "brightness(1.35)" : undefined }}
         >
-          <rect x="3" y="3" width="194" height="254" />
+          {STROKES.map((s, i) => (
+            <path
+              key={s.key}
+              ref={(el) => {
+                strokeRefs.current[i] = el;
+              }}
+              d={s.d}
+              pathLength={1}
+              strokeDasharray={1}
+              strokeDashoffset={1}
+              style={{ visibility: "hidden" }}
+            />
+          ))}
         </g>
       </svg>
+
+      {/* Knock flash washes over the whole doorway. */}
+      {flashing && (
+        <div className="pointer-events-none absolute inset-0 z-20 bg-white/10" />
+      )}
     </div>
   );
 }

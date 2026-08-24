@@ -26,18 +26,24 @@ describe("stroke plan", () => {
     }
   });
 
-  it("outlines first (casing) and splits last, per leaf", () => {
+  it("draws longest continuous lines first", () => {
+    const weights = STROKES.map((s) => s.weight);
+    expect(weights).toEqual([...weights].sort((a, b) => b - a));
     expect(STROKES[0].key).toBe("casing");
+    // Knobs are the shortest lines and land last.
     const order = STROKES.map((s) => s.key);
-    expect(order.indexOf("splitL")).toBeGreaterThan(order.indexOf("panelL2"));
-    expect(order.indexOf("splitR")).toBeGreaterThan(order.indexOf("panelR2"));
-    // Left leaf completes before the right leaf begins.
-    expect(order.indexOf("hingeR")).toBeGreaterThan(order.indexOf("splitL"));
+    expect(order.slice(-2).sort()).toEqual(["knobL", "knobR"]);
   });
 
-  it("gives longer strokes proportionally more time", () => {
+  it("completes the whole drawing in about one second", () => {
+    const last = STROKE_SPANS[STROKE_SPANS.length - 1];
+    expect(last.start + last.dur).toBeCloseTo(DRAW_END_MS, 6);
+    expect(DRAW_END_MS).toBeLessThanOrEqual(1100);
+  });
+
+  it("gives longer strokes proportionally more time (constant hand speed)", () => {
     for (const span of STROKE_SPANS) {
-      const weight = STROKES[STROKES.findIndex((s) => s.key === span.key)].weight;
+      const weight = STROKES[STROKE_INDEX[span.key]].weight;
       expect(span.dur / weight).toBeCloseTo(
         STROKE_SPANS[0].dur / STROKES[0].weight,
         5,
@@ -128,12 +134,7 @@ describe("computeIntro", () => {
   });
 
   it("exposes a plan index for every stroke key DoorsIntro renders", () => {
-    const keys = [
-      "casing",
-      "hingeL", "topL", "bottomL", "panelL1", "panelL2", "splitL",
-      "hingeR", "topR", "bottomR", "panelR1", "panelR2", "splitR",
-    ];
-    for (const key of keys) {
+    for (const key of STROKES.map((s) => s.key)) {
       expect(STROKE_INDEX[key]).toBeDefined();
       expect(STROKE_SPANS[STROKE_INDEX[key]].key).toBe(key);
     }

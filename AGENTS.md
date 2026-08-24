@@ -51,7 +51,10 @@ Next: **Phase 6 cont.** — candidate: target-specific grounding per §4/§5 (ge
 resize/walk/front-layer) and `/demo2/` (the "cat comes to the door" house story — a **launch
 candidate**). Both are separate Vite entries under `demo/`/`demo2/` + `src/demo/`, use the
 dev-gated unauthenticated `/api/demo/*` endpoints (disabled when `NODE_ENV=production`), and
-touch no real-app code. `pnpm dev` → `http://localhost:5173/demo/` and `/demo2/`.
+touch no real-app code. `/demo3/` (`demo3/index.html` + `src/demo/doors/`) is a self-contained
+doors-drawing tech demo (targets A/B/C: single-line human tracing → walnut+brass fade →
+3D swing+fade) with scrubber and per-stroke diagnostics; pure math in
+`src/demo/doors/timeline.ts`. `pnpm dev` → `http://localhost:5173/demo/` and `/demo2/`.
 
 ## Stack
 
