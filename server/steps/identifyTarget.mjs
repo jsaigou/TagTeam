@@ -14,7 +14,9 @@ function isResult(value) {
   if (typeof value !== "object" || value === null) return false;
   if (typeof value.name !== "string" || !value.name.trim()) return false;
   if (typeof value.query !== "string" || !value.query.trim()) return false;
-  if (value.city !== undefined && typeof value.city !== "string") return false;
+  // `!= null`: models emit `"city": null` for unknown optionals — rejecting
+  // that fails the whole step (same trap as intent.mjs's validator).
+  if (value.city != null && typeof value.city !== "string") return false;
   return true;
 }
 

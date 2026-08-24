@@ -19,9 +19,13 @@ export function isIntentResult(value) {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
   if (!INTENTS.has(value.intent)) return false;
   for (const key of STRING_FIELDS) {
-    if (value[key] !== undefined && typeof value[key] !== "string") return false;
+    // `!= null` tolerates EXPLICIT nulls: models routinely emit `"city": null`
+    // for optional fields, and strict `!== undefined` checks silently failed
+    // every classification (the objective read as "other", nothing ran).
+    const v = value[key];
+    if (v != null && typeof v !== "string") return false;
   }
-  if (value.confidence !== undefined && typeof value.confidence !== "number") return false;
+  if (value.confidence != null && typeof value.confidence !== "number") return false;
   return true;
 }
 
@@ -66,5 +70,11 @@ export async function classifyIntent(text, { gateOpen = false, llmChat } = {}) {
   } catch {
     return { intent: "other" };
   }
-  return isIntentResult(parsed) ? parsed : { intent: "other" };
+  if (!isIntentResult(parsed)) return { intent: "other" };
+  // Drop explicit nulls so callers see absent fields, not null traps.
+  const clean = { ...parsed };
+  for (const key of Object.keys(clean)) {
+    if (clean[key] === null) delete clean[key];
+  }
+  return clean;
 }

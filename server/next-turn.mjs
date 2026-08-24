@@ -53,15 +53,17 @@ export function isNextTurnResult(value) {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
   const jp = typeof value.jp === "string" ? value.jp : value.text;
   if (typeof jp !== "string" || !jp.trim()) return false;
-  if (value.en !== undefined && typeof value.en !== "string") return false;
-  if (value.vocab !== undefined) {
+  // `!= null` throughout: models emit explicit nulls for optional fields
+  // (e.g. `"en": null`), which strict undefined checks rejected.
+  if (value.en != null && typeof value.en !== "string") return false;
+  if (value.vocab != null) {
     if (!Array.isArray(value.vocab) || !value.vocab.every((v) => typeof v === "string")) {
       return false;
     }
   }
-  if (value.emotion !== undefined && !EMOTIONS.has(value.emotion)) return false;
-  if (value.intensity !== undefined && !INTENSITIES.has(value.intensity)) return false;
-  if (value.done !== undefined && typeof value.done !== "boolean") return false;
+  if (value.emotion != null && !EMOTIONS.has(value.emotion)) return false;
+  if (value.intensity != null && !INTENSITIES.has(value.intensity)) return false;
+  if (value.done != null && typeof value.done !== "boolean") return false;
   return true;
 }
 
