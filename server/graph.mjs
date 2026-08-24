@@ -85,6 +85,9 @@ export const GRAPH = {
     step: "research",
     input: (ctx) => ({
       q: ctx.geolocate?.queryHint || ctx.identifyTarget?.query || ctx.goal,
+      // Reranks hits against the identified name so the official site
+      // outranks listicles / same-name clinics elsewhere.
+      name: ctx.identifyTarget?.name,
     }),
   },
   confirmTarget: {

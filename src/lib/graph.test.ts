@@ -143,7 +143,9 @@ describe("createRunEngine", () => {
 
     expect(env.identifyTarget.calls).toEqual([{ goal: "book an appointment at Mejiro Dental Clinic" }]);
     expect(env.geolocate.calls).toEqual([{ name: "Mejiro Dental Clinic", city: "Toshima" }]);
-    expect(env.research.calls).toEqual([{ q: "Mejiro Dental Clinic Toshima" }]);
+    expect(env.research.calls).toEqual([
+      { q: "Mejiro Dental Clinic Toshima", name: "Mejiro Dental Clinic" },
+    ]);
 
     const run = env.runEngine.getRun("s1");
     expect(run.gate).toMatchObject({
@@ -232,7 +234,7 @@ describe("createRunEngine", () => {
 
     expect(env.research.calls).toHaveLength(1);
     // geolocate failed -> no queryHint -> falls back to identifyTarget's query.
-    expect(env.research.calls[0]).toEqual({ q: "市役所 在留カード" });
+    expect(env.research.calls[0]).toEqual({ q: "市役所 在留カード", name: "City hall" });
   });
 
   it("startRun cancels a prior in-flight run under the same runKey", async () => {
