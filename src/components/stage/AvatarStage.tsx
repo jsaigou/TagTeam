@@ -1,11 +1,7 @@
 import { useAppStore } from "@/state/app-store";
 import { useAvatar } from "@/state/avatar-context";
 import { Button } from "@/components/ui/button";
-import {
-  AVATAR_WINDOW_RIGHT,
-  AVATAR_WINDOW_SIZE,
-  AVATAR_WINDOW_TOP,
-} from "@/lib/avatar-window";
+import { useAvatarWindowRect } from "@/hooks/use-avatar-window-rect";
 import { cn } from "@/lib/utils";
 
 /** The assistant: a square, rounded portrait window pinned to the TOP-RIGHT
@@ -35,11 +31,14 @@ export function AvatarStage() {
      intro covers her window instead, hiding the loading pill behind doors. */
   const isInvite =
     state.screen === "setup" && !state.setupOpen && state.introPhase === "idle";
+  /* Live-measured window: attached to the setup panel element when one is
+     registered, fixed viewport corner otherwise. */
+  const rect = useAvatarWindowRect();
   const windowStyle = {
-    top: AVATAR_WINDOW_TOP,
-    right: AVATAR_WINDOW_RIGHT,
-    width: AVATAR_WINDOW_SIZE,
-    height: AVATAR_WINDOW_SIZE,
+    top: rect.top,
+    left: rect.left,
+    width: rect.size,
+    height: rect.size,
   };
 
   return (

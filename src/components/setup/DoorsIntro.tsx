@@ -7,12 +7,7 @@ import {
   STROKES,
   type IntroFrame,
 } from "./intro-timeline";
-import {
-  AVATAR_WINDOW_RIGHT,
-  AVATAR_WINDOW_SIZE,
-  AVATAR_WINDOW_TOP,
-} from "@/lib/avatar-window";
-import { playKnock } from "@/lib/sfx";
+import { useAvatarWindowRect } from "@/hooks/use-avatar-window-rect";import { playKnock } from "@/lib/sfx";
 
 const WALNUT = "linear-gradient(168deg, #6e4a30 0%, #593a2a 55%, #452b21 100%)";
 const BRASS =
@@ -127,6 +122,9 @@ export function DoorsIntro({
   onReveal: () => void;
 }) {
   const [flashing, setFlashing] = useState(false);
+  /* Same measured rect the avatar stage uses — the doors draw exactly over
+     Luna's attached window (panel-anchored when the setup card is mounted). */
+  const rect = useAvatarWindowRect();
   const startRef = useRef<number | null>(null);
   const rafRef = useRef(0);
   const knocksRef = useRef(0);
@@ -214,10 +212,10 @@ export function DoorsIntro({
       aria-label="Luna's door is opening — tap to skip"
       className="fixed z-50 cursor-pointer select-none overflow-hidden rounded-2xl outline-none"
       style={{
-        top: AVATAR_WINDOW_TOP,
-        right: AVATAR_WINDOW_RIGHT,
-        width: AVATAR_WINDOW_SIZE,
-        height: AVATAR_WINDOW_SIZE,
+        top: rect.top,
+        left: rect.left,
+        width: rect.size,
+        height: rect.size,
         opacity: 1,
         boxShadow: "0 12px 32px rgba(0,0,0,.35)",
       }}

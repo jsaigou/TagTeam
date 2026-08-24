@@ -10,13 +10,8 @@ import { useCatalog } from "@/hooks/use-catalog";
 import { useGuideChat, type GuideChatState } from "@/hooks/use-guide-chat";
 import { resolveDefaults } from "@/lib/presets";
 import { DEFAULT_VOICE_ID } from "@/lib/presets";
-import {
-  AVATAR_WINDOW_RIGHT,
-  AVATAR_WINDOW_SIZE,
-  AVATAR_WINDOW_TOP,
-  PANEL_HEADER_CLEAR,
-  PANEL_TOP,
-} from "@/lib/avatar-window";
+import { PANEL_HEADER_CLEAR, PANEL_TOP, setAvatarAnchor } from "@/lib/avatar-window";
+import { useAvatarWindowRect } from "@/hooks/use-avatar-window-rect";
 import { CALL_ROLES } from "@/lib/coaching";
 import { getScenario } from "@/lib/scenario-api";
 import { uploadPage } from "@/lib/session-api";
@@ -201,7 +196,13 @@ function SearchStatusLine({ search }: { search: ChatSearch }) {
 /** Papers appearing one by one in front of Luna while she searches — the
  *  visual of her working through reference material. Purely decorative. */
 function SearchPapersOverlay() {
-  const papers = [
+  const rect = useAvatarWindowRect();
+  const rectStyle = (): React.CSSProperties => ({
+    top: rect.top,
+    left: rect.left,
+    width: rect.size,
+    height: rect.size,
+  });  const papers = [
     { left: "12%", top: "18%", rot: "-14deg", delay: 0 },
     { left: "46%", top: "34%", rot: "9deg", delay: 0.4 },
     { left: "24%", top: "52%", rot: "-4deg", delay: 0.8 },
@@ -212,12 +213,7 @@ function SearchPapersOverlay() {
     <div
       aria-hidden
       className="pointer-events-none fixed z-30 overflow-hidden rounded-2xl"
-      style={{
-        top: AVATAR_WINDOW_TOP,
-        right: AVATAR_WINDOW_RIGHT,
-        width: AVATAR_WINDOW_SIZE,
-        height: AVATAR_WINDOW_SIZE,
-      }}
+      style={rectStyle()}
     >
       <style>{`
         @keyframes tt-paper-in {
@@ -753,17 +749,22 @@ export function SetupScreen() {
     );
   }
 
-  /* Setup card — wide (~80% of the viewport) and starting high so Luna's
-     corner window clips its top-right corner: she reads as part of the panel
-     instead of floating in distant whitespace. Geometry comes from
-     src/lib/avatar-window.ts (PANEL_TOP / PANEL_HEADER_CLEAR). */
+  /* Setup card — wide (~80% of the viewport) and starting high so Luna clips
+     its top-right corner: she reads as part of the panel instead of floating
+     in distant whitespace. The card is REGISTERED as her live anchor, so her
+     window is measured against this element (see src/lib/avatar-window.ts). */
   return (
     <>
       <div
         className="flex min-h-svh flex-col items-center justify-start px-4 pb-6"
         style={{ paddingTop: PANEL_TOP }}
       >
-      <div className="w-full max-w-[80%] overflow-y-auto rounded-2xl border bg-card/90 p-5 shadow-xl backdrop-blur-md sm:p-6 max-h-[calc(100svh-16rem)]">
+      <div
+        ref={(el) => {
+          setAvatarAnchor(el);
+        }}
+        className="w-full max-w-[80%] overflow-y-auto rounded-2xl border bg-card/90 p-5 shadow-xl backdrop-blur-md sm:p-6 max-h-[calc(100svh-16rem)]"
+      >
         {/* Header row keeps right of Luna's footprint while the card top is
             still under her window. */}
         <div
