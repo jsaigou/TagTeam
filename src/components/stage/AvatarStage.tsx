@@ -49,6 +49,11 @@ export function AvatarStage() {
            z-0 — there the full-screen stage IS the background. Still below
            the papers overlay (z-30) and the door intro (z-50). */
         isCall ? "fixed inset-0 z-0" : "fixed inset-0 z-20",
+        /* The wrapper spans the viewport but must never intercept input:
+           every button/textarea on the screens below lives inside these
+           bounds. Only Luna's visible card re-enables pointers (see inner
+           div); without this the whole UI reads as frozen. */
+        "pointer-events-none",
         /* opacity-0 alongside invisible: the presenter's render surface can
            override inherited visibility once active — opacity cannot be
            overridden from inside the subtree. */
@@ -61,7 +66,7 @@ export function AvatarStage() {
           "relative overflow-hidden bg-card",
           isCall
             ? "h-full w-full"
-            : "absolute rounded-2xl border-[3px] border-border shadow-2xl [&>sv-presenter]:h-full [&>sv-presenter]:w-full [&>sv-presenter]:translate-x-[27.2%] [&>sv-presenter]:scale-[1.545]",
+            : "pointer-events-auto absolute rounded-2xl border-[3px] border-border shadow-2xl [&>sv-presenter]:h-full [&>sv-presenter]:w-full [&>sv-presenter]:translate-x-[27.2%] [&>sv-presenter]:scale-[1.545]",
         )}
         style={isCall ? undefined : windowStyle}
       />
