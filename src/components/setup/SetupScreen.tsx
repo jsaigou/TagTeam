@@ -558,7 +558,10 @@ export function SetupScreen() {
   const sendChat = useCallback(
     (text: string) => {
       appendChat({ role: "user", text });
-      startChatSearch(text);
+      /* No client-side search here: the hub's classification extracts the
+         entity first, and the chat search (plus the run's research) keys off
+         that — searching the raw sentence flooded results with generic
+         appointment guides. */
       /* Server side: classify the turn; a stated objective starts a run
          seeded with the setup-screen context. Upload failures must not eat
          the message — fall back to an unseeded intent. */
@@ -569,7 +572,7 @@ export function SetupScreen() {
          the hub only acts on the intents it owns (objective/confirm/reject). */
       guideChat.sendText(text);
     },
-    [appendChat, buildRunContext, sendIntent, guideChat, startChatSearch],
+    [appendChat, buildRunContext, sendIntent, guideChat],
   );
   /* -- Conversation-first workflows (product spec §Workflows) --------------
      The server classifies each chat turn and broadcasts the result; Luna
@@ -587,6 +590,11 @@ export function SetupScreen() {
             if (name) {
               candidateRef.current = name;
               setCandidate(name);
+              /* Search the ENTITY, never the raw utterance — the whole
+                 sentence buries the place name and floods results with
+                 generic guides. The run's research step does its own
+                 geo-scoped query server-side. */
+              startChatSearch(name);
               handleSpeakGuide({ en: `Ok, I'm searching for “${name}”. Is that correct?` });
             } else {
               candidateRef.current = null;
@@ -620,7 +628,7 @@ export function SetupScreen() {
             break;
         }
       }),
-    [onClassified, handleSpeakGuide, cancelRun, run?.gate],
+    [onClassified, handleSpeakGuide, cancelRun, run?.gate, startChatSearch],
   );
 
   /* Site selection (Workflow 1's final step): when the confirmTarget gate
@@ -987,12 +995,7 @@ export function SetupScreen() {
 
         <div className="mt-5">
           {state.setupStep === "doc" && (
-            <div className="flex flex-col gap-2">
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                Optional — add a letter or screenshot
-              </p>
-              <DocUpload onAnalyzed={analyzeDoc} busy={analyzing} />
-            </div>
+            <DocUpload onAnalyzed={analyzeDoc} busy={analyzing} />
           )}
           {state.setupStep === "grounding" && (
             <div className="flex flex-col gap-4">
