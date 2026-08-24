@@ -230,6 +230,9 @@ export type AppSnapshot = {
   /** Phase 7b — background job runner status, derived server-side from job
    *  state; additive, so legacy clients ignoring it still see `callPhase`. */
   run?: RunSnapshot;
+  /** Conversation-first setup — Luna's latest spoken line, so companion
+   *  devices can follow the persona dialogue without the full transcript. */
+  lunaLine?: string;
 };
 
 /** Control surface actions a companion device can trigger on the stage. */
@@ -356,6 +359,25 @@ export type RunSnapshot = {
   result?: RunResult;
 };
 
+/* -- Conversation-first setup (persona chat dispatches, Gemma executes) ---- */
+
+/**
+ * The server's classification of one free-text persona-chat turn
+ * (server/intent.mjs). Broadcast back so the avatar can speak the matching
+ * dialogue — confirming the search candidate, acking a URL, asking to repeat —
+ * while the background run does the actual work. The model classifies; the
+ * avatar talks; neither chooses what runs.
+ */
+export type ClassifiedIntent = {
+  intent: "state_objective" | "provide_url" | "confirm" | "reject" | "question" | "other";
+  /** The extracted entity to search for (Workflow 1's search candidate). */
+  targetName?: string;
+  url?: string;
+  city?: string;
+  objective?: string;
+  confidence?: number;
+};
+
 /** Client → server WebSocket messages (mirrors docs/architecture.md §9). */
 export type WsClientMessage =
   | {
@@ -427,7 +449,12 @@ export type WsServerMessage =
   | { type: "job"; runId: string; job: JobSnapshot }
   /** Phase 7b — the full run snapshot, sent on every meaningful change and
    *  replayed to a device that joins mid-run. */
-  | { type: "run"; run: RunSnapshot };
+  | { type: "run"; run: RunSnapshot }
+  /** Conversation-first setup — how a persona-chat turn was classified, so
+   *  the avatar speaks the matching dialogue (candidate confirm, URL ack,
+   *  repeat-ask). `runId` is set when the classification started/cancels a
+   *  specific run. */
+  | { type: "classified"; result: ClassifiedIntent; runId?: string };
 
 /** REST shape for a created/looked-up app session (QR-able). */
 export type SessionSummary = {

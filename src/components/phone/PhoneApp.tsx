@@ -260,6 +260,17 @@ export function PhoneApp() {
             )}
           </div>
 
+          {/* Conversation-first setup — Luna's latest line, mirrored live so
+              the phone follows the desktop dialogue. */}
+          {snapshot?.screen === "setup" && snapshot.lunaLine && (
+            <div className="flex flex-col gap-1 rounded-xl border bg-card p-4">
+              <p className="text-[11px] font-medium uppercase tracking-wide text-primary">
+                Luna
+              </p>
+              <p className="text-sm text-foreground">{snapshot.lunaLine}</p>
+            </div>
+          )}
+
           {/* Active call turn */}
           {activeTurn && (
             <div className="flex flex-col gap-1.5 rounded-xl border bg-card p-4">

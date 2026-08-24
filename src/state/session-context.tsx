@@ -56,6 +56,10 @@ export type PhaseListener = (message: Extract<WsServerMessage, { type: "phase" }
 export type JobListener = (message: Extract<WsServerMessage, { type: "job" }>) => void;
 /** Phase 7b — the full run snapshot changed (status feed + confirmTarget gate). */
 export type RunListener = (message: Extract<WsServerMessage, { type: "run" }>) => void;
+/** Conversation-first setup — a persona-chat turn was classified server-side. */
+export type ClassifiedListener = (
+  message: Extract<WsServerMessage, { type: "classified" }>,
+) => void;
 
 type SessionContextValue = {
   /** The created/reused app session (desktop). Null until ensured. */
@@ -91,10 +95,16 @@ type SessionContextValue = {
   onJob: (listener: JobListener) => () => void;
   /** Phase 7b — register a handler for `run` broadcasts (full status feed). */
   onRun: (listener: RunListener) => () => void;
+  /** Conversation-first setup — register a handler for `classified` intent
+   *  broadcasts (drives the avatar's workflow dialogue). */
+  onClassified: (listener: ClassifiedListener) => () => void;
   /** Phase 7b — state a free-text objective / answer a gate in plain language;
    *  server/intent.mjs classifies it into a fixed action. `context` seeds the
    *  run's ctx when the text states an objective (setup-screen state). */
   sendIntent: (text: string, context?: RunContext) => void;
+  /** Conversation-first setup — stage: publish Luna's latest spoken line so
+   *  companion devices can follow the dialogue. */
+  setLunaLine: (line: string | null) => void;
   /** Phase 7b — resolve an open confirmTarget gate. `candidateId: null` = none match. */
   sendConfirm: (runId: string, candidateId: string | null) => void;
   /** Phase 7b — cancel a run in progress. */
@@ -156,8 +166,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const phaseListenersRef = useRef<Set<PhaseListener>>(new Set());
   const jobListenersRef = useRef<Set<JobListener>>(new Set());
   const runListenersRef = useRef<Set<RunListener>>(new Set());
+  const classifiedListenersRef = useRef<Set<ClassifiedListener>>(new Set());
   const playerStateRef = useRef<PlayerState | undefined>(undefined);
   const activeTurnRef = useRef<Turn | null>(null);
+  const lunaLineRef = useRef<string | null>(null);
   const handleMessageRef = useRef<(msg: WsServerMessage) => void>(() => {});
   const recoveringPairingRef = useRef(false);
 
@@ -174,6 +186,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       activeVocab: activeTurnRef.current
         ? store.state.glossary.filter((g) => activeTurnRef.current!.vocab.includes(g.id))
         : undefined,
+      lunaLine: lunaLineRef.current ?? undefined,
     }),
     [
       store.state.screen,
@@ -266,6 +279,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         case "run":
           setRun(msg.run);
           for (const listener of runListenersRef.current) listener(msg);
+          break;
+        case "classified":
+          for (const listener of classifiedListenersRef.current) listener(msg);
           break;
         case "upload":
           void handleIncomingUpload(msg.uploadId, msg.filename);
@@ -427,6 +443,19 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     return () => runListenersRef.current.delete(listener);
   }, []);
 
+  const onClassified = useCallback((listener: ClassifiedListener) => {
+    classifiedListenersRef.current.add(listener);
+    return () => classifiedListenersRef.current.delete(listener);
+  }, []);
+
+  const setLunaLine = useCallback(
+    (line: string | null) => {
+      lunaLineRef.current = line;
+      broadcastSoon();
+    },
+    [broadcastSoon],
+  );
+
   const sendIntent = useCallback((text: string, context?: RunContext) => {
     hubRef.current?.send({ type: "intent", text, ...(context ? { context } : {}) });
   }, []);
@@ -499,7 +528,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       onPhase,
       onJob,
       onRun,
+      onClassified,
       sendIntent,
+      setLunaLine,
       sendConfirm,
       cancelRun,
       ackPendingUpload,
@@ -527,7 +558,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       onPhase,
       onJob,
       onRun,
+      onClassified,
       sendIntent,
+      setLunaLine,
       sendConfirm,
       cancelRun,
       ackPendingUpload,

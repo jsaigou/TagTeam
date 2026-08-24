@@ -139,6 +139,13 @@ export function attachHub(
   const snapshots = new Map();
   /** sessionId -> latest RunSnapshot from runEngine (for re-joins). */
   const latestRun = new Map();
+  /**
+   * Conversation-first setup: sessionId -> the search candidate awaiting the
+   * user's yes/no ("Ok, I'm searching for 'X'. Is that correct?"). The run was
+   * ALREADY started (spec-parallel dispatch); a spoken/typed "no" cancels it.
+   * Not a graph gate — research keeps running while we ask, which is the point.
+   */
+  const pendingCandidates = new Map();
   /** sessionId -> pending room-teardown timer (grace period for reconnects). */
   const roomCleanupTimers = new Map();
 
@@ -164,6 +171,7 @@ export function attachHub(
         rooms.delete(sessionId);
         snapshots.delete(sessionId);
         latestRun.delete(sessionId);
+        pendingCandidates.delete(sessionId);
         orchestrator?.clear(sessionId);
         runEngine?.endSession(sessionId);
       }
@@ -340,7 +348,10 @@ export function attachHub(
   async function handleIntent(sessionId, text, context) {
     if (!runEngine || !classifyIntent) return;
     const current = latestRun.get(sessionId);
-    const gateOpen = Boolean(current?.gate);
+    const pending = pendingCandidates.get(sessionId);
+    // A pending search-candidate confirm counts as "gate open" so bare
+    // yes/no fast-paths to confirm/reject (server/intent.mjs).
+    const gateOpen = Boolean(current?.gate) || Boolean(pending);
     let result;
     try {
       result = await classifyIntent(text, { gateOpen });
@@ -348,21 +359,50 @@ export function attachHub(
       console.error("[hub] intent classification failed:", err?.message ?? err);
       return;
     }
+    /** Tell the devices how the turn was classified so the avatar speaks the
+     *  matching dialogue; `runId` pins cancel/confirm to a specific run. */
+    const classified = (extra = {}) => broadcast(sessionId, { type: "classified", result, ...extra });
     switch (result.intent) {
       case "state_objective": {
         const extra =
           context && typeof context === "object" && !Array.isArray(context) ? context : undefined;
-        runEngine.startRun(sessionId, result.objective || text, extra);
+        // Spec-parallel dispatch: the background run starts NOW; Luna asks
+        // about the candidate while Gemma already searches. A new objective
+        // supersedes any pending candidate (startRun cancels the old run).
+        const snap = runEngine.startRun(sessionId, result.objective || text, extra);
+        if (result.targetName) {
+          pendingCandidates.set(sessionId, { name: result.targetName, runId: snap.runId });
+          classified({ runId: snap.runId });
+        } else {
+          pendingCandidates.delete(sessionId);
+          classified();
+        }
         break;
       }
       case "confirm":
         if (current?.gate) {
           const candidateId = current.gate.guessId ?? current.gate.candidates[0]?.id ?? null;
           runEngine.resolveGate(sessionId, current.runId, candidateId);
+        } else if (pending) {
+          // Candidate confirmed — the parallel search simply continues.
+          pendingCandidates.delete(sessionId);
         }
+        classified({ ...(pending ? { runId: pending.runId } : {}) });
         break;
       case "reject":
-        if (current?.gate) runEngine.resolveGate(sessionId, current.runId, null);
+        if (current?.gate) {
+          runEngine.resolveGate(sessionId, current.runId, null);
+          classified();
+        } else if (pending) {
+          // Wrong candidate — cancel the in-flight Gemma work immediately and
+          // let the avatar ask for the correct name (or a letter/screenshot).
+          runEngine.cancelRun(sessionId, pending.runId);
+          pendingCandidates.delete(sessionId);
+          latestRun.delete(sessionId);
+          classified({ runId: pending.runId });
+        } else {
+          classified();
+        }
         break;
       case "provide_url": {
         // A URL with nothing in flight IS the objective — the user points at
@@ -374,11 +414,16 @@ export function attachHub(
             context && typeof context === "object" && !Array.isArray(context)
               ? context
               : undefined;
-          runEngine.startRun(sessionId, text, extra);
+          pendingCandidates.delete(sessionId);
+          const snap = runEngine.startRun(sessionId, text, extra);
+          classified({ runId: snap.runId });
+        } else {
+          classified();
         }
         break;
       }
       default:
+        pendingCandidates.delete(sessionId);
         // question / other: no job in this slice — the guide
         // chat's normal LLM turn (client-side, unrelated to this hub) handles it.
         break;

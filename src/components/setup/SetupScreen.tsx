@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { CheckCircle2, Loader2, Mic, SearchX, Send, Sparkles } from "lucide-react";
+import {
+  CheckCircle2,
+  Loader2,
+  Mic,
+  Paperclip,
+  SearchX,
+  Send,
+  Sparkles,
+} from "lucide-react";
 import type { DocInput, GroundingAnswer, RoleId, RunContext } from "@/shared/contract";
 import { streamSearchReference } from "@/lib/api";
 import type { ChatMessage } from "@/lib/llm";
@@ -17,6 +25,7 @@ import { CALL_ROLES } from "@/lib/coaching";
 import { getScenario } from "@/lib/scenario-api";
 import { uploadPage } from "@/lib/session-api";
 import { pipeline } from "@/state/pipeline";
+import { useFillers } from "@/hooks/use-fillers";
 import { DocUpload } from "./DocUpload";
 import { Grounding } from "./Grounding";
 import { ScenarioPicker } from "./ScenarioPicker";
@@ -255,25 +264,57 @@ function SearchPapersOverlay() {
   );
 }
 
-/** Persistent chat with Luna — transcript + text input + Talk mic. */
+/** Workflow 1's inline confirmation: "Searching X — correct?" with Yes/No.
+ *  Voice works too — bare yes/no fast-paths through the intent classifier. */
+function CandidateConfirm({
+  name,
+  onAnswer,
+}: {
+  name: string;
+  onAnswer: (answer: "yes" | "no") => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-accent/40 bg-accent/5 px-3 py-2">
+      <p className="min-w-0 flex-1 text-sm">
+        Searching for <span className="font-medium">“{name}”</span> — correct?
+      </p>
+      <Button size="sm" onClick={() => onAnswer("yes")}>
+        Yes
+      </Button>
+      <Button size="sm" variant="outline" onClick={() => onAnswer("no")}>
+        No
+      </Button>
+    </div>
+  );
+}
+
+/** Persistent chat with Luna — transcript + text input + Talk mic + attach. */
 function LunaChatPanel({
   messages,
   state,
   supported,
   search,
+  candidate,
   onStart,
   onStop,
   onSend,
+  onCandidateAnswer,
+  onAttach,
 }: {
   messages: ChatEntry[];
   state: GuideChatState;
   supported: boolean;
   search: ChatSearch | null;
+  candidate: string | null;
   onStart: () => void;
   onStop: () => void;
   onSend: (text: string) => void;
+  onCandidateAnswer: (answer: "yes" | "no") => void;
+  /** Workflow 3 — a letter/screenshot picked straight in the chat. */
+  onAttach: (file: File) => void;
 }) {
   const [draft, setDraft] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const submit = () => {
     const text = draft.trim();
@@ -289,7 +330,29 @@ function LunaChatPanel({
     <div className="flex w-full flex-col gap-2">
       <ChatBox messages={messages} />
       {search && <SearchStatusLine search={search} />}
+      {candidate && <CandidateConfirm name={candidate} onAnswer={onCandidateAnswer} />}
       <div className="flex items-end gap-2">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) onAttach(file);
+            e.target.value = "";
+          }}
+        />
+        <Button
+          size="icon"
+          variant="outline"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={!onAttach}
+          aria-label="Add a letter or screenshot"
+          title="Add a letter or screenshot"
+        >
+          <Paperclip className="size-4" />
+        </Button>
         <Textarea
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
@@ -342,8 +405,10 @@ export function SetupScreen() {
   const { session, unlockAudio, speakGuide } = useAvatar();
   /* Phase 7b slice 6 — the server-authoritative run: this screen's chat rides
      `sendIntent` (classify → maybe start a run), RunStatus renders the feed
-     and gate, and the delivered scenario drops into the store below. */
-  const { run, sendIntent } = useSession();
+     and gate, and the delivered scenario drops into the store below.
+     Conversation-first: `onClassified` drives Luna's workflow dialogue and
+     `cancelRun` executes a candidate rejection (cancel Gemma mid-search). */
+  const { run, sendIntent, cancelRun, onClassified, setLunaLine } = useSession();
 
   /* Persistent chat transcript — the comic bubble is transient, this never
      loses a line. Every guide line (spoken or not) and every user turn lands
@@ -363,8 +428,10 @@ export function SetupScreen() {
     (line: GuideLine) => {
       speakGuide(line);
       appendChat({ role: "luna", text: line.en });
+      /* Mirror to companion devices so the phone follows the dialogue. */
+      setLunaLine(line.en);
     },
-    [speakGuide, appendChat],
+    [speakGuide, appendChat, setLunaLine],
   );
 
   /* Phase 6 follow-up — hold-to-talk mic so the user can ask Luna a question on
@@ -471,6 +538,23 @@ export function SetupScreen() {
   );
   useEffect(() => () => chatSearchCloseRef.current?.(), []);
 
+  /* Ambient processing (product spec): while Gemma's background work runs —
+     the chat-triggered search, or any active run step with nothing awaiting
+     the user — Luna vocalizes short fillers instead of sitting silent. English
+     during setup; the Japanese call context takes over later. */
+  const gemmaBusy =
+    chatSearch?.status === "searching" ||
+    (!!run &&
+      !run.result &&
+      !run.gate &&
+      run.jobs.some((j) => j.status === "queued" || j.status === "running"));
+  useFillers({
+    active: setupOpen && gemmaBusy,
+    lang: "en",
+    speak: (text) => void session.speak(text),
+    isSpeaking: () => session.isSpeaking,
+  });
+
   const sendChat = useCallback(
     (text: string) => {
       appendChat({ role: "user", text });
@@ -487,9 +571,86 @@ export function SetupScreen() {
     },
     [appendChat, buildRunContext, sendIntent, guideChat, startChatSearch],
   );
+  /* -- Conversation-first workflows (product spec §Workflows) --------------
+     The server classifies each chat turn and broadcasts the result; Luna
+     speaks the matching dialogue here while Gemma's background run does the
+     actual work. Workflow 1 is spec-parallel: the run starts BEFORE she asks
+     "Is that correct?", so a rejection cancels real in-flight work. */
+  const [candidate, setCandidate] = useState<string | null>(null);
+  const candidateRef = useRef<string | null>(null);
+  useEffect(
+    () =>
+      onClassified(({ result, runId }) => {
+        switch (result.intent) {
+          case "state_objective": {
+            const name = result.targetName?.trim();
+            if (name) {
+              candidateRef.current = name;
+              setCandidate(name);
+              handleSpeakGuide({ en: `Ok, I'm searching for “${name}”. Is that correct?` });
+            } else {
+              candidateRef.current = null;
+              setCandidate(null);
+            }
+            break;
+          }
+          case "confirm":
+            if (candidateRef.current) {
+              candidateRef.current = null;
+              setCandidate(null);
+              handleSpeakGuide({ en: "Ok, let me search." });
+            } else if (run?.gate) {
+              handleSpeakGuide({ en: "Great — let me put your practice call together." });
+            }
+            break;
+          case "reject":
+            if (candidateRef.current) {
+              if (runId) cancelRun(runId);
+              candidateRef.current = null;
+              setCandidate(null);
+              handleSpeakGuide({
+                en: "No problem — can you repeat the name of the place? If you have a letter or screenshot you can also add it.",
+              });
+            }
+            break;
+          case "provide_url":
+            handleSpeakGuide({ en: "Thank you, let me research that now." });
+            break;
+          default:
+            break;
+        }
+      }),
+    [onClassified, handleSpeakGuide, cancelRun, run?.gate],
+  );
+
+  /* Site selection (Workflow 1's final step): when the confirmTarget gate
+     opens with research results, Luna reads out her best guess. Once per
+     run+gate — the snapshot re-broadcasts on every job change. */
+  const gate = run?.gate;
+  const gateGuess = gate?.candidates.find((c) => c.id === gate.guessId) ?? gate?.candidates[0];
+  const askedGateRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!run || !gate || !gateGuess) return;
+    const key = `${run.runId}:${gate.nodeId}`;
+    if (askedGateRef.current === key) return;
+    askedGateRef.current = key;
+    handleSpeakGuide({
+      en: `I found “${gateGuess.name}” — is that the right place? Pick it below, or just say yes.`,
+    });
+    // Primitive-only deps + the once-per-key ref guard; the snapshot
+    // re-broadcasts on every job change and must not re-trigger her.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [run?.runId, gate?.nodeId, gateGuess?.name, gateGuess?.id, handleSpeakGuide]);
+
+  /** Candidate yes/no chips reuse the intent pipeline — bare "yes"/"no" is
+   *  fast-pathed server-side because a candidate is pending there too. */
+  const answerCandidate = useCallback(
+    (answer: "yes" | "no") => void buildRunContext().then((c) => sendIntent(answer, c)).catch(() => sendIntent(answer)),
+    [buildRunContext, sendIntent],
+  );
+
   const [analyzing, setAnalyzing] = useState(false);
-  const launchedRef = useRef(false);
-  /* Seeded with the initial step: the doc-step guide is folded into
+  const launchedRef = useRef(false);  /* Seeded with the initial step: the doc-step guide is folded into
      GREETING_LINE, so the effect speaks only on later step changes. */
   const lastGuideStepRef = useRef<SetupStep | null>("doc");
 
@@ -522,11 +683,9 @@ export function SetupScreen() {
     handleSpeakGuide(GUIDES[state.setupStep]);
   }, [setupOpen, state.introPhase, state.setupStep, handleSpeakGuide]);
 
-  useEffect(() => {
-    /* Bounce back to the doc step only if nothing has been parsed yet. `docSummary`
-       is set by PARSED (the store's `doc` field is unused by the parse flow). */
-    if (!state.docSummary && state.setupStep !== "doc") setSetupStep("doc");
-  }, [state.docSummary, state.setupStep, setSetupStep]);
+  /* Conversation-first: no forced doc step — the chat is the entry point, so
+     a user who just states their task is never bounced back to "Document".
+     The panels below simply appear as the state earns them. */
 
   const handleGetStarted = useCallback(() => {
     /* This click is a user gesture — enable audio (presenter speech + the
@@ -557,6 +716,10 @@ export function SetupScreen() {
 
   const analyzeDoc = useCallback(
     async (doc: DocInput) => {
+      /* Workflow 3 — the avatar acks immediately; Gemma's extraction (the
+         client-side parse here, the server parseDocument step on next intent)
+         runs behind it. */
+      handleSpeakGuide({ en: "Thank you. Let me read this over." });
       /* Keep the DocInput in the store — the run context builder uploads its
          pages to the server's ephemeral store when the user states their
          objective (the parseDocument step's input). */
@@ -574,7 +737,20 @@ export function SetupScreen() {
         setBusy(false);
       }
     },
-    [setDoc, parsed, setBusy, setError, setSetupStep],
+    [setDoc, parsed, setBusy, setError, setSetupStep, handleSpeakGuide],
+  );
+
+  /** Workflow 3 entry: a file picked right in the chat becomes a DocInput. */
+  const handleAttachFile = useCallback(
+    (file: File) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result !== "string") return;
+        void analyzeDoc({ kind: "image", dataUrl: reader.result, mimeType: file.type || "image/jpeg" });
+      };
+      reader.readAsDataURL(file);
+    },
+    [analyzeDoc],
   );
 
   const handleAnswers = useCallback(
@@ -740,9 +916,9 @@ export function SetupScreen() {
           </h1>
           <p className="max-w-md text-base leading-relaxed text-muted-foreground">
             TagTeam rehearses phone calls with Japanese offices before you make
-            them. Upload a letter, answer a few questions, and an AI avatar
-            plays the staff member — practice the conversation, then walk in
-            with a cheat sheet.
+            them. Just tell Luna what you need — a letter, a link, or your own
+            words — and she researches the office, sets up the call, and an AI
+            avatar plays the staff member so you can practice.
           </p>
           <Button
             size="lg"
@@ -783,7 +959,8 @@ export function SetupScreen() {
           <div className="flex flex-col gap-1.5">
             <h2 className="text-xl font-semibold text-primary">Getting ready for your call</h2>
             <p className="text-sm text-muted-foreground">
-              Three quick steps, then we connect you with the ward office.
+              Tell Luna what you need — she'll research it and set up your
+              practice call. A letter, a link, or just your own words all work.
             </p>
           </div>
           {guideChat.error && (
@@ -796,9 +973,12 @@ export function SetupScreen() {
           state={guideChat.state}
           supported={guideChat.supported}
           search={chatSearch}
+          candidate={candidate}
           onStart={() => guideChat.startVoice()}
           onStop={() => guideChat.stopVoice()}
           onSend={sendChat}
+          onCandidateAnswer={answerCandidate}
+          onAttach={handleAttachFile}
         />
 
         <div className="mt-3">
@@ -807,7 +987,10 @@ export function SetupScreen() {
 
         <div className="mt-5">
           {state.setupStep === "doc" && (
-            <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-2">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Optional — add a letter or screenshot
+              </p>
               <DocUpload onAnalyzed={analyzeDoc} busy={analyzing} />
             </div>
           )}
