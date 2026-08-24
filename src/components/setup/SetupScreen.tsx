@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { CheckCircle2, Loader2, Mic, SearchX, Send, Sparkles } from "lucide-react";
 import type { DocInput, GroundingAnswer, RoleId, RunContext } from "@/shared/contract";
 import { streamSearchReference } from "@/lib/api";
@@ -202,14 +203,17 @@ function SearchPapersOverlay() {
     left: rect.left,
     width: rect.size,
     height: rect.size,
-  });  const papers = [
+  });
+  const papers = [
     { left: "12%", top: "18%", rot: "-14deg", delay: 0 },
     { left: "46%", top: "34%", rot: "9deg", delay: 0.4 },
     { left: "24%", top: "52%", rot: "-4deg", delay: 0.8 },
     { left: "56%", top: "12%", rot: "16deg", delay: 1.2 },
     { left: "38%", top: "64%", rot: "-20deg", delay: 1.6 },
   ];
-  return (
+  /* Portaled to <body> so its z-30 beats the avatar stage (z-20) — inside
+     the screens' `relative z-10` wrapper it would paint behind her. */
+  return createPortal(
     <div
       aria-hidden
       className="pointer-events-none fixed z-30 overflow-hidden rounded-2xl"
@@ -244,7 +248,8 @@ function SearchPapersOverlay() {
           }}
         />
       ))}
-    </div>
+    </div>,
+    document.body,
   );
 }
 

@@ -54,7 +54,10 @@ dev-gated unauthenticated `/api/demo/*` endpoints (disabled when `NODE_ENV=produ
 touch no real-app code. `/demo3/` (`demo3/index.html` + `src/demo/doors/`) is a self-contained
 doors-drawing tech demo (targets A/B/C: single-line human tracing → walnut+brass fade →
 3D swing+fade) with scrubber and per-stroke diagnostics; pure math in
-`src/demo/doors/timeline.ts`. `pnpm dev` → `http://localhost:5173/demo/` and `/demo2/`.
+`src/demo/doors/timeline.ts`. `/demo4/` mounts the REAL `DoorsIntro` over a fake
+panel + fake z-20 stage — the stacking-context regression test for the door
+reveal (portals: the overlay must live outside the screens' `relative z-10`
+wrapper or it paints below the avatar stage). `pnpm dev` → `http://localhost:5173/demo/` and `/demo2/`.
 
 ## Stack
 

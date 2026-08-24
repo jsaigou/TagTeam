@@ -1,4 +1,5 @@
 import { forwardRef, useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   computeIntro,
   INTRO_END,
@@ -204,7 +205,12 @@ export function DoorsIntro({
     };
   }, [finish, onReveal]);
 
-  return (
+  /* Portaled to <body>: the screens' content wrapper (App.tsx `relative
+     z-10`) is a stacking context, so a z-50 overlay rendered inside it would
+     still paint BELOW the avatar stage (z-20) and its opaque presenter
+     canvas — the doors would play invisibly behind Luna. At the body level
+     the z-50 wins. */
+  return createPortal(
     <div
       ref={stageRef}
       role="button"
@@ -269,6 +275,7 @@ export function DoorsIntro({
       {flashing && (
         <div className="pointer-events-none absolute inset-0 z-20 bg-white/10" />
       )}
-    </div>
+    </div>,
+    document.body,
   );
 }
