@@ -49,9 +49,11 @@ const GUIDES: Record<SetupStep, { en: string }> = {
   },
 };
 
-/** Luna's line when the doors open on her (Get Started door reveal). */
+/** Luna's line when the doors open on her (Get Started door reveal) — the
+ *  single combined opener; the doc-step guide is folded into it (the step
+ *  effect skips the initial step so this is the only opening message). */
 const GREETING_LINE = {
-  en: "Hi! I'm Luna — your practice-call assistant. Let's get your call ready!",
+  en: "Hi I'm Luna. Describe your issue or upload the doc you need to respond to.",
 };
 
 /** Luna's persona for the setup-screen mic chat. Short, warm, actionable.
@@ -487,7 +489,9 @@ export function SetupScreen() {
   );
   const [analyzing, setAnalyzing] = useState(false);
   const launchedRef = useRef(false);
-  const lastGuideStepRef = useRef<SetupStep | null>(null);
+  /* Seeded with the initial step: the doc-step guide is folded into
+     GREETING_LINE, so the effect speaks only on later step changes. */
+  const lastGuideStepRef = useRef<SetupStep | null>("doc");
 
   /* Launch the guide avatar (Luna / cc051_meeks by default). QA round: NOT on
      page load anymore — once the presenter activates, its render surface
