@@ -31,6 +31,49 @@ Try it: **Get started → upload a letter (or describe the issue) → pick who a
   <img src="./assets/readme/workflow.svg" width="100%" alt="From a letter to a confident call: ground, research, practice, review">
 </p>
 
+## How the prep flow works — methodology
+
+Getting ready for your call is **a conversation, not a form**. Luna (the avatar, driven by a
+front-end conversational LLM) is the only interface you must learn; everything technical happens
+silently behind her.
+
+**Two-model split**
+
+- **Persona Chat (Luna)** owns dialogue: she confirms what she heard, keeps you engaged while
+  work runs, dispatches background tasks, and cancels them the moment you correct or interrupt.
+- **Background worker (Gemma)** executes silently: web search, page fetching/scraping, document
+  text extraction (OCR), and supplemental research. It never talks to you directly — its output
+  surfaces only through Luna's questions and the status feed.
+
+**Three ways in** — say what you need ("I want to book an appointment at Mejirodai Dental
+Clinic"), paste a link (`https://mejirodaidental.jp/`), or attach a photo of a letter. All three
+converge on the same pipeline; documents are optional, never required.
+
+**Spec-parallel dispatch.** The moment you state an intent *and* name a target, the background
+search starts immediately — and Luna simultaneously asks *"Ok, I'm searching for 'Mejirodai
+Dental Clinic'. Is that correct?"* A "no" cancels the in-flight work instantly and asks you to
+repeat the name (or offer a letter/screenshot instead); a "yes" costs nothing because the search
+never stopped.
+
+**Confirm before trust.** Search results pause at a confirmation gate — Luna reads out her best
+guess and you approve, pick another candidate, or reject. Nothing downstream (rule extraction,
+script generation, cheat sheet) ever treats an unconfirmed guess as fact; the graph itself blocks
+on your answer rather than relying on UI rules.
+
+**Search the entity, never the utterance.** Your sentence is classified first; the extracted
+place name becomes the search key. Server-side steps then translate it into a proper
+geo-scoped Japanese query (name + ward/city) so results mirror Japan, not generic guides.
+
+**Name-aware result ranking.** Raw search order is luck — listicles ("東京都の歯医者 おすすめ
+17選") and same-named clinics in other cities crowd out the real place. Results are reranked
+against the identified name: exact normalized-name matches win, distinguishing head-prefixes are
+matched first (目白台 of 目白台歯科), romanized URL words count, and directory/listicle signals
+(おすすめ・ランキング・"top 10") are demoted — so the office's own site is the default guess.
+
+**Ambient processing.** While the worker searches or reads, Luna doesn't sit frozen — she
+vocalizes short thinking-out-loud fillers ("Hmm… let me think…"), stops the moment work
+completes or you start speaking, and mirrors everything on the phone companion.
+
 ## What makes it different
 
 - **A real co-pilot, not a script reader.** Live vocabulary cards (kanji, furigana, English) appear at 5x size the moment the word is spoken — on the desktop and on your phone.
