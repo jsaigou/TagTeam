@@ -22,6 +22,10 @@
  * mid-flow should supersede the old research rather than run both.
  */
 import crypto from "node:crypto";
+// Pure URL extraction shared with the research step — graph.mjs shapes node
+// INPUTS from ctx (data), and the user's raw links are input-shaping, not
+// step logic.
+import { extractUrls } from "./steps/research.mjs";
 
 /** `"x?"` marks a soft dependency — satisfied once the node is DONE, or once
  *  it reaches any terminal non-done status (a text-only objective has no
@@ -56,10 +60,27 @@ function depsSatisfied(run, deps) {
  * step. Later slices add further nodes additively, same as the rest of 7b.
  */
 export const GRAPH = {
-  identifyTarget: {
+  // A link pasted into the goal is fetched FIRST so identifyTarget reads the
+  // actual page (issue: "if I just give a url, infer my goal from its
+  // content") instead of guessing a business from a domain string. Reuses
+  // the scrape step (SSRF-guarded); research later receives the same page as
+  // `prescraped` so it is fetched exactly once per run. Fails soft: a dead
+  // link only costs the page-grounding, and identifyTarget's `readUrl?` dep
+  // accepts the failure.
+  readUrl: {
     deps: [],
+    step: "scrape",
+    enabled: (ctx) => extractUrls(ctx.goal).length > 0,
+    input: (ctx) => ({ url: extractUrls(ctx.goal)[0] }),
+  },
+  identifyTarget: {
+    deps: ["readUrl?"],
     step: "identifyTarget",
-    input: (ctx) => ({ goal: ctx.goal }),
+    input: (ctx) => ({ goal: ctx.goal, page: ctx.readUrl ?? null }),
+    // A bare-URL run's goal starts as the raw link; once the target is
+    // identified FROM that page, snapshots carry the inferred errand instead
+    // ("目白台デンタルクリニックの予約変更"), which is what the UI shows.
+    refineGoal: (result) => result?.objective ?? null,
   },
   parseDocument: {
     // Runs alongside identifyTarget from the moment a run starts — but only
@@ -76,7 +97,14 @@ export const GRAPH = {
   geolocate: {
     deps: ["identifyTarget"],
     step: "geolocate",
-    input: (ctx) => ({ name: ctx.identifyTarget?.name, city: ctx.identifyTarget?.city }),
+    input: (ctx) => ({
+      name: ctx.identifyTarget?.name,
+      city: ctx.identifyTarget?.city,
+      // identifyTarget's LLM-crafted Japanese query — geolocate prefers it
+      // over the raw name when composing the search hint (a romanized name
+      // searches poorly on ja-JP SearXNG).
+      query: ctx.identifyTarget?.query,
+    }),
   },
   research: {
     // Soft dep: geolocate only enriches the query; a text-only objective (or
@@ -85,9 +113,19 @@ export const GRAPH = {
     step: "research",
     input: (ctx) => ({
       q: ctx.geolocate?.queryHint || ctx.identifyTarget?.query || ctx.goal,
-      // Reranks hits against the identified name so the official site
-      // outranks listicles / same-name clinics elsewhere.
+      // The user's own links, extracted from the RAW goal — identifyTarget/
+      // geolocate rewrite `q`, and a URL must never be lost to that rewrite
+      // (that regression made pasted links get SEARCHED as domain-derived
+      // names instead of fetched). Scraped pages become `via: "user-url"`
+      // candidates that confirmTarget auto-confirms.
+      urls: extractUrls(ctx.goal),
+      // readUrl already fetched the first link for page-grounding; reuse it
+      // instead of a second scrape round-trip.
+      prescraped: ctx.readUrl ? [ctx.readUrl] : undefined,
+      // Reranks hits against the identified name (+ its romanized alias) so
+      // the official site outranks listicles / same-name clinics elsewhere.
       name: ctx.identifyTarget?.name,
+      alias: ctx.identifyTarget?.alias,
     }),
   },
   confirmTarget: {
@@ -100,7 +138,17 @@ export const GRAPH = {
         name: r.title || r.url,
         url: r.url,
         snippet: r.snippet,
+        via: r.via,
       })),
+    // A page the USER pasted is not a guess — asking "is this the right
+    // place?" about their own link reads as broken. If research produced a
+    // `via: "user-url"` result (their link, scraped), the gate resolves
+    // itself to it instead of pausing. When the direct scrape failed, no
+    // such candidate exists and the gate degrades to the normal ask flow.
+    autoConfirm: (ctx) => {
+      const direct = (ctx.research?.results ?? []).find((r) => r.via === "user-url");
+      return direct ? direct.url : null;
+    },
   },
   extractTargetRules: {
     deps: ["confirmTarget"],
@@ -123,7 +171,9 @@ export const GRAPH = {
       answers: ctx.answers,
       settings: ctx.settings,
       preset: ctx.preset,
-      goal: ctx.goal,
+      // A URL-only run's goal was refined by identifyTarget into the actual
+      // errand inferred from the page — script from THAT, not the raw link.
+      goal: ctx.identifyTarget?.objective || ctx.goal,
       target: ctx.extractTargetRules ?? (ctx.confirmTarget && { ...ctx.confirmTarget, rules: [] }),
     }),
     // The graph's deliverable: once this node completes, its result (plus the
@@ -242,6 +292,13 @@ export function createRunEngine({ jobRunner, graph = GRAPH } = {}) {
         if (run.nodes[nodeId]?.job !== job) return;
         run.ctx[nodeId] = result;
         run.nodes[nodeId].status = "done";
+        // A node may refine the run's human-facing goal (identifyTarget
+        // infers the actual errand from a pasted page). Applied BEFORE the
+        // snapshot so the UI shows "目白台デンタルクリニックの予約変更", not the raw link.
+        if (typeof graph[nodeId]?.refineGoal === "function") {
+          const refined = graph[nodeId].refineGoal(result);
+          if (typeof refined === "string" && refined.trim()) run.goal = refined.trim();
+        }
         if (typeof graph[nodeId]?.deliver === "function") {
           // MERGE, not replace: multiple deliver steps (planScenario's
           // script+glossary+target, cheatSheet's sheet) accumulate into one
@@ -263,6 +320,31 @@ export function createRunEngine({ jobRunner, graph = GRAPH } = {}) {
     return attachNode(run, nodeId, def.step ?? nodeId, input, priority);
   }
 
+  /** Commit `candidate` as the gate node's settled fact and (re)start its
+   *  speculative dependents at blocking priority. Shared by resolveGate's
+   *  user-confirmed path AND openGate's autoConfirm path — the only
+   *  difference between them is whether the guess jobs already exist
+   *  (resolveGate supersedes stale guesses; auto-confirm has none yet). */
+  function settleGate(run, nodeId, candidate) {
+    run.ctx[nodeId] = candidate;
+    run.nodes[nodeId] = { status: "done", label: graph[nodeId]?.label ?? nodeId };
+    run.gate = undefined;
+    notifyRun(run);
+
+    for (const [depId, depDef] of speculativeDependents(graph, nodeId)) {
+      const staleJob = run.nodes[depId]?.job ?? null;
+      startNode(run, depId, depDef, { priority: "blocking" });
+      const newJob = run.nodes[depId].job;
+      // Same candidate as the guess -> same dedup key -> jobs.mjs returns the
+      // SAME job (now promoted to blocking): zero new executions. A
+      // different candidate -> different input -> a fresh job; abort the now
+      // -irrelevant guess so it doesn't waste an LLM/net-lane slot.
+      if (staleJob && staleJob !== newJob) jobRunner.cancel(staleJob, { supersede: true });
+    }
+
+    tryAdvance(run);
+  }
+
   function openGate(run, nodeId, def) {
     const candidates = def.candidates(run.ctx);
     // An empty candidate list can never be confirmed — opening the gate would
@@ -281,6 +363,16 @@ export function createRunEngine({ jobRunner, graph = GRAPH } = {}) {
       return;
     }
     const guessId = candidates[0]?.id;
+
+    // Auto-confirm (e.g. a user-pasted URL that research scraped directly):
+    // the candidate is the user's own input, not a guess — settle the gate
+    // immediately instead of pausing for an answer that reads as broken.
+    const autoConfirmId = def.autoConfirm?.(run.ctx) ?? null;
+    if (autoConfirmId != null && candidates.some((c) => c.id === autoConfirmId)) {
+      settleGate(run, nodeId, candidates.find((c) => c.id === autoConfirmId));
+      return;
+    }
+
     run.gate = { nodeId, candidates, guessId };
     run.nodes[nodeId] = { status: "needs_input", label: def.label ?? nodeId };
     notifyRun(run);
@@ -378,10 +470,9 @@ export function createRunEngine({ jobRunner, graph = GRAPH } = {}) {
     const run = runs.get(runKey);
     if (!run || run.runId !== runId || !run.gate) return false;
     const nodeId = run.gate.nodeId;
-    const dependents = speculativeDependents(graph, nodeId);
 
     if (candidateId === null) {
-      for (const [depId] of dependents) cancelNode(run, depId);
+      for (const [depId] of speculativeDependents(graph, nodeId)) cancelNode(run, depId);
       run.nodes[nodeId] = { status: "failed", error: { message: "No candidate confirmed" } };
       run.gate = undefined;
       notifyRun(run);
@@ -391,23 +482,7 @@ export function createRunEngine({ jobRunner, graph = GRAPH } = {}) {
     const candidate = run.gate.candidates.find((c) => c.id === candidateId);
     if (!candidate) return false;
 
-    run.ctx[nodeId] = candidate;
-    run.nodes[nodeId] = { status: "done" };
-    run.gate = undefined;
-    notifyRun(run);
-
-    for (const [depId, depDef] of dependents) {
-      const staleJob = run.nodes[depId]?.job ?? null;
-      startNode(run, depId, depDef, { priority: "blocking" });
-      const newJob = run.nodes[depId].job;
-      // Same candidate as the guess -> same dedup key -> jobs.mjs returns the
-      // SAME job (now promoted to blocking): zero new executions. A
-      // different candidate -> different input -> a fresh job; abort the now
-      // -irrelevant guess so it doesn't waste an LLM/net-lane slot.
-      if (staleJob && staleJob !== newJob) jobRunner.cancel(staleJob, { supersede: true });
-    }
-
-    tryAdvance(run);
+    settleGate(run, nodeId, candidate);
     return true;
   }
 

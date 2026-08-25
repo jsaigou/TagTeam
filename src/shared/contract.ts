@@ -292,6 +292,10 @@ export type TargetCandidate = {
   url?: string;
   address?: string;
   snippet?: string;
+  /** How research found it. "user-url" = the user pasted that link and it
+   *  was scraped directly — the confirmTarget gate auto-confirms those (a
+   *  user's own URL is not a guess). Absent on legacy results = search. */
+  via?: "search" | "user-url";
 };
 
 /**

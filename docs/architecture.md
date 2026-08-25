@@ -123,11 +123,16 @@ typed, retried once, then surfaced.
 
 ```
 DocInput(s) ─▶ parseDocument (own-LLM, multimodal) ─▶ DocSummary + GroundingQuestions
-answers    ─▶ identifyTarget (doc-prefill + ask + optional URL) ─▶ { name, url?, confidence }
-              └▶ geolocate (mailing address / user confirm / ja-JP) ─▶ geoScope
-mailings + url ─▶ research (SearXNG language=ja-JP) ─▶ scrape (Firecrawl/camofox)
-              └▶ extractTargetRules ─▶ TargetProfile (citations) ─▶ user confirms
-doc + answers + target ─▶ planScenario ─▶ SimScript + Glossary
+goal+url ─▶ readUrl (scrape the pasted link; SSRF-guarded) ─▶ page markdown
+goal + page ─▶ identifyTarget (official JP name + romanized alias + inferred
+               objective/objectiveEn when grounded on a page)
+              └▶ geolocate (queryHint prefers identifyTarget's crafted JP query)
+goal urls + prescraped page ─▶ research (SearXNG language=ja-JP; direct scrapes
+               tagged user-url) ─▶ scrape (Firecrawl/camofox)
+user-url candidate ─▶ confirmTarget AUTO-CONFIRMS (a pasted link is not a guess);
+               search-only results still pause for the user
+               └▶ extractTargetRules ─▶ TargetProfile (citations)
+doc + answers + target(+objective) ─▶ planScenario ─▶ SimScript + Glossary
 call state ─▶ nextTurn ─▶ { jp, en, vocab, emotion, intensity }      (guided or free)
 stuck       ─▶ suggestReply  ·  user utterance ─▶ assessTurn (optional coaching)
 script + glossary ─▶ cheatSheet (goal, phrases, practice, targetRules)
@@ -388,6 +393,29 @@ sub-components (`SetupScreen.tsx` → ~400 lines, `CallScreen.tsx` → ~470). Al
 `react-hooks/exhaustive-deps` suppressions were audited; 2 were genuine bugs relying on incidental
 re-renders (fixed, not just silenced), 4 were legitimately unstable-identity context objects (left
 as-is). Full detail: `docs/handoff-2026-08-25-review-hardening.md`.
+
+**Research correctness pass (2026-08-25, same day):** three linked fixes to the research flow,
+filed after the "mejirodai dental clinic" failure (a pasted `https://mejirodaidental.jp/` got
+SEARCHED as a domain-derived name and surfaced wrong same-name clinics instead of being fetched):
+
+1. **URL passthrough** — the graph's research input used to prefer geolocate's queryHint, so the
+   raw goal's links never reached research and its direct-scrape path was dead in graph runs. The
+   research node now passes `urls` (extracted from the raw goal via `extractUrls`) and
+   `prescraped` (readUrl's page), and a link-only goal no longer falls back to searching the bare
+   domain string.
+2. **Search quality** — geolocate now prefers identifyTarget's LLM-crafted Japanese query over the
+   raw identified name; identifyTarget requires an official Japanese-script name plus a romanized
+   `alias`, which `rankResults(…, alias)` uses for latin/domain-token scoring so
+   `mejirodaidental.jp` boosts even when the name is kanji.
+3. **Page-grounded goals** — a new `readUrl` graph node scrapes the pasted link first (reusing the
+   SSRF-guarded scrape step; research receives it as `prescraped`, so one fetch per URL per run),
+   identifyTarget reads that markdown and infers `objective`/`objectiveEn`, planScenario scripts
+   from the inferred objective, and `refineGoal` updates the run's human-facing goal. A
+   `via: "user-url"` candidate auto-confirms the confirmTarget gate (the user's own link is not a
+   guess); if the direct scrape fails, the gate degrades to the normal ask-the-user flow.
+   Naming convention per domain feedback: identifyTarget must NOT normalize private dental
+   practices to 歯科医院 — katakana 歯科クリニック / デンタルクリニック is how they actually
+   name themselves; page-grounded runs use the page's own official name verbatim.
 
 ## 12. Open questions
 
