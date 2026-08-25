@@ -9,7 +9,7 @@ and an OpenAI-compatible LLM.
 > records what was verified live against Perxona. `CONTRACT.md` is the stale hackday doc and is
 > being superseded.
 
-## Current status (Phase 1 + 2 + 3 + 4 + 5 + 6)
+## Current status (Phase 1 + 2 + 3 + 4 + 5 + 6 + 7)
 
 Done: presenter layer at the full 0.2.0 surface; canned demo removed; **better-auth + Drizzle +
 SQLite login gate**; provider module (`server/providers.mjs`); Dockerfile + docker-compose;
@@ -44,8 +44,22 @@ between hold-to-talk (default) and hands-free voice-activated using **Silero VAD
 phone companion (`PhoneApp.tsx`) with an echo guard (mic only runs on the user's turn while the avatar
 isn't speaking/thinking); VAD clips ride the same `/api/audio` → STT → nextTurn pipeline as PTT; an
 attributions dialog (`AttributionsDialog.tsx`, from Settings) credits all open-source deps + Perxona.
-Next: **Phase 6 cont.** — candidate: target-specific grounding per §4/§5 (geolocate → scrape →
-`extractTargetRules` with user confirmation, using the unused `scenario.target` column).
+**Phase 7 — server-authoritative research + conversation-first UI:** the client→server migration
+(background job runner `server/jobs.mjs`, step graph + run engine `server/graph.mjs`,
+`confirmTarget` gate with speculative execution, `planScenario`/`parseDocument`/`cheatSheet` as
+graph steps) plus the intent-message UI (free-text classified server-side via `server/intent.mjs`,
+driving Luna's conversation-first workflow dialogue) and a layout/usability pass (stepper removed,
+audio controls promoted to the main surface). Full slice-by-slice history:
+`docs/architecture.md` §11 and `docs/handoff-phase7b.md`.
+**Phase 7 cont. — security & code-quality hardening (2026-08-25):** WS hub join-attempt rate
+limiting + role gating (`server/hub.mjs`), an SSRF guard on outbound scrape targets
+(`server/ssrf-guard.mjs`), magic-byte content checking on uploads (`server/file-sniff.mjs`), a
+shared rate-limiter registry (`server/rate-limit.mjs`), `server.mjs` split from a 1000+ line file
+into `server/connect-client.mjs` + `server/middleware.mjs` + `server/routes/*.mjs`, and the
+`SetupScreen.tsx`/`CallScreen.tsx` god-components extracted into hooks
+(`src/hooks/use-setup-chat.ts`, `use-call-mic-input.ts`, `use-call-ws-events.ts`). Full list:
+`docs/handoff-2026-08-25-review-hardening.md`.
+Next: nothing queued — see the handoff doc's "Known next work".
 
 **Dev-only avatar-effect demos (see `docs/avatar-effects-demo.md`):** `/demo/` (primitive
 resize/walk/front-layer) and `/demo2/` (the "cat comes to the door" house story — a **launch
@@ -102,17 +116,31 @@ once on an empty/malformed reply (reasoning models burn the budget).
 
 ## Architecture
 
-- **User login via better-auth** (`server/auth.mjs`). `server.mjs` (Express) holds the shared
-  Connect identity from env, mints a connect_token for the browser (`GET /api/connect-token`),
-  and proxies the catalog (`GET /api/avatars|scenes|voices` + `GET /api/avatars/:id/motions`).
-  Vite proxies `/api` → `:8083` in dev; in prod the server serves the built app. Modeled on the
-  perxona-connect-kit `samples/express` server.
+- **User login via better-auth** (`server/auth.mjs`). `server.mjs` is a slim bootstrap: env
+  validation, the Express app + auth middleware, then it wires dependencies and mounts route
+  modules — it holds no route handlers of its own. The shared Connect identity (from env), token
+  cache, and Connect API client live in `server/connect-client.mjs`
+  (`createConnectClient({ baseUrl, email, password })` → `{ connectApi, authedCall }`); shared
+  `requireAuth`/`route` middleware is in `server/middleware.mjs`. Route modules (each a factory
+  taking its deps as one object, mounted as an Express Router) live under `server/routes/`:
+  `catalog.mjs` (connect-token/avatars/scenes/voices/motions + the dev-only `/api/demo/*` mirror),
+  `media.mjs` (`/api/llm`, `/api/stt`, `/api/tts`, `/api/audio`), `search.mjs` (`/api/search` SSE),
+  `sessions.mjs` (app-session/pairing, scenario persistence, uploads). **New backend routes should
+  follow this pattern** — a factory in `server/routes/`, deps injected rather than closed over a
+  forward reference, mounted from `server.mjs` in dependency order. Vite proxies `/api` → `:8083`
+  in dev; in prod the server serves the built app. Modeled on the perxona-connect-kit
+  `samples/express` server.
 - **Multi-device sessions** (`server/hub.mjs` + `src/state/session-context.tsx`): the desktop is
   the `stage` device; phones join `/phone#s=<id>&p=<code>` as `input`+`control` (in-app camera QR
   scan via `CameraScanner`, or type the code). Session REST (`POST /api/sessions`, uploads) + WS
   hub at `/api/ws` (Vite proxy upgrades it with `ws:true`). Shared protocol types are in
   `src/shared/contract.ts`; pure join/status helpers in `src/lib/session-utils.ts`. Uploaded pages
-  are ephemeral (10-min TTL) and deleted on ack.
+  are ephemeral (10-min TTL) and deleted on ack. **Hub hardening:** WS `join` attempts are
+  rate-limited per IP and a connection is dropped after repeated bad pairing codes
+  (`server/rate-limit.mjs`'s shared registry); a device that joined with no declared role
+  (`capabilities: []`) is refused any state-mutating message (`audio`/`intent`/`confirm`/
+  `cancelRun`/`upload`/`ack`) — see `ROLE_GATED_TYPES` in `server/hub.mjs`. If you add a new WS
+  message type that mutates run/audio state, add it to that set.
 - **Real conversation (Phase 3)** — the **server orchestrator** (`server/orchestrator.mjs`) owns the
   per-session call context (`POST /api/sessions/:id/call-context` seeds script+glossary at call
   start) and the running transcript. Push-to-talk audio (16 kHz mono WAV, `src/lib/audio-utils.ts`
@@ -122,6 +150,13 @@ once on an empty/malformed reply (reasoning models burn the budget).
   turn/phase`. The stage presents broadcast bureaucrat turns with `setListening`/`setThinking`
   around the loop; the phone companion mic uses the same `audio` path. If STT/LLM are unconfigured
   the call falls back to scripted mode (Skip & continue).
+- **Outbound-fetch + upload hardening:** `server/steps/scrape.mjs` (called from both
+  `research.mjs`'s objective-embedded URLs and `extractTargetRules.mjs`'s confirmed candidate)
+  runs every target through `server/ssrf-guard.mjs`'s `assertPublicHttpUrl` before forwarding to
+  Firecrawl — rejects non-http(s) schemes and loopback/private/link-local hosts (incl. the cloud
+  metadata address). Any new server-side fetch of a user- or search-derived URL should go through
+  the same guard. `POST /api/uploads` checks the actual bytes with `server/file-sniff.mjs`'s
+  `isImageContent` rather than trusting the client-reported `Content-Type`.
 - **Coaching (Phase 4)** — roles/difficulty/pace chosen in the scenario step; persona data in
   `src/shared/coaching.json` feeds both script generation (`src/lib/coaching.ts`) and the live
   brain (`server/coaching.mjs`). Settings persist per scenario row and ride the call context.
@@ -155,6 +190,17 @@ once on an empty/malformed reply (reasoning models burn the budget).
 - English UI copy; the avatar speaks Japanese (LLM-generated turns).
 - Tests (`*.test.ts`) live next to the code under `src/` and run with Vitest.
 - Never commit `.env` or real secrets (see `CONTRACT.md` secret hygiene).
+- **Component size**: when a component's state/effects start covering more than one workflow
+  (chat + search + a confirm state machine + document handling, say), extract the non-rendering
+  logic into a dedicated hook under `src/hooks/` and move any inline sub-components to their own
+  files — don't let one component keep growing. See `src/hooks/use-setup-chat.ts` +
+  `src/components/setup/SetupScreen.tsx`, or `src/hooks/use-call-mic-input.ts` +
+  `src/hooks/use-call-ws-events.ts` + `src/components/call/CallScreen.tsx`, for the pattern.
+- **`react-hooks/exhaustive-deps` suppressions** are allowed only with a comment explaining why the
+  omitted dependency is deliberate (e.g. an unstable-identity context object, or a primitive-only
+  guard against a re-broadcast snapshot) — never to silence a real missing dependency. Grep
+  `eslint-disable-next-line react-hooks/exhaustive-deps` before adding a new one; if the existing
+  ones nearby follow a pattern (see `use-call-mic-input.ts`'s VAD-window effect), match it.
 
 ## Deployment
 

@@ -178,9 +178,24 @@ Env example: `LLM_PROVIDER=openai|anthropic|connect`, `STT_PROVIDER=whisper-cpp|
   `CONNECT_TOKEN_EXPIRED` event rotates them via `refreshConnectToken`. Never logged.
 - **Auth.** better-auth (email/password + optional OAuth), rate-limited login, session cookies.
 - **API hardening.** Rate limiting on `/api/connect-token`, `/api/llm`, `/api/stt`,
-  `/api/search`, `/api/chatbots*`; body-size limits; validation on every input.
-- **Search/LLM are server-side only** — the browser never holds the LLM/STT keys, and Connect
-  tools cannot reach private IPs (SSRF protection), so research stays on the server.
+  `/api/search`, `/api/chatbots*`; body-size limits; validation on every input. Every named
+  limiter (HTTP routes in `server/routes/*.mjs`, the WS hub's join-attempt check below) shares one
+  registry + sweep interval via `server/rate-limit.mjs` — add a new limiter by picking a unique
+  name, not by hand-rolling another `Map`/`setInterval`.
+- **WS hub hardening.** Pairing codes are 6 chars over a 32-symbol alphabet (~10⁹ space) — `join`
+  attempts are rate-limited per IP (`server/rate-limit.mjs`) and a connection is dropped after
+  repeated invalid codes. A device that joined without declaring a role (`capabilities: []`) is
+  refused any state-mutating message (`audio`/`intent`/`confirm`/`cancelRun`/`upload`/`ack`) —
+  see `ROLE_GATED_TYPES` in `server/hub.mjs`.
+- **Search/LLM are server-side only** — the browser never holds the LLM/STT keys. Outbound scrape
+  targets (`server/steps/scrape.mjs`, reached from both `research.mjs`'s objective-embedded URLs
+  and `extractTargetRules.mjs`'s confirmed candidate) are checked by `server/ssrf-guard.mjs`
+  before being forwarded to Firecrawl — non-http(s) schemes and loopback/private/link-local hosts
+  (including the cloud metadata address) are rejected — so research stays on the server without
+  becoming a proxy into internal infrastructure.
+- **Upload content checking.** `POST /api/uploads` sniffs the actual bytes with
+  `server/file-sniff.mjs` (`isImageContent`) rather than trusting the client-reported
+  `Content-Type`, which is attacker-controllable.
 - **Wrong-country guard.** Searches are scoped `language=ja-JP` + location terms, and the located
   target + extracted rules are always shown for user confirmation before a scenario is built.
 
@@ -209,6 +224,10 @@ Reconnect: devices rejoin by `sessionId` + (for companions) the pairing token; t
 re-initializes the presenter with the persisted scenario. The orchestrator's context + transcript
 are keyed by session, independent of WS connections, and cleared when the room empties.
 
+Hardening (§8, Phase 7d): `join` is rate-limited per IP and a connection is dropped after repeated
+invalid pairing codes; a device with no declared role is refused `audio`/`intent`/`confirm`/
+`cancelRun`/`upload`/`ack`.
+
 ## 10. Deployment
 
 - **One image** (`Dockerfile`): Node 22+ runtime, built `dist/`, SQLite file on `/data` volume,
@@ -231,6 +250,7 @@ are keyed by session, independent of WS connections, and cleared when the room e
 | 5 — Companion + persistence | in-app camera QR scanning, per-role avatar packs, scenario persistence, Connect Chatbot nextTurn, phone vocab picker, BYO TTS | ✅ done — see below |
 | 7b — client→server migration | background job runner, step graph + run engine, confirmTarget gate, planScenario/parseDocument/cheatSheet as graph steps, intent-message UI | ✅ done — see below |
 | 7c — UI usability | chrome cleanup (stepper removed, app footer, mobile transcript access), main-surface audio controls + chat cleanliness | ✅ done |
+| 7d — Security & code-quality hardening | WS join rate-limit + role gating, SSRF guard on scrape, upload content sniffing, shared rate-limiter, `server.mjs` route-module split, `SetupScreen`/`CallScreen` hook extraction | ✅ done — see below |
 
 **Phase 1 completed:** presenter layer at full 0.2.0 surface (`setListening/setThinking`,
 `present(text,{emotion,intensity})`, `presentWithAudio`, `muteAudio`, `updateCameraAngle`,
@@ -350,6 +370,24 @@ into `startRun`; `deliver` stamps `run.result` onto every `RunSnapshot`; `RunSta
 
 **Phase 7c completed (this round):** UI usability — chrome cleanup (setup stepper removed, an app
 footer added, transcript reachable on mobile) and main-surface audio controls + chat cleanliness.
+
+**Phase 7d completed (2026-08-25) — security & code-quality hardening**, driven by a repo-wide
+review filed as 14 GitHub issues (jsaigou/TagTeam#1-14), all closed. Security: WS pairing-code
+brute-force protection + role gating on state-mutating hub messages (§8, `server/hub.mjs`); an
+SSRF guard on outbound scrape targets (`server/ssrf-guard.mjs`); magic-byte content checking on
+uploads (`server/file-sniff.mjs`); shape validation added to `PUT /api/scenarios/:id` (previously
+the only scenario write path that skipped it); a startup warning if the dev-only demo API is ever
+enabled under `NODE_ENV=production`. Code quality: `server.mjs` (1000+ lines) split into
+`server/connect-client.mjs`, `server/middleware.mjs`, and `server/routes/{catalog,media,search,
+sessions}.mjs` — see the Architecture bullet in `AGENTS.md` for the module map and the new-route
+convention; a shared rate-limiter registry (`server/rate-limit.mjs`) replaced 13 independent
+`Map`/`setInterval` pairs. `SetupScreen.tsx` (1091 lines) and `CallScreen.tsx` (660 lines) were
+god-components mixing chat/search/state-machine/mic-input logic with rendering — extracted into
+`src/hooks/use-setup-chat.ts`, `use-call-mic-input.ts`, `use-call-ws-events.ts` and 5 standalone
+sub-components (`SetupScreen.tsx` → ~400 lines, `CallScreen.tsx` → ~470). All 6 existing
+`react-hooks/exhaustive-deps` suppressions were audited; 2 were genuine bugs relying on incidental
+re-renders (fixed, not just silenced), 4 were legitimately unstable-identity context objects (left
+as-is). Full detail: `docs/handoff-2026-08-25-review-hardening.md`.
 
 ## 12. Open questions
 

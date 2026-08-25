@@ -13,8 +13,9 @@
 | `/demo2/` | The story: a two-story house, a cat (Luna) in the window, approach to the door, and a transition into an indoor scene | `demo2/index.html`, `src/demo/house/*` |
 
 Run with `pnpm dev` → `http://localhost:5173/demo/` and `http://localhost:5173/demo2/`.
-Both reuse the dev-gated unauthenticated `/api/demo/*` endpoints (`server.mjs`, enabled only
-when `NODE_ENV !== "production"` or `ENABLE_DEMO_API=1`) and the low-level `usePresenter` hook —
+Both reuse the dev-gated unauthenticated `/api/demo/*` endpoints (`server/routes/catalog.mjs`,
+enabled only when `NODE_ENV !== "production"` or `ENABLE_DEMO_API=1` — a warning logs at startup
+if the latter is ever set under `NODE_ENV=production`) and the low-level `usePresenter` hook —
 no login, no real-app changes.
 
 ## The candidate: "cat comes to the door"
@@ -91,4 +92,4 @@ element, so scale / traverse / bob move everything coherently.
 - Scene component: `src/demo/house/HouseDemo.tsx`
 - Facade/layer CSS: `src/demo/house/house.css`
 - Shared demo API + UI primitives: `src/demo/api.ts`, `src/demo/ui.tsx`
-- Dev-gated demo endpoints: `server.mjs` (`/api/demo/*`)
+- Dev-gated demo endpoints: `server/routes/catalog.mjs` (`/api/demo/*`)

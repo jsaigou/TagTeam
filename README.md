@@ -103,8 +103,9 @@ Open http://localhost:5173. Verify: `pnpm build && pnpm lint && pnpm test`. Prod
 
 ## Repo map
 
-- `server.mjs` — Express app: better-auth login gate, minted connect tokens, avatar/scene/voice/motion catalog proxy, session hub, orchestrator, `/api/tts`, serves the built app.
-- `server/` — auth, Drizzle+SQLite schema/db, WebSocket session hub, scenario persistence, call orchestrator + nextTurn brain, provider layer (LLM/STT/TTS/chatbot/search).
+- `server.mjs` — Express bootstrap: env validation, better-auth login gate, wires dependencies and mounts `server/routes/*`, serves the built app.
+- `server/routes/` — the actual route handlers (catalog/connect-token proxy, STT/TTS/audio/LLM proxy, search, session+scenario+upload REST), each a DI'd factory mounted from `server.mjs`.
+- `server/` — auth, Drizzle+SQLite schema/db, WebSocket session hub (+ pairing rate-limit/role gating), SSRF-guarded scrape, upload content check, scenario persistence, call orchestrator + nextTurn brain, provider layer (LLM/STT/TTS/chatbot/search).
 - `src/shared/contract.ts` — cross-module data contract (SimScript, Glossary, CheatSheet, player API, WS protocol, coaching settings).
 - `src/lib/` — api/presenter (Connect), llm/doc-parser/sim-engine/glossary/cheat-sheet/coaching (AI pipeline + settings), audio/tts (speech).
 - `src/hooks/` — React bindings; `use-script-player` is the sentence-queue driving the call; `use-push-to-talk` is the mic.
