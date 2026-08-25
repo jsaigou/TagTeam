@@ -107,8 +107,10 @@ export function useGuideChat(options: GuideChatOptions) {
         );
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
+    // `enqueueTurn` is genuinely stable (it only depends on `runTurn`, which
+    // has an empty dep array itself) — listing it doesn't churn this
+    // callback's identity, so no suppression needed.
+    [enqueueTurn],
   );
 
   /* Talk button: press to open a voice-activated session, press again to stop.

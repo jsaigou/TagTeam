@@ -64,12 +64,20 @@ export function PhoneApp() {
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const [selectedVocab, setSelectedVocab] = useState<GlossaryEntry | null>(null);
 
-  const hasCode = useMemo(
-    () => parsePhoneHash(window.location.hash) !== null,
-    // Re-evaluate when the hash changes (manual entry sets it).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [window.location.hash],
-  );
+  /* `window.location.hash` isn't a reactive value, so a plain useMemo over it
+     only ever recomputes when something else happens to re-render this
+     component — it worked by coincidence (a hub-status change usually
+     follows right after). Setting `location.hash` fires a native
+     `hashchange` event, so listening for it directly makes this correct
+     unconditionally instead of leaning on that coincidence, and needs no
+     lint suppression. */
+  const [hash, setHash] = useState(window.location.hash);
+  useEffect(() => {
+    const onHashChange = () => setHash(window.location.hash);
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
+  const hasCode = useMemo(() => parsePhoneHash(hash) !== null, [hash]);
 
   /* Phase 3 — mirror the orchestrator's brain state and live transcript. */
   useEffect(() => onPhase((m) => setThinking(m.phase === "thinking")), [onPhase]);

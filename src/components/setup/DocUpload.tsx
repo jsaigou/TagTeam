@@ -21,6 +21,12 @@ type DocUploadProps = {
   busy: boolean;
 };
 
+// The base64 data URL this becomes inflates ~33%, and it's later POSTed as
+// JSON to /api/uploads (12 MB body limit) — reject oversized files up front
+// instead of locking up the tab reading them into memory only to have the
+// upload fail later.
+const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+
 function toImageDoc(dataUrl: string, mimeType: string): ImageDoc {
   return { kind: "image", dataUrl, mimeType };
 }
@@ -65,6 +71,7 @@ export function DocUpload({ onAnalyzed, busy }: DocUploadProps) {
   const [dragging, setDragging] = useState(false);
   const [scanOpen, setScanOpen] = useState(false);
   const [pairOpen, setPairOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const { pendingUploads, ackPendingUpload } = useSession();
   const webcamAvailable = useWebcamAvailable();
@@ -73,7 +80,14 @@ export function DocUpload({ onAnalyzed, busy }: DocUploadProps) {
   const readFiles = useCallback((files: FileList | File[]) => {
     const images = [...files].filter((f) => f.type.startsWith("image/"));
     if (images.length === 0) return;
-    for (const file of images) {
+    const oversized = images.filter((f) => f.size > MAX_IMAGE_BYTES);
+    const toRead = images.filter((f) => f.size <= MAX_IMAGE_BYTES);
+    setError(
+      oversized.length > 0
+        ? `${oversized.length === 1 ? "One image is" : `${oversized.length} images are`} too large (max ${MAX_IMAGE_BYTES / (1024 * 1024)} MB each) and ${oversized.length === 1 ? "was" : "were"} skipped.`
+        : null,
+    );
+    for (const file of toRead) {
       const reader = new FileReader();
       reader.onload = () => {
         setPages((prev) => [...prev, toImageDoc(String(reader.result), file.type)]);
@@ -161,6 +175,8 @@ export function DocUpload({ onAnalyzed, busy }: DocUploadProps) {
           />
         )}
       </div>
+
+      {error && <p className="text-xs text-destructive">{error}</p>}
 
       {pages.length > 0 && (
         <div className="flex flex-wrap gap-2">

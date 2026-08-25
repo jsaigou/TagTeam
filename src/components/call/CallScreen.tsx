@@ -5,8 +5,9 @@ import { useAppStore } from "@/state/app-store";
 import { useAvatar } from "@/state/avatar-context";
 import { useSession } from "@/state/session-context";
 import { useScriptPlayer } from "@/hooks/use-script-player";
-import { usePushToTalk } from "@/hooks/use-push-to-talk";
-import { useVoiceTalk } from "@/hooks/use-voice-talk";
+import { useCallWsEvents } from "@/hooks/use-call-ws-events";
+import { useCallMicInput } from "@/hooks/use-call-mic-input";
+import type { PushToTalkResult } from "@/hooks/use-push-to-talk";
 import { useTalkMode } from "@/state/talk-mode-context";
 import { setCallContext } from "@/lib/session-api";
 import { createScenario, updateScenario } from "@/lib/scenario-api";
@@ -44,9 +45,7 @@ export function CallScreen() {
   const { player } = useScriptPlayer(playerDeps);
   const { session, setPlayerState, setActiveTurn, onControl, onTurn, onPhase, sendPushToTalk, run } =
     useSession();
-  const ptt = usePushToTalk();
   const { talkMode } = useTalkMode();
-  const vad = useVoiceTalk();
 
   const [turns, setTurns] = useState<Turn[]>([]);
   const [activeTurnId, setActiveTurnId] = useState<string | null>(null);
@@ -62,7 +61,8 @@ export function CallScreen() {
   /* Phase 3 — adaptive conversation state. */
   const [adaptive, setAdaptive] = useState(false);
   const [userTurnActive, setUserTurnActive] = useState(false);
-  const [brainPhase, setBrainPhase] = useState<"idle" | "thinking">("idle");  const [conversationEnded, setConversationEnded] = useState(false);
+  const [brainPhase, setBrainPhase] = useState<"idle" | "thinking">("idle");
+  const [conversationEnded, setConversationEnded] = useState(false);
   const [conversationError, setConversationError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -96,13 +96,7 @@ export function CallScreen() {
      surface a "your turn" prompt so the practice flow keeps moving. */
   const atUserTurn = activeTurn?.speaker === "user" && playerState === "talking";
   const showUserTurn = userTurnActive || atUserTurn;
-  /* Avatar is actually speaking only outside the user-turn / listening /
-     thinking windows — covers both scripted turns and generated replies. */
-  const isSpeaking =
-    playerState === "talking" &&
-    !showUserTurn &&
-    ptt.state !== "recording" &&
-    brainPhase === "idle";
+  const ended = playerState === "ended" || conversationEnded;
 
   const handleStart = useCallback(async () => {
     if (!script) return;
@@ -189,15 +183,6 @@ export function CallScreen() {
     [player],
   );
 
-  /* Companion phones send hold/resume/tap-help over the hub — run them here. */
-  useEffect(() => {
-    return onControl((msg) => {
-      if (msg.action === "hold") void handleHold();
-      else if (msg.action === "resume") handleResume();
-      else if (msg.action === "tapHelp" && msg.entryId) handleTapHelp(msg.entryId);
-    });
-  }, [onControl, handleHold, handleResume, handleTapHelp]);
-
   /* Phase 3 — present a generated bureaucrat reply, then invite the next turn. */
   const presentReply = useCallback(
     async (turn: Turn) => {
@@ -215,13 +200,15 @@ export function CallScreen() {
     [avatar],
   );
 
-  /* Phase 3 — the orchestrator broadcasts turns for the whole conversation. */
-  useEffect(() => {
-    return onTurn((msg) => {
-      const turn = msg.turn;
+  /* Phase 3 — the orchestrator broadcasts turns for the whole conversation;
+     mirror the brain phase (thinking/idle) on the avatar too. Both handlers
+     are handed to useCallWsEvents below, alongside the companion `control`
+     relays (hold/resume/tapHelp). */
+  const handleServerTurn = useCallback(
+    (turn: Turn, end: boolean | undefined) => {
       setTurns((prev) => [...prev, turn]);
       setActiveTurn(turn);
-      if (msg.end) {
+      if (end) {
         setBrainPhase("idle");
         avatar.setThinking(false);
         setConversationEnded(true);
@@ -232,33 +219,34 @@ export function CallScreen() {
         avatar.setThinking(false);
         void presentReply(turn);
       }
-    });
-  }, [onTurn, avatar, setActiveTurn, presentReply]);
+    },
+    [setActiveTurn, avatar, presentReply],
+  );
 
-  /* Phase 3 — mirror the server's brain phase on the avatar (thinking). */
-  useEffect(() => {
-    return onPhase((msg) => {
-      setBrainPhase(msg.phase);
-      avatar.setThinking(msg.phase === "thinking");
-    });
-  }, [onPhase, avatar]);
+  const handleServerPhase = useCallback(
+    (phase: "idle" | "thinking") => {
+      setBrainPhase(phase);
+      avatar.setThinking(phase === "thinking");
+    },
+    [avatar],
+  );
 
-  const handlePTTDown = useCallback(async () => {
-    if (ptt.state === "recording") return;
-    setUserTurnActive(false);
-    setConversationError(null);
-    const recording = await ptt.start();
-    if (recording) {
-      avatar.setListening(true);
-    } else {
-      setUserTurnActive(true);
-    }
-  }, [ptt, avatar]);
+  useCallWsEvents({
+    onControl,
+    onTurn,
+    onPhase,
+    onHold: () => void handleHold(),
+    onResume: handleResume,
+    onTapHelp: handleTapHelp,
+    onServerTurn: handleServerTurn,
+    onServerPhase: handleServerPhase,
+  });
 
   /* Phase 3 — submit a recorded utterance to the orchestrator and show the
-     avatar "thinking". Shared by push-to-talk and voice-activated (VAD) paths. */
+     avatar "thinking". Shared by push-to-talk and voice-activated (VAD) paths
+     (see useCallMicInput's `onUtterance`). */
   const submitUtterance = useCallback(
-    async (audio: { audioBase64: string; mimeType: "audio/wav" }) => {
+    async (audio: PushToTalkResult) => {
       setAdaptive(true);
       setBrainPhase("thinking");
       avatar.setThinking(true);
@@ -276,112 +264,30 @@ export function CallScreen() {
     [avatar, sendPushToTalk],
   );
 
-  const handlePTTUp = useCallback(async () => {
-    if (ptt.state !== "recording") return;
-    avatar.setListening(false);
-    const audio = await ptt.stop();
-    if (!audio) {
-      setUserTurnActive(true);
-      return;
-    }
-    await submitUtterance(audio);
-  }, [ptt, avatar, submitUtterance]);
+  const mic = useCallMicInput({
+    talkMode,
+    // The user's turn is showing and the call hasn't ended — mic input is
+    // available at all (also gates the Space-bar hotkey).
+    active: showUserTurn && !ended,
+    // Further gates the VAD auto-listen window: the call has started and the
+    // brain isn't already replying.
+    vadReady: started && brainPhase === "idle",
+    setListening: avatar.setListening,
+    setUserTurnActive,
+    setConversationError,
+    onUtterance: submitUtterance,
+  });
 
-  /* §7c.5 — the mic accepts BOTH press-and-hold (phones) and click-to-toggle
-     + the Space hotkey (desktop): a release under CLICK_TOGGLE_MS latches the
-     mic on instead of stopping it, and the next click/Space releases. Holds
-     past the threshold behave exactly as before. */
-  const CLICK_TOGGLE_MS = 280;
-  const micPressAtRef = useRef(0);
-  const micLatchedRef = useRef(false);
-  const [micLatched, setMicLatched] = useState(false);
-  const setLatch = useCallback((value: boolean) => {
-    setMicLatched(value);
-    micLatchedRef.current = value;
-  }, []);
-
-  const handleMicPress = useCallback(() => {
-    if (micLatchedRef.current) {
-      setLatch(false);
-      void handlePTTUp();
-      return;
-    }
-    micPressAtRef.current = Date.now();
-    void handlePTTDown();
-  }, [handlePTTDown, handlePTTUp, setLatch]);
-
-  const handleMicRelease = useCallback(() => {
-    if (
-      !micLatchedRef.current &&
-      ptt.state === "recording" &&
-      Date.now() - micPressAtRef.current < CLICK_TOGGLE_MS
-    ) {
-      setLatch(true); // a quick tap = click-to-start; keep recording
-      return;
-    }
-    setLatch(false);
-    void handlePTTUp();
-  }, [handlePTTUp, ptt.state, setLatch]);
-
-  /* Phase 6 — voice-activated talk (Silero VAD). The mic runs only while it's
-     the user's turn AND the avatar is not speaking/thinking (echo guard). */
-  const ended = playerState === "ended" || conversationEnded;
-  const canStart = !started && !ended && Boolean(script);
-
-  /* Space mirrors the mic button — gated exactly like its render (user's turn,
-     call not over), ignored while typing and on auto-repeat. */
-  useEffect(() => {
-    const typing = (target: EventTarget | null) =>
-      target instanceof HTMLElement &&
-      target.closest("input, textarea, select, [contenteditable='true']");
-    const accept = () => showUserTurn && !ended;
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.code !== "Space" || e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
-      if (typing(e.target) || !accept()) return;
-      e.preventDefault();
-      handleMicPress();
-    };
-    const onKeyUp = (e: KeyboardEvent) => {
-      if (e.code !== "Space") return;
-      if (typing(e.target) || !accept()) return;
-      e.preventDefault();
-      handleMicRelease();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    window.addEventListener("keyup", onKeyUp);
-    return () => {
-      window.removeEventListener("keydown", onKeyDown);
-      window.removeEventListener("keyup", onKeyUp);
-    };
-  }, [showUserTurn, ended, handleMicPress, handleMicRelease]);
-
-  const vadWindow =
-    talkMode === "vad" &&
-    started &&
-    !ended &&
-    showUserTurn &&
+  /* Avatar is actually speaking only outside the user-turn / listening /
+     thinking windows — covers both scripted turns and generated replies. */
+  const isSpeaking =
+    playerState === "talking" &&
+    !showUserTurn &&
+    mic.ptt.state !== "recording" &&
     brainPhase === "idle";
 
-  useEffect(() => {
-    if (!vadWindow) {
-      void vad.stop();
-      avatar.setListening(false);
-      return;
-    }
-    void vad.start({
-      onUtterance: (audio) => void submitUtterance(audio),
-    });
-    avatar.setListening(true);
-    return () => {
-      void vad.stop();
-      avatar.setListening(false);
-    };
-    /* Deps deliberately use the stable functions, not the `vad`/`avatar`
-       context objects which change identity every render. */
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [vadWindow, vad.start, vad.stop, avatar.setListening, submitUtterance]);
-
-  const vadFallback = talkMode === "vad" && (!vad.supported || vad.state === "error");
+  const canStart = !started && !ended && Boolean(script);
+  const vadFallback = mic.vadFallback;
 
   /* Phase 7b slice 7 — the run's speculative cheatSheet node (server/graph.mjs)
      delivered while the user rehearses: adopt it and attach it to the
@@ -492,12 +398,12 @@ export function CallScreen() {
                   <p className="text-xs font-medium uppercase tracking-wide text-primary">
                     Your turn
                   </p>
-                  {vad.state === "listening" ? (
+                  {mic.vad.state === "listening" ? (
                     <p className="flex items-center gap-2 text-sm text-foreground">
                       <span className="size-2 animate-pulse rounded-full bg-emerald-500" />
                       Listening — speak whenever you're ready.
                     </p>
-                  ) : vad.state === "speaking" ? (
+                  ) : mic.vad.state === "speaking" ? (
                     <p className="flex items-center gap-2 text-sm text-foreground">
                       <span className="size-2 animate-pulse rounded-full bg-destructive" />
                       I can hear you — go ahead.
@@ -524,14 +430,14 @@ export function CallScreen() {
                     Skip & continue <ChevronRight className="size-4" />
                   </Button>
                 </>
-              ) : ptt.state === "recording" ? (
+              ) : mic.ptt.state === "recording" ? (
                 <>
                   <p className="text-xs font-medium uppercase tracking-wide text-primary">
                     Listening…
                   </p>
                   <p className="flex items-center gap-2 text-sm text-foreground">
                     <span className="size-2 animate-pulse rounded-full bg-destructive" />
-                    {micLatched
+                    {mic.micLatched
                       ? "Recording hands-free — click the mic or press Space to send."
                       : "Keep holding to speak — release when done."}
                   </p>
@@ -555,25 +461,25 @@ export function CallScreen() {
                       )}
                     </p>
                   )}
-                  {vad.state === "error" && vad.error && (
+                  {mic.vad.state === "error" && mic.vad.error && (
                     <p className="text-xs text-destructive">
-                      {vad.error} Falling back to the hold button.
+                      {mic.vad.error} Falling back to the hold button.
                     </p>
                   )}
                   <button
                     type="button"
-                    onPointerDown={() => handleMicPress()}
-                    onPointerUp={() => handleMicRelease()}
-                    onPointerLeave={() => handleMicRelease()}
-                    onPointerCancel={() => handleMicRelease()}
-                    disabled={!ptt.supported}
+                    onPointerDown={() => mic.handleMicPress()}
+                    onPointerUp={() => mic.handleMicRelease()}
+                    onPointerLeave={() => mic.handleMicRelease()}
+                    onPointerCancel={() => mic.handleMicRelease()}
+                    disabled={!mic.ptt.supported}
                     className={cn(
                       "flex select-none touch-none items-center justify-center gap-2 rounded-lg border border-accent/40 bg-accent/15 px-4 py-3 text-sm font-semibold text-accent transition-colors hover:bg-accent/25 active:bg-accent/30",
-                      !ptt.supported && "cursor-not-allowed opacity-50",
+                      !mic.ptt.supported && "cursor-not-allowed opacity-50",
                     )}
                   >
                     <Mic className="size-4" />
-                    {micLatched ? "Click or press Space to send" : "Hold to speak"}
+                    {mic.micLatched ? "Click or press Space to send" : "Hold to speak"}
                   </button>
                   {conversationError && (
                     <p className="text-xs text-destructive">{conversationError}</p>
