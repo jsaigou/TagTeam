@@ -38,19 +38,29 @@ describe("hasAssemblyContent", () => {
     }
   });
 
-  it("is true for banking.lost_card, added in Sprint 3", () => {
+  it("is true for banking.lost_card and the housing leaves added in Sprints 3-4", () => {
     expect(hasAssemblyContent("banking.lost_card")).toBe(true);
+    expect(hasAssemblyContent("housing.rent")).toBe(true);
+    expect(hasAssemblyContent("housing.urgent_damage")).toBe(true);
   });
 
-  it("is false for a leaf outside the pilot departments — planScenario must fall back to the LLM", () => {
-    expect(hasAssemblyContent("housing.rent")).toBe(false);
+  it("is false for housing.other_damage and every gov.* leaf — deliberately never templated", () => {
+    // housing.other_damage: what happened varies every call — a template
+    // would misfit more often than help. gov.*: already has full
+    // LLM-generation infra from before this plan; Sprint 5 ships its vocab
+    // packs as content only, no turn-plan shape. planScenario must fall back
+    // to the LLM for all of these.
+    expect(hasAssemblyContent("housing.other_damage")).toBe(false);
+    expect(hasAssemblyContent("gov.tax")).toBe(false);
+    expect(hasAssemblyContent("gov.general")).toBe(false);
     expect(hasAssemblyContent("not.a.real.leaf")).toBe(false);
   });
 });
 
 describe("assembleScript", () => {
   it("throws for a leaf with no content — callers must check hasAssemblyContent first", () => {
-    expect(() => assembleScript("housing.rent", { target: TARGET })).toThrow();
+    expect(() => assembleScript("housing.other_damage", { target: TARGET })).toThrow();
+    expect(() => assembleScript("gov.tax", { target: TARGET })).toThrow();
   });
 
   it("produces a schema-valid, alternating script opening and closing on the bureaucrat", () => {
@@ -161,6 +171,26 @@ describe("assembleScript — Sprint 3 (banking, the full-prebuild test case)", (
     expect(script.turns.length).toBeGreaterThanOrEqual(6);
     expect(script.turns[0].speaker).toBe("bureaucrat");
     expect(glossary.length).toBe(10);
+  });
+});
+
+describe("assembleScript — Sprint 4 (housing)", () => {
+  it("reports to the landlord with no scheduling turn — ends in a promised follow-up instead", () => {
+    const { script } = assembleScript("housing.urgent_damage", { target: TARGET });
+    expect(script.turns.some((t) => t.jp.includes("水が漏れて"))).toBe(true);
+    expect(script.turns.at(-1)?.jp).toContain("ご連絡");
+  });
+
+  it("differentiates rent questions from urgent damage in the opening and detail turns", () => {
+    const rent = assembleScript("housing.rent", { target: TARGET });
+    const damage = assembleScript("housing.urgent_damage", { target: TARGET });
+    expect(rent.script.turns[1].jp).toContain("家賃");
+    expect(damage.script.turns[1].jp).toContain("水漏れ");
+    expect(rent.script.turns.at(-2)?.jp).not.toBe(damage.script.turns.at(-2)?.jp);
+  });
+
+  it("housing.other_damage has no assembly content — always falls back to the LLM", () => {
+    expect(hasAssemblyContent("housing.other_damage")).toBe(false);
   });
 });
 

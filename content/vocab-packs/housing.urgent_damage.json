@@ -1,0 +1,16 @@
+{
+  "_comment": "Sprint 4 (Switchboard Plan) — prebuilt vocab pack for housing.urgent_damage (fire, earthquake, water leak — reporting to the landlord AFTER the fact, not an in-progress 119/110 emergency call; see the plan's safety note). Authored directly, matches src/shared/contract.ts's VocabPack/GlossaryEntry shape.",
+  "leafId": "housing.urgent_damage",
+  "entries": [
+    { "id": "v1", "kanji": "水漏れ", "furigana": "みずもれ", "en": "water leak" },
+    { "id": "v2", "kanji": "火災", "furigana": "かさい", "en": "fire" },
+    { "id": "v3", "kanji": "地震", "furigana": "じしん", "en": "earthquake" },
+    { "id": "v4", "kanji": "被害", "furigana": "ひがい", "en": "damage" },
+    { "id": "v5", "kanji": "至急", "furigana": "しきゅう", "en": "urgently" },
+    { "id": "v6", "kanji": "修理", "furigana": "しゅうり", "en": "repair" },
+    { "id": "v7", "kanji": "業者", "furigana": "ぎょうしゃ", "en": "contractor / repair company" },
+    { "id": "v8", "kanji": "保険", "furigana": "ほけん", "en": "insurance" },
+    { "id": "v9", "kanji": "避難", "furigana": "ひなん", "en": "evacuation", "note": "if this word actually applies right now, call 119 first — this leaf is for reporting afterward, not for an emergency in progress." },
+    { "id": "v10", "kanji": "現状確認", "furigana": "げんじょうかくにん", "en": "checking the current state (of the damage)" }
+  ]
+}

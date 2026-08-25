@@ -1,0 +1,62 @@
+{
+  "_comment": "Sprint 4 (Switchboard Plan) — module lines (MOD 1-3, 5) for the Housing & Landlord department (calling the landlord/management office). Covers housing.rent and housing.urgent_damage — housing.other_damage deliberately has NO module/vocab-pack content (see server/scenario-assembly.mjs's comment): what broke and how badly varies every time, so it stays on full LLM generation rather than forcing a template that would misfit most calls. Authored directly per house convention.",
+  "department": "housing",
+  "modules": {
+    "mod1_greeting": {
+      "formal": {
+        "jp": "お電話ありがとうございます。{facilityName}でございます。本日はどのようなご用件でございましょうか。",
+        "en": "Thank you for calling. This is {facilityName}. How may I help you today?"
+      },
+      "standard": {
+        "jp": "お電話ありがとうございます。{facilityName}です。本日はどういったご用件でしょうか。",
+        "en": "Thank you for calling. This is {facilityName}. What can I help you with today?"
+      },
+      "friendly": {
+        "jp": "お電話ありがとうございます！{facilityName}です。今日はどんなご用件でしょうか？",
+        "en": "Thanks for calling! This is {facilityName}. What can I do for you today?"
+      }
+    },
+    "mod2_identity": {
+      "formal": {
+        "jp": "恐れ入りますが、お部屋番号とお名前をお伺いしてもよろしいでしょうか。",
+        "en": "I'm sorry to trouble you, but may I ask for your room number and name?"
+      },
+      "standard": {
+        "jp": "お部屋番号とお名前を伺ってもよろしいですか。",
+        "en": "May I have your room number and name, please?"
+      },
+      "friendly": {
+        "jp": "お部屋番号とお名前を伺ってもいいですか？",
+        "en": "Can I get your room number and name?"
+      }
+    },
+    "mod3_hold": {
+      "formal": {
+        "jp": "恐れ入りますが、少々お待ちいただけますでしょうか。",
+        "en": "I'm sorry, could I ask you to wait just a moment?"
+      },
+      "standard": {
+        "jp": "少々お待ちください。",
+        "en": "One moment, please."
+      },
+      "friendly": {
+        "jp": "少々お待ちくださいね。",
+        "en": "Just a sec, okay?"
+      }
+    },
+    "mod5_closing": {
+      "formal": {
+        "jp": "かしこまりました。担当の者から追ってご連絡させていただきます。お電話ありがとうございました。失礼いたします。",
+        "en": "Understood. Someone from our team will follow up with you. Thank you for calling. Goodbye."
+      },
+      "standard": {
+        "jp": "承知しました。担当者から追ってご連絡します。お電話ありがとうございました。失礼します。",
+        "en": "Understood. Someone will follow up with you. Thank you for calling. Goodbye."
+      },
+      "friendly": {
+        "jp": "わかりました！担当の者から連絡させますね。お電話ありがとうございました！",
+        "en": "Got it! We'll have someone reach out to you. Thanks for calling!"
+      }
+    }
+  }
+}

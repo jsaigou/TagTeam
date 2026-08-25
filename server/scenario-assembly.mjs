@@ -8,7 +8,10 @@
  *
  * A leaf with no content here falls through to the existing full LLM
  * generation — unchanged, which is what keeps "handle anything thrown at
- * it" true regardless of how complete the taxonomy is.
+ * it" true regardless of how complete the taxonomy is. Some leaves are
+ * DELIBERATELY left out even within a covered department — see
+ * `housing.other_damage`'s note below — because forcing a template onto a
+ * genuinely variable call would misfit more often than it'd help.
  *
  * Reuses `reconcileSimulation` (server/glossary.mjs) so an assembled script
  * satisfies the exact same contract (alternation, 6-10 turns, vocab ids
@@ -30,6 +33,7 @@ const MODULE_SETS = {
   appt: loadJson("scenario-modules/appt.json"),
   medical: loadJson("scenario-modules/medical.json"),
   banking: loadJson("scenario-modules/banking.json"),
+  housing: loadJson("scenario-modules/housing.json"),
 };
 
 // leafId -> { shape }. Only leaves with a real turn-plan shape AND a vocab
@@ -44,6 +48,11 @@ const ASSEMBLY_LEAVES = {
   "medical.symptom_injury": "symptom_triage",
   "medical.symptom_skin_concern": "symptom_triage",
   "banking.lost_card": "lost_card",
+  // housing.other_damage is deliberately NOT here: what broke and how badly
+  // varies every call, so it stays on full LLM generation rather than a
+  // template that would misfit most calls.
+  "housing.rent": "damage_report",
+  "housing.urgent_damage": "damage_report",
 };
 
 const VOCAB_PACKS = Object.fromEntries(
@@ -81,6 +90,14 @@ const SYMPTOM_OPENING_LINE = {
   },
 };
 
+const DAMAGE_OPENING_LINE = {
+  "housing.rent": { jp: "家賃のことでご相談したいのですが。", en: "I'd like to ask about my rent." },
+  "housing.urgent_damage": {
+    jp: "部屋で水漏れがあったので、ご連絡したのですが。",
+    en: "There's been a water leak in my room and I wanted to let you know.",
+  },
+};
+
 const SCENARIO_TITLES = {
   "appt.doctor_dentist": "診療の予約の電話",
   "appt.restaurant": "レストランの予約の電話",
@@ -91,6 +108,8 @@ const SCENARIO_TITLES = {
   "medical.symptom_injury": "けがについての電話",
   "medical.symptom_skin_concern": "ほくろについての電話",
   "banking.lost_card": "カード紛失の電話",
+  "housing.rent": "家賃についての電話",
+  "housing.urgent_damage": "水漏れの報告の電話",
 };
 
 const DEFAULT_PRESET = "standard";
@@ -236,11 +255,42 @@ function lostCardTurnPlan(preset, target) {
   ];
 }
 
+/** Greeting → identity (room number) → "tell me more" → the specific
+ *  situation → closing with a promised follow-up (no scheduling turn — a
+ *  landlord call ends in "we'll look into it and call you back", not a
+ *  booked appointment). Shared by housing.rent and housing.urgent_damage. */
+function damageReportTurnPlan(leafId, preset, target) {
+  const detailRequest = withCallout(
+    { jp: "詳しい状況を教えていただけますでしょうか。", en: "Could you tell me more about the situation?" },
+    hoursCallout(target),
+  );
+  return [
+    { speaker: "bureaucrat", ...modLine(leafId, "mod1_greeting", preset, target) },
+    { speaker: "user", ...DAMAGE_OPENING_LINE[leafId] },
+    { speaker: "bureaucrat", ...modLine(leafId, "mod2_identity", preset, target) },
+    { speaker: "user", jp: "101号室の田中です。", en: "This is Tanaka in room 101." },
+    { speaker: "bureaucrat", ...detailRequest },
+    {
+      speaker: "user",
+      jp:
+        leafId === "housing.urgent_damage"
+          ? "キッチンの下から水が漏れていて、床が濡れています。"
+          : "来月からの家賃の支払い方法について確認したいです。",
+      en:
+        leafId === "housing.urgent_damage"
+          ? "Water is leaking from under the kitchen sink and the floor is wet."
+          : "I'd like to confirm how to pay rent starting next month.",
+    },
+    { speaker: "bureaucrat", ...modLine(leafId, "mod5_closing", preset, target) },
+  ];
+}
+
 const TURN_PLAN_BUILDERS = {
   booking: (leafId, preset, target) => bookingTurnPlan(leafId, preset, target),
   cancel_reschedule: (leafId, preset, target) => cancelRescheduleTurnPlan(preset, target),
   symptom_triage: (leafId, preset, target) => symptomTriageTurnPlan(leafId, preset, target),
   lost_card: (leafId, preset, target) => lostCardTurnPlan(preset, target),
+  damage_report: (leafId, preset, target) => damageReportTurnPlan(leafId, preset, target),
 };
 
 /**

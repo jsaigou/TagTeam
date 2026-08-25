@@ -1,0 +1,16 @@
+{
+  "_comment": "Sprint 4 (Switchboard Plan) — prebuilt vocab pack for housing.rent. Authored directly, matches src/shared/contract.ts's VocabPack/GlossaryEntry shape.",
+  "leafId": "housing.rent",
+  "entries": [
+    { "id": "v1", "kanji": "家賃", "furigana": "やちん", "en": "rent" },
+    { "id": "v2", "kanji": "振込", "furigana": "ふりこみ", "en": "bank transfer" },
+    { "id": "v3", "kanji": "引き落とし", "furigana": "ひきおとし", "en": "automatic withdrawal" },
+    { "id": "v4", "kanji": "滞納", "furigana": "たいのう", "en": "unpaid / in arrears", "note": "worth knowing even if it doesn't apply to you — landlords use it a lot." },
+    { "id": "v5", "kanji": "支払期限", "furigana": "しはらいきげん", "en": "payment deadline" },
+    { "id": "v6", "kanji": "更新料", "furigana": "こうしんりょう", "en": "lease renewal fee" },
+    { "id": "v7", "kanji": "敷金", "furigana": "しききん", "en": "security deposit" },
+    { "id": "v8", "kanji": "管理費", "furigana": "かんりひ", "en": "management fee" },
+    { "id": "v9", "kanji": "領収書", "furigana": "りょうしゅうしょ", "en": "receipt" },
+    { "id": "v10", "kanji": "口座変更", "furigana": "こうざへんこう", "en": "changing (payment) account" }
+  ]
+}
