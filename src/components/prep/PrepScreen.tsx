@@ -13,11 +13,13 @@
  * briefing-audio.ts); subtitles carry every spoken line so the flow works
  * with sound blocked. Skip jumps straight to the ready state.
  */
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Check, FastForward } from "lucide-react";
 import { useAppStore } from "@/state/app-store";
 import { useAvatar } from "@/state/avatar-context";
 import { Button } from "@/components/ui/button";
+import { packToSelection } from "@/lib/presets";
+import { DEFAULT_AVATAR_ID, DEFAULT_SCENE_ID, DEFAULT_VOICE_ID } from "@/lib/presets";
 import { pickKeyTerms } from "@/lib/key-terms";
 import { resumeBriefingAudio } from "@/lib/briefing-audio";
 import { BRIEFING_LINE, usePrepBriefing } from "@/hooks/use-prep-briefing";
@@ -26,13 +28,55 @@ import { cn } from "@/lib/utils";
 export function PrepScreen() {
   const { state, toCall } = useAppStore();
   const { session } = useAvatar();
-  const terms = useMemo(() => pickKeyTerms(state.glossary, state.script), [state.glossary, state.script]);
+  const terms = useMemo(
+    () => pickKeyTerms(state.glossary, state.script),
+    [state.glossary, state.script],
+  );
   const { phase, revealed, activeIndex, subtitle, skip } = usePrepBriefing(
     terms,
     session.speak,
   );
   /** The Metal Gear layer ends with the cough. */
   const crtOn = phase === "briefing" || phase === "listing" || phase === "cough";
+
+  /* QA fix — the presenter was showing the PRACTICE avatar (SetupScreen used
+     to launch it before navigating here). The briefing belongs to Luna: swap
+     to the guide preset on mount; her own stage pill/retry handles failures.
+     The practice avatar is launched at the ready-click instead (once per
+     mount — StrictMode-safe via a ref). */
+  const lunaLaunchedRef = useRef(false);
+  const [handoff, setHandoff] = useState<{ busy: boolean; error: string | null }>({
+    busy: false,
+    error: null,
+  });
+
+  useEffect(() => {
+    if (lunaLaunchedRef.current) return;
+    lunaLaunchedRef.current = true;
+    void session
+      .launch({ avatarId: DEFAULT_AVATAR_ID, sceneId: DEFAULT_SCENE_ID, voiceId: DEFAULT_VOICE_ID })
+      .catch(() => {});
+    // Once per mount; `session` identity churns with provider renders.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleReady = () => {
+    const selection = state.scenario ?? packToSelection(state.settings.role);
+    if (!selection) {
+      setHandoff({ busy: false, error: "That call is missing its avatar setup." });
+      return;
+    }
+    setHandoff({ busy: true, error: null });
+    void session
+      .launch(selection)
+      .then(() => toCall())
+      .catch((err: unknown) =>
+        setHandoff({
+          busy: false,
+          error: err instanceof Error ? err.message : "Failed to launch the presenter.",
+        }),
+      );
+  };
 
   return (
     <div
@@ -143,10 +187,18 @@ export function PrepScreen() {
             </Button>
           ) : (
             <>
+              {handoff.error && (
+                <p className="text-sm text-destructive">{handoff.error}</p>
+              )}
               <span className="text-sm text-muted-foreground">Ready to practice?</span>
-              <Button size="lg" onClick={toCall} className="gap-2 rounded-full px-8 shadow-lg">
+              <Button
+                size="lg"
+                onClick={handleReady}
+                disabled={handoff.busy}
+                className="gap-2 rounded-full px-8 shadow-lg"
+              >
                 <Check className="size-5" />
-                I&apos;m ready — start the call
+                {handoff.busy ? "Warming up the practice avatar…" : "I'm ready — start the call"}
               </Button>
             </>
           )}

@@ -1,15 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Sparkles } from "lucide-react";
-import type { DocInput, GroundingAnswer, RoleId } from "@/shared/contract";
+import type { DocInput, GroundingAnswer } from "@/shared/contract";
 import { useAppStore, type SetupStep } from "@/state/app-store";
 import { useAvatar, GREETING_WAVE_MOTION } from "@/state/avatar-context";
 import { useSession } from "@/state/session-context";
 import { useCatalog } from "@/hooks/use-catalog";
 import { useSetupChat } from "@/hooks/use-setup-chat";
-import { resolveDefaults } from "@/lib/presets";
-import { DEFAULT_VOICE_ID } from "@/lib/presets";
+import { resolveDefaults, packToSelection } from "@/lib/presets";
 import { PANEL_HEADER_CLEAR, PANEL_TOP, setAvatarAnchor } from "@/lib/avatar-window";
-import { CALL_ROLES } from "@/lib/coaching";
 import { getScenario } from "@/lib/scenario-api";
 import { pipeline } from "@/state/pipeline";
 import { useFillers } from "@/hooks/use-fillers";
@@ -50,13 +48,6 @@ const GUIDES: Record<SetupStep, { en: string }> = {
 const GREETING_LINE = {
   en: "Hi I'm Luna. Describe your issue or upload the doc you need to respond to.",
 };
-
-/** Resolve a stored role back to its curated avatar/scene/voice selection. */
-function packToSelection(role: RoleId): { avatarId: string; sceneId: string; voiceId: string } | null {
-  const pack = CALL_ROLES[role].pack;
-  if (!pack?.avatarId || !pack.sceneId) return null;
-  return { avatarId: pack.avatarId, sceneId: pack.sceneId, voiceId: pack.voiceId ?? DEFAULT_VOICE_ID };
-}
 
 export function SetupScreen() {
   const {
@@ -266,7 +257,8 @@ export function SetupScreen() {
           state.settings,
         );
         setSim(result.script, result.glossary);
-        await session.launch(scenario);
+        /* The practice avatar is NOT launched here anymore — the prep screen
+           shows Luna first and launches the role pack at its ready-click. */
         toPrep();
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to generate simulation");
@@ -345,10 +337,11 @@ export function SetupScreen() {
   );
 
   /* Phase 7b slice 6 — the run delivered a scenario: drop script + glossary
-     into the store, launch the practice avatar, and move to the call. The
-     selection is the user's pick when they made one, else the configured
-     role's curated pack (the intent path skips the ScenarioPicker).
-     Once-per-runId: the snapshot re-broadcasts on every job change. */
+     into the store and move to the prep briefing (which shows Luna; the
+     practice avatar launches at its ready-click). The selection is the
+     user's pick when they made one, else the configured role's curated pack
+     (the intent path skips the ScenarioPicker). Once-per-runId: the snapshot
+     re-broadcasts on every job change. */
   const appliedRunRef = useRef<string | null>(null);
   useEffect(() => {
     const result = run?.result;
@@ -361,27 +354,14 @@ export function SetupScreen() {
     }
     chooseScenario(selection);
     setSim(result.script, result.glossary);
-    setBusy(true);
-    session.setThinking(true);
-    void session
-      .launch(selection)
-      .then(() => toPrep())
-      .catch((err: unknown) =>
-        setError(err instanceof Error ? err.message : "Failed to launch the presenter."),
-      )
-      .finally(() => {
-        session.setThinking(false);
-        setBusy(false);
-      });
+    toPrep();
   }, [
     run,
     state.scenario,
     state.settings.role,
     chooseScenario,
     setSim,
-    setBusy,
     setError,
-    session,
     toPrep,
   ]);
 

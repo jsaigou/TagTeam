@@ -42,6 +42,16 @@ export function resolveDefaults(
 
 export type RoleSelection = { avatarId: string; sceneId: string; voiceId: string };
 
+/** Resolve a stored/chosen role back to its curated avatar/scene/voice
+ *  selection (moved here from SetupScreen so the prep screen can relaunch the
+ *  practice avatar at the ready-click too). Null when the role pack lacks a
+ *  usable avatar+scene. */
+export function packToSelection(role: RoleId): RoleSelection | null {
+  const pack = CALL_ROLES[role].pack;
+  if (!pack?.avatarId || !pack.sceneId) return null;
+  return { avatarId: pack.avatarId, sceneId: pack.sceneId, voiceId: pack.voiceId ?? DEFAULT_VOICE_ID };
+}
+
 /** Prefer `preferred` when present in `items`, else `secondary`, else the first item. */
 function pickWithFallback<T extends { id: string }>(
   items: T[],

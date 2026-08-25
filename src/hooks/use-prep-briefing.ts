@@ -43,61 +43,19 @@ export function usePrepBriefing(terms: GlossaryEntry[], speak: (text: string) =>
   /** Monotonic token: skip()/unmount invalidates every in-flight await. */
   const runIdRef = useRef(0);
 
-  const sleep = (ms: number) =>
-    new Promise<boolean>((resolve) => {
-      const id = window.setTimeout(() => resolve(true), ms);
-      // Resolves false only via the timeout being cleared on teardown —
-      // handled implicitly: after unmount setState calls are skipped by the
-      // runId guard, so a leaked timer resolving late is harmless.
-      void id;
-    });
-
-  const run = useCallback(async () => {
-    const runId = ++runIdRef.current;
-    const alive = () => runIdRef.current === runId;
-    const guard = <T,>(p: Promise<T>, fallback: T): Promise<T> =>
-      p.catch(() => fallback);
-
-    try {
-      resumeBriefingAudio();
-      setPhase("briefing");
-      setSubtitle(BRIEFING_LINE);
-      await guard(speakBriefingLine(BRIEFING_LINE), false);
-      if (!alive()) return;
-
-      setPhase("listing");
-      for (let i = 0; i < terms.length; i++) {
-        playDetectionCue();
-        setRevealed(i + 1);
-        await sleep(REVEAL_MS);
-        if (!alive()) return;
-      }
-
-      setPhase("cough");
-      setSubtitle(COUGH_SUBTITLE);
-      playCough();
-      await sleep(COUGH_MS);
-      if (!alive()) return;
-      setSubtitle(null);
-
-      setPhase("explain");
-      for (let i = 0; i < terms.length; i++) {
-        setActiveIndex(i);
-        const t = terms[i];
-        await guard(
-          speak(`${t.furigana}. This means: ${t.en}.`),
-          undefined,
-        );
-        if (!alive()) return;
-      }
-      setActiveIndex(-1);
-      await guard(speak("Are you ready?"), undefined);
-      if (!alive()) return;
-      setPhase("ready");
-    } catch {
-      if (alive()) setPhase("ready");
-    }
-  }, [terms, speak]);
+  /* Identity-proofing (QA fix): `speak` gets a fresh function identity
+     whenever the avatar provider re-renders — and every speak() toggles its
+     isSpeaking state, re-rendering the provider MID-SEQUENCE. Keying the
+     effect on that identity made it tear down and restart in a loop,
+     replaying the briefing line forever. The sequence therefore reads both
+     inputs through refs and runs EXACTLY ONCE per mount; a started guard
+     keeps even a hot effect re-run from replaying the line. */
+  const termsRef = useRef(terms);
+  const speakRef = useRef(speak);
+  useEffect(() => {
+    termsRef.current = terms;
+    speakRef.current = speak;
+  });
 
   /** Invalidate the current run token; called from skip() and unmount. */
   const invalidate = useCallback(() => {
@@ -106,17 +64,64 @@ export function usePrepBriefing(terms: GlossaryEntry[], speak: (text: string) =>
   }, []);
 
   useEffect(() => {
-    void run();
+    // [invalidate] is stable → this runs once per mount; the refs above keep
+    // mid-sequence provider re-renders from ever restarting it.
+    const runId = ++runIdRef.current;
+    const alive = () => runIdRef.current === runId;
+    const guard = <T,>(p: Promise<T>, fallback: T): Promise<T> =>
+      p.catch(() => fallback);
+
+    void (async () => {
+      try {
+        resumeBriefingAudio();
+        setPhase("briefing");
+        setSubtitle(BRIEFING_LINE);
+        await guard(speakBriefingLine(BRIEFING_LINE), false);
+        if (!alive()) return;
+
+        setPhase("listing");
+        const current = termsRef.current;
+        for (let i = 0; i < current.length; i++) {
+          playDetectionCue();
+          setRevealed(i + 1);
+          await new Promise((r) => window.setTimeout(r, REVEAL_MS));
+          if (!alive()) return;
+        }
+
+        setPhase("cough");
+        setSubtitle(COUGH_SUBTITLE);
+        playCough();
+        await new Promise((r) => window.setTimeout(r, COUGH_MS));
+        if (!alive()) return;
+        setSubtitle(null);
+
+        setPhase("explain");
+        for (let i = 0; i < current.length; i++) {
+          setActiveIndex(i);
+          const t = current[i];
+          await guard(speakRef.current(`${t.furigana}. This means: ${t.en}.`), undefined);
+          if (!alive()) return;
+        }
+        setActiveIndex(-1);
+        await guard(speakRef.current("Are you ready?"), undefined);
+        if (!alive()) return;
+        setPhase("ready");
+      } catch {
+        if (alive()) setPhase("ready");
+      }
+    })();
+
     return invalidate;
-  }, [run, invalidate]);
+  }, [invalidate]);
 
   const skip = useCallback(() => {
-    invalidate();
+    runIdRef.current++;
+    cancelBriefingSpeech();
     setSubtitle(null);
     setRevealed(terms.length);
     setActiveIndex(-1);
     setPhase("ready");
-  }, [invalidate, terms.length]);
+  }, [terms.length]);
 
   return { phase, revealed, activeIndex, subtitle, skip };
 }
