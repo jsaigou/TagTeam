@@ -539,10 +539,14 @@ export function SetupScreen() {
   useEffect(() => () => chatSearchCloseRef.current?.(), []);
 
   /* Ambient processing (product spec): while Gemma's background work runs —
-     the chat-triggered search, or any active run step with nothing awaiting
-     the user — Luna vocalizes short fillers instead of sitting silent. English
+     Luna's own LLM turn, the chat-triggered search, or any active run step —
+     she vocalizes short fillers instead of sitting silent. Including guide-chat
+     "thinking" matters: classification queues behind it on the homelab model,
+     so this is the ONLY immediate feedback a fresh objective gets. English
      during setup; the Japanese call context takes over later. */
+  const lunaThinking = guideChat.state === "thinking";
   const gemmaBusy =
+    lunaThinking ||
     chatSearch?.status === "searching" ||
     (!!run &&
       !run.result &&
@@ -555,6 +559,41 @@ export function SetupScreen() {
     isSpeaking: () => session.isSpeaking,
   });
 
+  /* Classification watchdog: classification queues behind Luna's guide-chat
+     reply on the serialized homelab model (two back-to-back completions,
+     measured ~20-35s), and when it fails outright the hub stays silent.
+     Either way the user used to see NOTHING happen after sending an
+     objective. If no `classified` broadcast lands within 40s of a send —
+     past the normal race, i.e. something actually went wrong — fall back to
+     searching the raw text; an entity-keyed search supersedes it if
+     classification lands later. */
+  const CLASSIFY_WATCHDOG_MS = 40_000;
+  const lastClassifiedAtRef = useRef(0);
+  const watchdogIdRef = useRef(0);
+  const watchdogTextRef = useRef<string | null>(null);
+  const watchdogTimerRef = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      if (watchdogTimerRef.current !== null) window.clearTimeout(watchdogTimerRef.current);
+    },
+    [],
+  );
+  const armClassifyWatchdog = useCallback(
+    (text: string) => {
+      const sentAt = Date.now();
+      watchdogIdRef.current = sentAt;
+      watchdogTextRef.current = text;
+      if (watchdogTimerRef.current !== null) window.clearTimeout(watchdogTimerRef.current);
+      watchdogTimerRef.current = window.setTimeout(() => {
+        watchdogTimerRef.current = null;
+        // A newer send owns the watch now, or classification already landed.
+        if (watchdogIdRef.current !== sentAt || lastClassifiedAtRef.current >= sentAt) return;
+        startChatSearch(text);
+      }, CLASSIFY_WATCHDOG_MS);
+    },
+    [startChatSearch],
+  );
+
   const sendChat = useCallback(
     (text: string) => {
       appendChat({ role: "user", text });
@@ -562,6 +601,7 @@ export function SetupScreen() {
          entity first, and the chat search (plus the run's research) keys off
          that — searching the raw sentence flooded results with generic
          appointment guides. */
+      armClassifyWatchdog(text);
       /* Server side: classify the turn; a stated objective starts a run
          seeded with the setup-screen context. Upload failures must not eat
          the message — fall back to an unseeded intent. */
@@ -572,7 +612,7 @@ export function SetupScreen() {
          the hub only acts on the intents it owns (objective/confirm/reject). */
       guideChat.sendText(text);
     },
-    [appendChat, buildRunContext, sendIntent, guideChat],
+    [appendChat, buildRunContext, sendIntent, guideChat, armClassifyWatchdog],
   );
   /* -- Conversation-first workflows (product spec §Workflows) --------------
      The server classifies each chat turn and broadcasts the result; Luna
@@ -584,6 +624,8 @@ export function SetupScreen() {
   useEffect(
     () =>
       onClassified(({ result, runId }) => {
+        // Any classified broadcast disarms the raw-text watchdog.
+        lastClassifiedAtRef.current = Date.now();
         switch (result.intent) {
           case "state_objective": {
             const name = result.targetName?.trim();
@@ -1036,8 +1078,9 @@ export function SetupScreen() {
       </div>
       </div>
 
-      {/* Papers pile up in front of Luna while she researches the task. */}
-      {chatSearch?.status === "searching" && <SearchPapersOverlay />}
+      {/* Papers pile up in front of Luna while she works — immediately on
+          send (her LLM turn), then through the search itself. */}
+      {(lunaThinking || chatSearch?.status === "searching") && <SearchPapersOverlay />}
 
       {/* The corner door reveal plays over the live, centered UI. */}
       {state.introPhase === "running" && (
