@@ -100,8 +100,21 @@ export async function createScenario(userId, data) {
   return { id: inserted.id };
 }
 
+/** Thrown when a patch field doesn't match the shape the create route and
+ *  `/api/sessions/:id/call-context` already enforce for the same fields —
+ *  the update path used to skip this check entirely. */
+function invalidPatch(message) {
+  return Object.assign(new Error(message), { status: 400 });
+}
+
 /** Patch an owned scenario (e.g. attach the cheat sheet after the call). */
 export async function updateScenario(userId, id, patch) {
+  if ("script" in patch && (!patch.script || !Array.isArray(patch.script.turns))) {
+    throw invalidPatch("'script.turns' must be an array.");
+  }
+  if ("glossary" in patch && !Array.isArray(patch.glossary)) {
+    throw invalidPatch("'glossary' must be an array.");
+  }
   const set = {};
   for (const [key, value] of Object.entries(patch)) {
     if (TEXT_FIELDS.has(key)) {

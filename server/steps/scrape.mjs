@@ -5,6 +5,7 @@
  * strictly-sequential `for` loop.
  */
 import { config } from "../providers.mjs";
+import { assertPublicHttpUrl } from "../ssrf-guard.mjs";
 
 /** @param {{ url: string }} input */
 export async function run({ url }, { signal, report }) {
@@ -13,6 +14,11 @@ export async function run({ url }, { signal, report }) {
       status: 501,
     });
   }
+  // Both call sites (research.mjs's objective-embedded URLs,
+  // extractTargetRules.mjs's confirmed candidate) trace back to user-supplied
+  // text — never forward this to Firecrawl without checking it doesn't point
+  // at loopback/private/link-local infrastructure first.
+  await assertPublicHttpUrl(url);
   report({ detail: url });
 
   const headers = { "Content-Type": "application/json" };

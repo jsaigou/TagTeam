@@ -18,6 +18,7 @@
 import { WebSocketServer, WebSocket } from "ws";
 import crypto from "node:crypto";
 import { eq } from "drizzle-orm";
+import { consume } from "./rate-limit.mjs";
 
 export const PAIRING_CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 export const PAIRING_TTL_MS = 15 * 60 * 1000;
@@ -25,8 +26,27 @@ export const UPLOAD_TTL_MS = 10 * 60 * 1000;
 export const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
 export const MAX_UPLOADS = 15;
 const MAX_WS_MESSAGE_BYTES = 256 * 1024;
+// Pairing codes are 6 chars over a 32-symbol alphabet (32^6 ≈ 10^9 space) —
+// brute-forcing one by guessing `join` messages must be throttled per IP
+// (across any number of connections) and a single connection that keeps
+// guessing wrong codes must be dropped outright.
+const JOIN_ATTEMPTS_PER_IP = { windowMs: 60_000, max: 20 };
+const MAX_FAILED_JOINS_PER_CONNECTION = 5;
 
 const DEVICE_CAPABILITIES = new Set(["stage", "input", "control"]);
+// Message types that mutate run/audio state or feed the pipeline — refused
+// from a device that joined without declaring any capability (roles.length
+// === 0), since the hub otherwise never checks the sender's role for these.
+const ROLE_GATED_TYPES = new Set(["audio", "intent", "confirm", "cancelRun", "upload", "ack"]);
+
+/** Best-effort client IP for WS connections, honoring a TLS-terminating
+ *  reverse proxy's X-Forwarded-For (server.mjs sets `trust proxy` for
+ *  Express, but the `ws` upgrade path needs its own read of the header). */
+function clientIp(req) {
+  const xff = req.headers["x-forwarded-for"];
+  if (typeof xff === "string" && xff.trim()) return xff.split(",")[0].trim();
+  return req.socket?.remoteAddress ?? "unknown";
+}
 
 export function generatePairingCode() {
   const bytes = crypto.randomBytes(6);
@@ -230,16 +250,23 @@ export function attachHub(
   }
 
   async function handleJoin(ws, msg) {
+    if (!consume("ws-join", ws.clientIp, JOIN_ATTEMPTS_PER_IP)) {
+      sendError(ws, "RATE_LIMITED", "Too many join attempts — please wait a moment and try again.");
+      ws.close();
+      return;
+    }
     const caps = Array.isArray(msg.capabilities)
       ? [...new Set(msg.capabilities.filter((c) => DEVICE_CAPABILITIES.has(c)))]
       : [];
     const session = await resolveSession(msg.pairingToken);
     if (!session) {
+      ws.failedJoins = (ws.failedJoins ?? 0) + 1;
       sendError(
         ws,
         "INVALID_PAIRING",
         "This pairing code is invalid or has expired. Ask the desktop for a fresh one.",
       );
+      if (ws.failedJoins >= MAX_FAILED_JOINS_PER_CONNECTION) ws.close();
       return;
     }
     const sessionId = session.id;
@@ -279,6 +306,10 @@ export function attachHub(
     const device = room?.get(ws.appDeviceId);
     if (!room || !device) {
       sendError(ws, "NOT_JOINED", "Join a session before sending messages.");
+      return;
+    }
+    if (ROLE_GATED_TYPES.has(msg.type) && device.roles.length === 0) {
+      sendError(ws, "FORBIDDEN", "This device has no declared role in the session.");
       return;
     }
 
@@ -473,7 +504,8 @@ export function attachHub(
     return [...(room?.values() ?? [])][0]?.ws;
   }
 
-  wss.on("connection", (ws) => {
+  wss.on("connection", (ws, req) => {
+    ws.clientIp = clientIp(req);
     ws.isAlive = true;
     ws.on("pong", () => {
       ws.isAlive = true;
