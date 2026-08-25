@@ -137,6 +137,45 @@ export type TargetRule = {
   kind: "hours" | "booking" | "required_docs" | "cancellation" | "fees" | "notes";
 };
 
+/* -- Sprint 0 (Switchboard Plan): scenario module / vocab-pack content ----- */
+
+/** Voice register a scenario module/vocab-pack line is authored for. A
+ *  separate literal union from `src/lib/sim-engine.ts`'s `VoicePresetId`
+ *  (same three ids) rather than an import — contract.ts is the
+ *  coordinator-owned shared surface and sim-engine.ts is client-only; keep
+ *  the two in sync if a preset is ever added or renamed. */
+export type ScenarioVoicePreset = "formal" | "standard" | "friendly";
+
+/**
+ * One cross-cutting module line (MOD 1-6 — greeting, identity check, hold
+ * filler, scheduling, closing, cancel/reschedule) — a fixed, native-checked
+ * line reused across every department instead of being regenerated per call.
+ * `audioAssetId` is set once the offline render pipeline
+ * (`server/scenario-audio.mjs`) has produced a clip for this exact
+ * (id, voicePreset) pair; absent until then, in which case the line is still
+ * spoken, just via live TTS/Perxona instead of a prebuilt clip.
+ */
+export type ScenarioModuleLine = {
+  /** e.g. "mod1.greeting", "mod6.cancel.confirm" — stable across re-renders. */
+  id: string;
+  voicePreset: ScenarioVoicePreset;
+  jp: string;
+  en?: string;
+  audioAssetId?: string;
+};
+
+/**
+ * A taxonomy leaf's prebuilt vocabulary (server/scenario-taxonomy.mjs; the
+ * Switchboard Plan §03's "prebuild" column) — same entry shape a generated
+ * script's glossary already uses, so nothing downstream has to special-case
+ * where an entry came from.
+ */
+export type VocabPack = {
+  /** Matches a scenario-taxonomy leaf id, e.g. "appt.doctor_dentist". */
+  leafId: string;
+  entries: GlossaryEntry[];
+};
+
 /* -- Phase 4: coaching settings (roles, difficulty, pace) ------------------ */
 
 /** The office role the practice avatar plays (feeds the LLM persona). */

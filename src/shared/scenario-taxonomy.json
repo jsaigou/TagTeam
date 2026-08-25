@@ -1,0 +1,131 @@
+{
+  "_comment": "Sprint 0 (Switchboard Plan) — shared scenario taxonomy: the departments/leaves a call can be classified into, alongside the existing role/difficulty/pace coaching data. Single source for BOTH the client (src/lib/scenario-taxonomy.ts) and the server (server/scenario-taxonomy.mjs, classifyScenario step), same split as coaching.json. `standardization` (high/medium/low) is the badge from the plan doc — it's what later sprints use to decide how much a leaf can be prebuilt. `examples` are short reference phrasings for the classifier prompt, not UI copy.",
+  "departments": {
+    "appt": { "id": "appt", "label": "Appointments & Reservations" },
+    "medical": { "id": "medical", "label": "Medical & Health" },
+    "banking": { "id": "banking", "label": "Banking & Finance" },
+    "housing": { "id": "housing", "label": "Housing & Landlord" },
+    "gov": { "id": "gov", "label": "City Hall & Government" }
+  },
+  "leaves": {
+    "appt.doctor_dentist": {
+      "id": "appt.doctor_dentist",
+      "department": "appt",
+      "label": "Book a doctor / dentist visit",
+      "standardization": "high",
+      "examples": ["I need to book a dentist appointment", "歯医者の予約を取りたい", "I want to see a doctor next week"]
+    },
+    "appt.restaurant": {
+      "id": "appt.restaurant",
+      "department": "appt",
+      "label": "Book a restaurant table",
+      "standardization": "high",
+      "examples": ["I want to reserve a table for 4", "レストランの予約をしたい"]
+    },
+    "appt.salon_laser": {
+      "id": "appt.salon_laser",
+      "department": "appt",
+      "label": "Book a salon / laser hair removal clinic",
+      "standardization": "high",
+      "examples": ["I want to book a laser hair removal session", "美容脱毛の予約をしたい"]
+    },
+    "appt.cancel_reschedule": {
+      "id": "appt.cancel_reschedule",
+      "department": "appt",
+      "label": "Cancel or reschedule an appointment",
+      "standardization": "high",
+      "examples": ["I need to cancel my appointment", "予約を変更したい", "I have to reschedule my booking"]
+    },
+    "medical.symptom_common": {
+      "id": "medical.symptom_common",
+      "department": "medical",
+      "label": "Symptom call: sore throat, fever, rash, dizziness",
+      "standardization": "medium",
+      "examples": ["I have a fever and sore throat", "熱があって喉が痛い", "I feel dizzy and need to see someone"]
+    },
+    "medical.symptom_sti": {
+      "id": "medical.symptom_sti",
+      "department": "medical",
+      "label": "Symptom call: suspected STI",
+      "standardization": "medium",
+      "examples": ["I'm worried I might have an STI and need a test"]
+    },
+    "medical.symptom_injury": {
+      "id": "medical.symptom_injury",
+      "department": "medical",
+      "label": "Symptom call: soreness, broken bone, cut needing stitches",
+      "standardization": "medium",
+      "examples": ["I think I broke my arm", "I have a deep cut that might need stitches", "腕を骨折したかもしれない"]
+    },
+    "medical.symptom_skin_concern": {
+      "id": "medical.symptom_skin_concern",
+      "department": "medical",
+      "label": "Symptom call: skin infection, worrying mole or cancer concern",
+      "standardization": "medium",
+      "examples": ["I have a mole that looks different and I'm worried", "I think I have a skin infection"]
+    },
+    "banking.lost_card": {
+      "id": "banking.lost_card",
+      "department": "banking",
+      "label": "Report a lost or stolen card, request reissue",
+      "standardization": "high",
+      "examples": ["I lost my credit card and need to report it", "カードを紛失したので止めてほしい"]
+    },
+    "housing.rent": {
+      "id": "housing.rent",
+      "department": "housing",
+      "label": "Rent question or payment issue",
+      "standardization": "medium",
+      "examples": ["I have a question about my rent payment", "家賃について相談したい"]
+    },
+    "housing.urgent_damage": {
+      "id": "housing.urgent_damage",
+      "department": "housing",
+      "label": "Urgent damage: fire, earthquake, water leak",
+      "standardization": "medium",
+      "examples": ["There's a water leak in my apartment", "水漏れがあった", "There was a fire in my building and I need to tell the landlord"]
+    },
+    "housing.other_damage": {
+      "id": "housing.other_damage",
+      "department": "housing",
+      "label": "Other, unnamed apartment damage",
+      "standardization": "low",
+      "examples": ["Something broke in my apartment and I don't know how to explain it"]
+    },
+    "gov.general": {
+      "id": "gov.general",
+      "department": "gov",
+      "label": "General city hall call (reception / claims / accounts)",
+      "standardization": "high",
+      "examples": ["I need to call city hall about a form", "役所に電話したい"]
+    },
+    "gov.tax": {
+      "id": "gov.tax",
+      "department": "gov",
+      "label": "Resident tax questions",
+      "standardization": "medium",
+      "examples": ["I have a question about my resident tax bill", "住民税について聞きたい"]
+    },
+    "gov.address_registration": {
+      "id": "gov.address_registration",
+      "department": "gov",
+      "label": "Address registration (move in / move out)",
+      "standardization": "high",
+      "examples": ["I need to register my new address", "転入届を出したい"]
+    },
+    "gov.home_purchase": {
+      "id": "gov.home_purchase",
+      "department": "gov",
+      "label": "Home purchase registration",
+      "standardization": "medium",
+      "examples": ["I bought a house and need to register it"]
+    },
+    "gov.mynumber_card": {
+      "id": "gov.mynumber_card",
+      "department": "gov",
+      "label": "Lost My Number card, reissue",
+      "standardization": "high",
+      "examples": ["I lost my My Number card and need a new one", "マイナンバーカードを紛失した"]
+    }
+  }
+}

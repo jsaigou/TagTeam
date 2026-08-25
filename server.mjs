@@ -19,6 +19,7 @@ import { step as identifyTargetStep } from "./server/steps/identifyTarget.mjs";
 import { step as geolocateStep } from "./server/steps/geolocate.mjs";
 import { step as extractTargetRulesStep } from "./server/steps/extractTargetRules.mjs";
 import { step as planScenarioStep } from "./server/steps/planScenario.mjs";
+import { step as classifyScenarioStep } from "./server/steps/classifyScenario.mjs";
 import { createParseDocumentStep } from "./server/steps/parseDocument.mjs";
 import {
   createScenario,
@@ -125,6 +126,10 @@ const jobRunner = createJobRunner({
     geolocate: geolocateStep,
     extractTargetRules: extractTargetRulesStep,
     planScenario: planScenarioStep,
+    // Sprint 0 (Switchboard Plan) — registered but not yet a GRAPH node (see
+    // server/steps/classifyScenario.mjs's header). Registering it here now
+    // means Sprint 1 only has to add a graph entry, not wire the runner too.
+    classifyScenario: classifyScenarioStep,
     // A factory, unlike the pure env-singleton steps above: it needs the
     // shared upload store injected (see server/steps/parseDocument.mjs).
     parseDocument: createParseDocumentStep({ uploadStore }).step,

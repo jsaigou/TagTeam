@@ -10,6 +10,7 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "test": "vitest run",
+    "render-audio": "node --env-file=.env scripts/render-scenario-audio.mjs",
     "preview": "vite preview",
     "start": "node --env-file=.env server.mjs"
   },
