@@ -29,6 +29,7 @@ function loadJson(relativePath) {
 const MODULE_SETS = {
   appt: loadJson("scenario-modules/appt.json"),
   medical: loadJson("scenario-modules/medical.json"),
+  banking: loadJson("scenario-modules/banking.json"),
 };
 
 // leafId -> { shape }. Only leaves with a real turn-plan shape AND a vocab
@@ -42,6 +43,7 @@ const ASSEMBLY_LEAVES = {
   "medical.symptom_sti": "symptom_triage",
   "medical.symptom_injury": "symptom_triage",
   "medical.symptom_skin_concern": "symptom_triage",
+  "banking.lost_card": "lost_card",
 };
 
 const VOCAB_PACKS = Object.fromEntries(
@@ -88,6 +90,7 @@ const SCENARIO_TITLES = {
   "medical.symptom_sti": "性感染症の検査についての電話",
   "medical.symptom_injury": "けがについての電話",
   "medical.symptom_skin_concern": "ほくろについての電話",
+  "banking.lost_card": "カード紛失の電話",
 };
 
 const DEFAULT_PRESET = "standard";
@@ -203,10 +206,41 @@ function symptomTriageTurnPlan(leafId, preset, target) {
   ];
 }
 
+/** The test case for how far full prebuild can go (see the plan) — minimal
+ *  branching, identity verification (name/DOB, last 4 digits of the card)
+ *  carries most of the call's weight. */
+function lostCardTurnPlan(preset, target) {
+  const leafId = "banking.lost_card";
+  const stopConfirm = withCallout(
+    { jp: "確認が取れました。ただいまよりカードの利用を停止いたします。", en: "That's confirmed. We'll suspend the card's use effective immediately." },
+    hoursCallout(target),
+  );
+  return [
+    { speaker: "bureaucrat", ...modLine(leafId, "mod1_greeting", preset, target) },
+    {
+      speaker: "user",
+      jp: "カードを紛失してしまったので、利用を止めていただきたいのですが。",
+      en: "I've lost my card and would like to have its use stopped.",
+    },
+    { speaker: "bureaucrat", ...modLine(leafId, "mod2_identity", preset, target) },
+    { speaker: "user", jp: "田中太郎です。生年月日は1990年5月10日です。", en: "Taro Tanaka. Date of birth May 10, 1990." },
+    {
+      speaker: "bureaucrat",
+      jp: "かしこまりました。念のため、カード番号の下4桁をお伺いできますでしょうか。",
+      en: "Understood. Just to confirm, could I ask for the last 4 digits of the card number?",
+    },
+    { speaker: "user", jp: "1234です。", en: "1234." },
+    { speaker: "bureaucrat", ...stopConfirm },
+    { speaker: "user", jp: "ありがとうございます。", en: "Thank you." },
+    { speaker: "bureaucrat", ...modLine(leafId, "mod5_closing", preset, target) },
+  ];
+}
+
 const TURN_PLAN_BUILDERS = {
   booking: (leafId, preset, target) => bookingTurnPlan(leafId, preset, target),
   cancel_reschedule: (leafId, preset, target) => cancelRescheduleTurnPlan(preset, target),
   symptom_triage: (leafId, preset, target) => symptomTriageTurnPlan(leafId, preset, target),
+  lost_card: (leafId, preset, target) => lostCardTurnPlan(preset, target),
 };
 
 /**

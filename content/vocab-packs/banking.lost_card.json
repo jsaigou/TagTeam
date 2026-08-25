@@ -1,0 +1,16 @@
+{
+  "_comment": "Sprint 3 (Switchboard Plan) — prebuilt vocab pack for banking.lost_card. Chosen as the test case for how far full prebuild can go (see the plan) — minimal branching, identity verification carries most of the call's weight. Authored directly, matches src/shared/contract.ts's VocabPack/GlossaryEntry shape.",
+  "leafId": "banking.lost_card",
+  "entries": [
+    { "id": "v1", "kanji": "紛失", "furigana": "ふんしつ", "en": "loss (of an item)" },
+    { "id": "v2", "kanji": "盗難", "furigana": "とうなん", "en": "theft" },
+    { "id": "v3", "kanji": "利用停止", "furigana": "りようていし", "en": "suspend use (of the card)" },
+    { "id": "v4", "kanji": "再発行", "furigana": "さいはっこう", "en": "reissue" },
+    { "id": "v5", "kanji": "本人確認", "furigana": "ほんにんかくにん", "en": "identity verification" },
+    { "id": "v6", "kanji": "生年月日", "furigana": "せいねんがっぴ", "en": "date of birth" },
+    { "id": "v7", "kanji": "口座番号", "furigana": "こうざばんごう", "en": "account number" },
+    { "id": "v8", "kanji": "不正利用", "furigana": "ふせいりよう", "en": "fraudulent use", "note": "worth mentioning proactively if you've seen a charge you don't recognize." },
+    { "id": "v9", "kanji": "発行手数料", "furigana": "はっこうてすうりょう", "en": "issuance fee" },
+    { "id": "v10", "kanji": "届出", "furigana": "とどけで", "en": "official report / notification", "note": "as in 紛失届 (a loss report) — the formal term for what you're doing on this call." }
+  ]
+}

@@ -38,8 +38,11 @@ describe("hasAssemblyContent", () => {
     }
   });
 
+  it("is true for banking.lost_card, added in Sprint 3", () => {
+    expect(hasAssemblyContent("banking.lost_card")).toBe(true);
+  });
+
   it("is false for a leaf outside the pilot departments — planScenario must fall back to the LLM", () => {
-    expect(hasAssemblyContent("banking.lost_card")).toBe(false);
     expect(hasAssemblyContent("housing.rent")).toBe(false);
     expect(hasAssemblyContent("not.a.real.leaf")).toBe(false);
   });
@@ -47,7 +50,7 @@ describe("hasAssemblyContent", () => {
 
 describe("assembleScript", () => {
   it("throws for a leaf with no content — callers must check hasAssemblyContent first", () => {
-    expect(() => assembleScript("banking.lost_card", { target: TARGET })).toThrow();
+    expect(() => assembleScript("housing.rent", { target: TARGET })).toThrow();
   });
 
   it("produces a schema-valid, alternating script opening and closing on the bureaucrat", () => {
@@ -142,6 +145,22 @@ describe("assembleScript — Sprint 2 (medical symptom triage)", () => {
     const { script } = assembleScript("medical.symptom_injury", { target });
     const schedulingTurn = script.turns.find((t) => t.jp.includes("来院"));
     expect(schedulingTurn?.jp).toContain("土曜日は休診となっております");
+  });
+});
+
+describe("assembleScript — Sprint 3 (banking, the full-prebuild test case)", () => {
+  it("verifies identity with name, DOB, and the last 4 card digits before confirming", () => {
+    const { script } = assembleScript("banking.lost_card", { target: TARGET });
+    expect(script.turns.some((t) => t.jp.includes("生年月日"))).toBe(true);
+    expect(script.turns.some((t) => t.jp.includes("下4桁"))).toBe(true);
+    expect(script.turns.some((t) => t.jp.includes("利用を停止"))).toBe(true);
+  });
+
+  it("produces a schema-valid script", () => {
+    const { script, glossary } = assembleScript("banking.lost_card", { target: TARGET });
+    expect(script.turns.length).toBeGreaterThanOrEqual(6);
+    expect(script.turns[0].speaker).toBe("bureaucrat");
+    expect(glossary.length).toBe(10);
   });
 });
 

@@ -1,0 +1,62 @@
+{
+  "_comment": "Sprint 3 (Switchboard Plan) — module lines (MOD 1-3, 5) for the Banking & Finance department. Register is deliberately the most formal of any department so far — a bank's card-loss line — and identity verification carries more weight than usual. Authored directly per house convention.",
+  "department": "banking",
+  "modules": {
+    "mod1_greeting": {
+      "formal": {
+        "jp": "お電話ありがとうございます。{facilityName}カード盗難・紛失窓口でございます。本日はどのようなご用件でございましょうか。",
+        "en": "Thank you for calling {facilityName}'s lost and stolen card line. How may I help you today?"
+      },
+      "standard": {
+        "jp": "お電話ありがとうございます。{facilityName}カード紛失窓口です。本日はどういったご用件でしょうか。",
+        "en": "Thank you for calling {facilityName}'s card loss line. What can I help you with today?"
+      },
+      "friendly": {
+        "jp": "お電話ありがとうございます！{facilityName}カード窓口です。今日はどうされましたか？",
+        "en": "Thanks for calling! This is {facilityName}'s card desk. What's going on today?"
+      }
+    },
+    "mod2_identity": {
+      "formal": {
+        "jp": "恐れ入りますが、ご本人確認のため、お名前とご生年月日をお伺いしてもよろしいでしょうか。",
+        "en": "I'm sorry to trouble you, but for identity verification, may I ask for your name and date of birth?"
+      },
+      "standard": {
+        "jp": "本人確認のため、お名前と生年月日を伺ってもよろしいですか。",
+        "en": "For identity verification, may I have your name and date of birth?"
+      },
+      "friendly": {
+        "jp": "確認のため、お名前と生年月日を伺ってもいいですか？",
+        "en": "Just to confirm, can I get your name and date of birth?"
+      }
+    },
+    "mod3_hold": {
+      "formal": {
+        "jp": "恐れ入りますが、少々お待ちいただけますでしょうか。",
+        "en": "I'm sorry, could I ask you to wait just a moment?"
+      },
+      "standard": {
+        "jp": "少々お待ちください。",
+        "en": "One moment, please."
+      },
+      "friendly": {
+        "jp": "少々お待ちくださいね。",
+        "en": "Just a sec, okay?"
+      }
+    },
+    "mod5_closing": {
+      "formal": {
+        "jp": "かしこまりました。カードは本日付けで利用停止とさせていただきます。再発行のお手続きにつきましては、後日書面にてご案内いたします。お電話ありがとうございました。失礼いたします。",
+        "en": "Understood. We'll suspend the card effective today. We'll send you the reissue procedure in writing. Thank you for calling. Goodbye."
+      },
+      "standard": {
+        "jp": "承知しました。カードは本日付けで利用停止にします。再発行の手続きは、後日書面でご案内します。お電話ありがとうございました。失礼します。",
+        "en": "Understood. We'll suspend the card as of today. We'll send the reissue procedure by mail. Thank you for calling. Goodbye."
+      },
+      "friendly": {
+        "jp": "わかりました！カードは今日付けで止めておきますね。再発行の案内は後で書面で届きます。お電話ありがとうございました！",
+        "en": "Got it! We'll stop the card as of today. The reissue info will come in the mail. Thanks for calling!"
+      }
+    }
+  }
+}
