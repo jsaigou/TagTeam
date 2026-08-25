@@ -17,7 +17,7 @@ import type {
 import type { DocSummary } from "@/lib/doc-parser";
 import { DEFAULT_CALL_SETTINGS } from "@/lib/coaching";
 
-export type Screen = "setup" | "call" | "cheat-sheet";
+export type Screen = "setup" | "prep" | "call" | "cheat-sheet";
 export type SetupStep = "doc" | "grounding" | "scenario";
 /** QA round — the Get Started door intro (draw → knock → open → wave). While
  *  running, AvatarStage reframes Luna into the centered doorway. */
@@ -172,6 +172,7 @@ type Store = {
   setSetupOpen: (open: boolean) => void;
   setIntroPhase: (phase: IntroPhase) => void;
   toCall: () => void;
+  toPrep: () => void;
   toCheatSheet: () => void;
   reset: () => void;
   setDoc: (doc: DocInput) => void;
@@ -201,6 +202,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       setSetupOpen: (open) => dispatch({ type: "SET_SETUP_OPEN", open }),
       setIntroPhase: (phase) => dispatch({ type: "SET_INTRO_PHASE", phase }),
       toCall: () => dispatch({ type: "SET_SCREEN", screen: "call" }),
+      toPrep: () => dispatch({ type: "SET_SCREEN", screen: "prep" }),
       toCheatSheet: () => dispatch({ type: "SET_SCREEN", screen: "cheat-sheet" }),
       reset: () => dispatch({ type: "RESET" }),
       setDoc: (doc) => dispatch({ type: "DOC_UPLOADED", doc }),

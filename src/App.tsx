@@ -11,6 +11,7 @@ import { AppFooter } from "@/components/app/AppFooter";
 import { CallHeaderControls } from "@/components/call/CallHeaderControls";
 import { SetupScreen } from "@/components/setup/SetupScreen";
 import { CallScreen } from "@/components/call/CallScreen";
+import { PrepScreen } from "@/components/prep/PrepScreen";
 import { CheatSheetView } from "@/components/cheat-sheet/CheatSheetView";
 import { PhoneApp } from "@/components/phone/PhoneApp";
 
@@ -31,6 +32,9 @@ function AppContent() {
 
       <div className="relative z-10">
         {state.screen === "setup" && <SetupScreen />}
+        {/* The briefing between research delivery and the call. A direct nav
+            without a script falls back to the setup screen. */}
+        {state.screen === "prep" && (state.script ? <PrepScreen /> : <SetupScreen />)}
         {state.screen === "call" && <CallScreen />}
         {state.screen === "cheat-sheet" &&
           (state.cheatSheet ? (

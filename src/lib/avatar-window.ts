@@ -27,6 +27,23 @@ export const AVATAR_WINDOW_RIGHT =
 /** Matches Tailwind's `rounded-2xl`. */
 export const AVATAR_WINDOW_RADIUS = "1rem";
 
+/* --- Prep-screen window (the MGS-style briefing) ------------------------- */
+/** The briefing reframes her as a briefing-room monitor: HALF size, pinned
+ *  TOP-LEFT instead of top-right. Same header clearance as the corner
+ *  window; the CRT overlay paints over the whole viewport including her. */
+export const PREP_AVATAR_SCALE = 0.5;
+
+/** Fixed top-left rect for the prep screen (recomputed per call so resize
+ *  handling stays with the caller's render loop). */
+export function prepAvatarWindowRect(): WindowRect {
+  const rem = remPx();
+  return {
+    size: avatarWindowSizePx() * PREP_AVATAR_SCALE,
+    top: Math.max(AVATAR_WINDOW_TOP_REM, AVATAR_VIEWPORT_GAP_REM) * rem,
+    left: AVATAR_VIEWPORT_GAP_REM * rem,
+  };
+}
+
 /** Content top padding below xl: clears the corner window plus breathing room. */
 export const CONTENT_CLEARANCE =
   `calc(${AVATAR_WINDOW_TOP} + ${AVATAR_WINDOW_SIZE} + 1.5rem)`;

@@ -75,6 +75,7 @@ export function SetupScreen() {
     setBusy,
     setReference,
     toCall,
+    toPrep,
     toCheatSheet,
   } = useAppStore();
   const { setupOpen } = state;
@@ -266,7 +267,7 @@ export function SetupScreen() {
         );
         setSim(result.script, result.glossary);
         await session.launch(scenario);
-        toCall();
+        toPrep();
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to generate simulation");
       } finally {
@@ -278,7 +279,7 @@ export function SetupScreen() {
       chooseScenario,
       setBusy,
       setSim,
-      toCall,
+      toPrep,
       state.summary,
       state.answers,
       state.docSummary,
@@ -364,7 +365,7 @@ export function SetupScreen() {
     session.setThinking(true);
     void session
       .launch(selection)
-      .then(() => toCall())
+      .then(() => toPrep())
       .catch((err: unknown) =>
         setError(err instanceof Error ? err.message : "Failed to launch the presenter."),
       )
@@ -381,7 +382,7 @@ export function SetupScreen() {
     setBusy,
     setError,
     session,
-    toCall,
+    toPrep,
   ]);
 
   /* Invite state — a clean hero (QA round): a short explainer + one prominent

@@ -1,7 +1,9 @@
+import { useEffect, useState } from "react";
 import { useAppStore } from "@/state/app-store";
 import { useAvatar } from "@/state/avatar-context";
 import { Button } from "@/components/ui/button";
 import { useAvatarWindowRect } from "@/hooks/use-avatar-window-rect";
+import { prepAvatarWindowRect, watchAvatarWindow } from "@/lib/avatar-window";
 import { cn } from "@/lib/utils";
 
 /** The assistant: a square, rounded portrait window pinned to the TOP-RIGHT
@@ -26,14 +28,23 @@ export function AvatarStage() {
   const { stageRef, session } = useAvatar();
   const { state } = useAppStore();
   const isCall = state.screen === "call";
+  /* Briefing mode: half-size monitor pinned TOP-LEFT (see avatar-window.ts).
+     watchAvatarWindow keeps the rect live through viewport resizes. */
+  const isPrep = state.screen === "prep";
+  const [prepRect, setPrepRect] = useState(prepAvatarWindowRect);
+  useEffect(() => {
+    if (!isPrep) return;
+    return watchAvatarWindow(() => setPrepRect(prepAvatarWindowRect()));
+  }, [isPrep]);
   /* QA round: the Get Started hero is avatar-free. The stage stays mounted
-     (the presenter keeps preloading) but nothing renders visibly — the door
-     intro covers her window instead, hiding the loading pill behind doors. */
+      (the presenter keeps preloading) but nothing renders visibly — the door
+      intro covers her window instead, hiding the loading pill behind doors. */
   const isInvite =
     state.screen === "setup" && !state.setupOpen && state.introPhase === "idle";
   /* Live-measured window: attached to the setup panel element when one is
-     registered, fixed viewport corner otherwise. */
-  const rect = useAvatarWindowRect();
+      registered, fixed viewport corner otherwise. */
+  const measuredRect = useAvatarWindowRect();
+  const rect = isPrep ? prepRect : measuredRect;
   const windowStyle = {
     top: rect.top,
     left: rect.left,
