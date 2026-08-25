@@ -8,6 +8,7 @@ import type {
   GroundingAnswer,
   SessionSummary,
   SimScript,
+  TargetProfile,
 } from "@/shared/contract";
 import type { ApiError } from "./api";
 
@@ -113,7 +114,13 @@ export async function transcribeAudio(audio: {
   });
 }
 
-/** Stage-only: seed the server orchestrator with the scenario before the call. */
+/** Stage-only: seed the server orchestrator with the scenario before the call.
+ *  `target` — the confirmed office/agency from Phase 7b's grounding graph, when
+ *  this call went through it — takes priority server-side over `reference`:
+ *  the server rebuilds the same digest `planScenario` wrote the script from
+ *  (see server/routes/sessions.mjs), so the live call can't drift from a
+ *  separately-sourced reference string. `reference` stays as the fallback for
+ *  calls that never had a confirmed target (the legacy search-only path). */
 export async function setCallContext(
   sessionId: string,
   context: {
@@ -122,6 +129,7 @@ export async function setCallContext(
     summary?: string | null;
     answers?: GroundingAnswer[];
     reference?: string | null;
+    target?: TargetProfile | null;
     settings?: CallSettings;
   },
 ): Promise<{ ok: boolean }> {
@@ -135,6 +143,7 @@ export async function setCallContext(
         ? { answers: context.answers }
         : {}),
       ...(context.reference ? { reference: context.reference } : {}),
+      ...(context.target ? { target: context.target } : {}),
       ...(context.settings ? { settings: context.settings } : {}),
     }),
   });

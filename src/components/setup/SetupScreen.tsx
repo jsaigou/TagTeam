@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Sparkles } from "lucide-react";
-import type { DocInput, GroundingAnswer } from "@/shared/contract";
+import type { DocInput, GroundingAnswer, TargetProfile } from "@/shared/contract";
 import { useAppStore, type SetupStep } from "@/state/app-store";
 import { useAvatar, GREETING_WAVE_MOTION } from "@/state/avatar-context";
 import { useSession } from "@/state/session-context";
@@ -307,6 +307,7 @@ export function SetupScreen() {
           summary: stored.summary,
           answers: stored.answers,
           reference: stored.reference,
+          target: (stored.target as TargetProfile | null | undefined) ?? null,
           settings: stored.settings ?? state.settings,
           selection,
           script: stored.script,
@@ -353,7 +354,7 @@ export function SetupScreen() {
       return;
     }
     chooseScenario(selection);
-    setSim(result.script, result.glossary);
+    setSim(result.script, result.glossary, result.target ?? null);
     toPrep();
   }, [
     run,

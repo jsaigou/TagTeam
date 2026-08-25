@@ -62,6 +62,18 @@ describe("buildNextTurnMessages", () => {
     expect(joined).toContain("お電話ありがとうございます");
     expect(joined).toContain("g1");
   });
+
+  it("instructs the bureaucrat to enforce a posted rule instead of agreeing with a conflicting request", () => {
+    const ctx = {
+      script: SCRIPT,
+      glossary: GLOSSARY,
+      reference: "【窓口ルール】\n- (hours) Closed Sundays — https://a.example",
+    };
+    const messages = buildNextTurnMessages(ctx, []);
+    const system = messages[0].content as string;
+    expect(system).toContain("矛盾する場合は");
+    expect(system).toContain("Closed Sundays");
+  });
 });
 
 describe("createCallOrchestrator", () => {

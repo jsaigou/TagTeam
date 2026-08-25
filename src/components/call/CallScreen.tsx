@@ -122,6 +122,7 @@ export function CallScreen() {
         summary: state.summary,
         answers: state.answers,
         reference: state.reference,
+        target: state.target,
         settings: state.settings,
       }).catch(() => {
         setConversationError("Live conversation is offline — the script will guide the call.");
@@ -133,6 +134,7 @@ export function CallScreen() {
         sessionId: session?.id,
         summary: state.summary,
         reference: state.reference,
+        target: state.target,
         answers: state.answers,
         settings: state.settings,
         selection: state.scenario,
@@ -154,6 +156,7 @@ export function CallScreen() {
     state.summary,
     state.answers,
     state.reference,
+    state.target,
     state.settings,
     state.scenario,
     state.scenarioId,

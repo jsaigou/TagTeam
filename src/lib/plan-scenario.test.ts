@@ -11,7 +11,7 @@ const llmChat = vi.fn();
 vi.mock("../../server/providers.mjs", () => ({ llmChat: (...args: unknown[]) => llmChat(...args) }));
 
 // @ts-expect-error server .mjs modules ship without type declarations
-const { run } = await import("../../server/steps/planScenario.mjs");
+const { run, buildReferenceDigest } = await import("../../server/steps/planScenario.mjs");
 
 function chatResult(content: string) {
   return { choices: [{ message: { content } }] };
@@ -89,5 +89,37 @@ describe("planScenario run()", () => {
     await expect(run({ docSummary: DOC_SUMMARY_FIXTURE, answers: ANSWERS }, ctx)).rejects.toMatchObject({
       status: 502,
     });
+  });
+});
+
+// Exercised directly because server/routes/sessions.mjs's call-context route
+// now reuses this exact function to rebuild the live call's reference from
+// the confirmed target — see that route's `groundedReference` line — instead
+// of trusting a separately-sourced `reference` string that could drift from
+// what the script was actually written from.
+describe("buildReferenceDigest", () => {
+  it("renders the confirmed office name, address, url and cited rules", () => {
+    const digest = buildReferenceDigest({
+      name: "Mejiro Dental Clinic",
+      url: "https://a.example",
+      address: "Toshima, Tokyo",
+      rules: [{ id: "r1", rule: "Closed Sundays", kind: "hours", source: "https://a.example" }],
+    });
+    expect(digest).toContain("Mejiro Dental Clinic");
+    expect(digest).toContain("Toshima, Tokyo");
+    expect(digest).toContain("https://a.example");
+    expect(digest).toContain("Closed Sundays");
+  });
+
+  it("omits the rules section when there are none", () => {
+    const digest = buildReferenceDigest({ name: "Mejiro Dental Clinic", rules: [] });
+    expect(digest).toContain("Mejiro Dental Clinic");
+    expect(digest).not.toContain("窓口ルール");
+  });
+
+  it("returns undefined for a missing or nameless target — the route's fallback to `reference` then applies", () => {
+    expect(buildReferenceDigest(undefined)).toBeUndefined();
+    expect(buildReferenceDigest(null)).toBeUndefined();
+    expect(buildReferenceDigest({ rules: [] })).toBeUndefined();
   });
 });

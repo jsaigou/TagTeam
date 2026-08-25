@@ -5,6 +5,7 @@ import { and, desc, eq, gt } from "drizzle-orm";
 import { requireAuth, route } from "../middleware.mjs";
 import { rateLimit } from "../rate-limit.mjs";
 import { isImageContent } from "../file-sniff.mjs";
+import { buildReferenceDigest } from "../steps/planScenario.mjs";
 
 /**
  * @param {{
@@ -156,12 +157,26 @@ export function createSessionsRoutes({
     route(async (req, res) => {
       const row = await ownedSession(req, res);
       if (!row) return;
-      const { script, glossary, summary, answers, reference, settings } = req.body ?? {};
+      const { script, glossary, summary, answers, reference, target, settings } = req.body ?? {};
       if (!script || !Array.isArray(script.turns) || !Array.isArray(glossary)) {
         res.status(400).json({ error: "'script' and 'glossary' are required." });
         return;
       }
-      orchestrator.setContext(row.id, { script, glossary, summary, answers, reference, settings });
+      // Rebuild the reference digest from the confirmed target SERVER-SIDE,
+      // via the same buildReferenceDigest() planScenario already wrote the
+      // script from — so the live call is grounded in the identical cited
+      // rules, not a separately-sourced `reference` string that could drift
+      // from what the script actually says. `reference` is the fallback for
+      // calls that never had a confirmed target (the legacy search-only path).
+      const groundedReference = buildReferenceDigest(target) ?? reference;
+      orchestrator.setContext(row.id, {
+        script,
+        glossary,
+        summary,
+        answers,
+        reference: groundedReference,
+        settings,
+      });
       res.json({ ok: true });
     }),
   );

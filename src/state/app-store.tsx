@@ -13,6 +13,7 @@ import type {
   GroundingAnswer,
   GroundingQuestion,
   SimScript,
+  TargetProfile,
 } from "@/shared/contract";
 import type { DocSummary } from "@/lib/doc-parser";
 import { DEFAULT_CALL_SETTINGS } from "@/lib/coaching";
@@ -34,6 +35,9 @@ export type ScenarioRestore = {
   summary: string | null;
   answers: GroundingAnswer[];
   reference: string | null;
+  /** The confirmed target office/agency (Phase 7b's grounding graph) the
+   *  script was written from, if this call went through it. */
+  target: TargetProfile | null;
   settings: CallSettings;
   selection: ScenarioSelection;
   script: SimScript;
@@ -62,6 +66,11 @@ type AppState = {
   scenarioId: string | null;
   /** Web-researched reference digest about the office/agency for the call. */
   reference: string | null;
+  /** The confirmed target office/agency (Phase 7b's grounding graph), when
+   *  this call went through it — carries the real, cited rules the script
+   *  was written from, so the live call can be grounded in the SAME facts
+   *  instead of the separate free-text `reference` digest. */
+  target: TargetProfile | null;
   busy: boolean;
   error: string | null;
 };
@@ -78,7 +87,7 @@ type Action =
   | { type: "SETTINGS_CHANGED"; settings: Partial<CallSettings> }
   | { type: "SCENARIO_SAVED"; id: string }
   | { type: "SCENARIO_RESTORED"; payload: ScenarioRestore }
-  | { type: "SIM_READY"; script: SimScript; glossary: GlossaryEntry[] }
+  | { type: "SIM_READY"; script: SimScript; glossary: GlossaryEntry[]; target?: TargetProfile | null }
   | { type: "CHEAT_SHEET_READY"; cheatSheet: CheatSheet }
   | { type: "REFERENCE_READY"; digest: string }
   | { type: "BUSY"; busy: boolean }
@@ -102,6 +111,7 @@ const initialState: AppState = {
   settings: DEFAULT_CALL_SETTINGS,
   scenarioId: null,
   reference: null,
+  target: null,
   busy: false,
   error: null,
 };
@@ -141,6 +151,7 @@ function reducer(state: AppState, action: Action): AppState {
         summary: action.payload.summary,
         answers: action.payload.answers,
         reference: action.payload.reference,
+        target: action.payload.target,
         settings: action.payload.settings,
         scenario: action.payload.selection,
         script: action.payload.script,
@@ -149,7 +160,13 @@ function reducer(state: AppState, action: Action): AppState {
         setupStep: action.payload.cheatSheet ? "scenario" : state.setupStep,
       };
     case "SIM_READY":
-      return { ...state, script: action.script, glossary: action.glossary, busy: false };
+      return {
+        ...state,
+        script: action.script,
+        glossary: action.glossary,
+        target: action.target ?? null,
+        busy: false,
+      };
     case "CHEAT_SHEET_READY":
       return { ...state, cheatSheet: action.cheatSheet, busy: false };
     case "REFERENCE_READY":
@@ -182,7 +199,7 @@ type Store = {
   setSettings: (settings: Partial<CallSettings>) => void;
   setScenarioId: (id: string) => void;
   restoreScenario: (payload: ScenarioRestore) => void;
-  setSim: (script: SimScript, glossary: GlossaryEntry[]) => void;
+  setSim: (script: SimScript, glossary: GlossaryEntry[], target?: TargetProfile | null) => void;
   setCheatSheet: (cheatSheet: CheatSheet) => void;
   setReference: (digest: string) => void;
   setBusy: (busy: boolean) => void;
@@ -213,7 +230,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       setSettings: (settings) => dispatch({ type: "SETTINGS_CHANGED", settings }),
       setScenarioId: (id) => dispatch({ type: "SCENARIO_SAVED", id }),
       restoreScenario: (payload) => dispatch({ type: "SCENARIO_RESTORED", payload }),
-      setSim: (script, glossary) => dispatch({ type: "SIM_READY", script, glossary }),
+      setSim: (script, glossary, target) => dispatch({ type: "SIM_READY", script, glossary, target }),
       setCheatSheet: (cheatSheet) => dispatch({ type: "CHEAT_SHEET_READY", cheatSheet }),
       setReference: (digest) => dispatch({ type: "REFERENCE_READY", digest }),
       setBusy: (busy) => dispatch({ type: "BUSY", busy }),

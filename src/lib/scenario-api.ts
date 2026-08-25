@@ -9,6 +9,7 @@ import type {
   GlossaryEntry,
   GroundingAnswer,
   SimScript,
+  TargetProfile,
 } from "@/shared/contract";
 import type { DocSummary } from "@/lib/doc-parser";
 import { jsonRequest } from "./session-api";
@@ -26,7 +27,7 @@ export type StoredScenario = {
   docSummary: DocSummary | null;
   summary: string | null;
   reference: string | null;
-  target: unknown;
+  target: TargetProfile | null;
   answers: GroundingAnswer[];
   settings: CallSettings | null;
   selection: ScenarioSelection | null;
@@ -53,6 +54,7 @@ export type SaveScenarioInput = {
   docSummary?: DocSummary | null;
   summary?: string | null;
   reference?: string | null;
+  target?: TargetProfile | null;
   answers?: GroundingAnswer[];
   settings: CallSettings;
   selection: ScenarioSelection;
