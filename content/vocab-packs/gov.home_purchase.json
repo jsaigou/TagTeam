@@ -1,0 +1,16 @@
+{
+  "_comment": "Sprint 5 (Switchboard Plan) — prebuilt vocab pack for gov.home_purchase (home purchase registration). Content-only per the plan's 'vocab-pack exercise, not new plumbing' scope for this department. Authored directly, matches src/shared/contract.ts's VocabPack/GlossaryEntry shape.",
+  "leafId": "gov.home_purchase",
+  "entries": [
+    { "id": "v1", "kanji": "登記", "furigana": "とうき", "en": "(property) registration" },
+    { "id": "v2", "kanji": "所有権移転", "furigana": "しょゆうけんいてん", "en": "transfer of ownership" },
+    { "id": "v3", "kanji": "固定資産税", "furigana": "こていしさんぜい", "en": "fixed asset (property) tax" },
+    { "id": "v4", "kanji": "不動産取得税", "furigana": "ふどうさんしゅとくぜい", "en": "real estate acquisition tax" },
+    { "id": "v5", "kanji": "登記簿謄本", "furigana": "とうきぼとうほん", "en": "certified copy of the registry" },
+    { "id": "v6", "kanji": "司法書士", "furigana": "しほうしょし", "en": "judicial scrivener", "note": "the professional who usually files property registration — a landlord/city hall may direct you to one." },
+    { "id": "v7", "kanji": "権利証", "furigana": "けんりしょう", "en": "certificate of ownership" },
+    { "id": "v8", "kanji": "住宅ローン控除", "furigana": "じゅうたくろーんこうじょ", "en": "mortgage tax deduction" },
+    { "id": "v9", "kanji": "評価額", "furigana": "ひょうかがく", "en": "assessed value" },
+    { "id": "v10", "kanji": "納税義務者", "furigana": "のうぜいぎむしゃ", "en": "the person liable for the tax" }
+  ]
+}

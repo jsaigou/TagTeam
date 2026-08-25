@@ -1,0 +1,16 @@
+{
+  "_comment": "Sprint 5 (Switchboard Plan) — prebuilt vocab pack for gov.tax (resident tax questions). This department already has full LLM-generation infra (server/prompts/bureaucrat.mjs, src/shared/coaching.json's roles) from before this plan existed — Sprint 5 is a content-only 'vocab-pack exercise, not new plumbing' per the plan; this pack is not yet consumed by planScenario's LLM path (no template assembly for gov leaves). Authored directly, matches src/shared/contract.ts's VocabPack/GlossaryEntry shape.",
+  "leafId": "gov.tax",
+  "entries": [
+    { "id": "v1", "kanji": "住民税", "furigana": "じゅうみんぜい", "en": "resident tax" },
+    { "id": "v2", "kanji": "納税通知書", "furigana": "のうぜいつうちしょ", "en": "tax payment notice" },
+    { "id": "v3", "kanji": "納付期限", "furigana": "のうふきげん", "en": "payment deadline" },
+    { "id": "v4", "kanji": "分割納付", "furigana": "ぶんかつのうふ", "en": "installment payment" },
+    { "id": "v5", "kanji": "課税証明書", "furigana": "かぜいしょうめいしょ", "en": "tax certificate" },
+    { "id": "v6", "kanji": "非課税", "furigana": "ひかぜい", "en": "tax-exempt" },
+    { "id": "v7", "kanji": "口座振替", "furigana": "こうざふりかえ", "en": "automatic bank transfer (for payment)" },
+    { "id": "v8", "kanji": "コンビニ納付", "furigana": "こんびにのうふ", "en": "convenience-store payment" },
+    { "id": "v9", "kanji": "延滞金", "furigana": "えんたいきん", "en": "late-payment penalty" },
+    { "id": "v10", "kanji": "税務課", "furigana": "ぜいむか", "en": "tax division" }
+  ]
+}

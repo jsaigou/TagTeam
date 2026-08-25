@@ -1,0 +1,16 @@
+{
+  "_comment": "Sprint 5 (Switchboard Plan) — prebuilt vocab pack for gov.mynumber_card (lost My Number card, reissue). Content-only per the plan's 'vocab-pack exercise, not new plumbing' scope for this department. Authored directly, matches src/shared/contract.ts's VocabPack/GlossaryEntry shape.",
+  "leafId": "gov.mynumber_card",
+  "entries": [
+    { "id": "v1", "kanji": "マイナンバーカード", "furigana": "まいなんばーかーど", "en": "My Number card" },
+    { "id": "v2", "kanji": "紛失届", "furigana": "ふんしつとどけ", "en": "loss report" },
+    { "id": "v3", "kanji": "一時停止", "furigana": "いちじていし", "en": "temporary suspension (of the card's function)" },
+    { "id": "v4", "kanji": "再交付", "furigana": "さいこうふ", "en": "reissue" },
+    { "id": "v5", "kanji": "暗証番号", "furigana": "あんしょうばんごう", "en": "PIN number" },
+    { "id": "v6", "kanji": "本人確認書類", "furigana": "ほんにんかくにんしょるい", "en": "identity verification document" },
+    { "id": "v7", "kanji": "手数料", "furigana": "てすうりょう", "en": "handling fee" },
+    { "id": "v8", "kanji": "警察への届出", "furigana": "けいさつへのとどけで", "en": "report to the police", "note": "usually required first for a lost/stolen card before the ward office can reissue it." },
+    { "id": "v9", "kanji": "受け取り", "furigana": "うけとり", "en": "pickup (of the reissued card)" },
+    { "id": "v10", "kanji": "有効期限", "furigana": "ゆうこうきげん", "en": "expiration date" }
+  ]
+}

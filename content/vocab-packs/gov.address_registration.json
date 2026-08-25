@@ -1,0 +1,16 @@
+{
+  "_comment": "Sprint 5 (Switchboard Plan) — prebuilt vocab pack for gov.address_registration (move in / move out). Content-only per the plan's 'vocab-pack exercise, not new plumbing' scope for this department. Authored directly, matches src/shared/contract.ts's VocabPack/GlossaryEntry shape.",
+  "leafId": "gov.address_registration",
+  "entries": [
+    { "id": "v1", "kanji": "転入届", "furigana": "てんにゅうとどけ", "en": "move-in notification" },
+    { "id": "v2", "kanji": "転出届", "furigana": "てんしゅつとどけ", "en": "move-out notification" },
+    { "id": "v3", "kanji": "転居届", "furigana": "てんきょとどけ", "en": "change-of-address notification (within the same ward)" },
+    { "id": "v4", "kanji": "住民票", "furigana": "じゅうみんひょう", "en": "residence certificate" },
+    { "id": "v5", "kanji": "マイナンバーカード", "furigana": "まいなんばーかーど", "en": "My Number card", "note": "usually needed to complete the registration in person." },
+    { "id": "v6", "kanji": "在留カード", "furigana": "ざいりゅうかーど", "en": "residence card" },
+    { "id": "v7", "kanji": "世帯主", "furigana": "せたいぬし", "en": "head of household" },
+    { "id": "v8", "kanji": "同一世帯", "furigana": "どういつせたい", "en": "same household" },
+    { "id": "v9", "kanji": "14日以内", "furigana": "じゅうよっかいない", "en": "within 14 days", "note": "the standard legal deadline for reporting a move." },
+    { "id": "v10", "kanji": "戸籍課", "furigana": "こせきか", "en": "family register / civil affairs division" }
+  ]
+}
