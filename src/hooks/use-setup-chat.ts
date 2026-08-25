@@ -398,5 +398,6 @@ export function useSetupChat(options: UseSetupChatOptions) {
     answerCandidate,
     lunaThinking,
     gemmaBusy,
+    buildRunContext,
   };
 }

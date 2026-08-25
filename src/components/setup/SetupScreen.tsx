@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Sparkles } from "lucide-react";
-import type { DocInput, GroundingAnswer, TargetProfile } from "@/shared/contract";
+import type { DocInput, GroundingAnswer, RoleId, TargetProfile } from "@/shared/contract";
 import { useAppStore, type SetupStep } from "@/state/app-store";
 import { useAvatar, GREETING_WAVE_MOTION } from "@/state/avatar-context";
 import { useSession } from "@/state/session-context";
@@ -91,6 +91,7 @@ export function SetupScreen() {
     answerCandidate,
     lunaThinking,
     gemmaBusy,
+    buildRunContext,
   } = useSetupChat({
     stepLabel,
     summary: state.summary,
@@ -242,44 +243,23 @@ export function SetupScreen() {
     [saveAnswers, setSetupStep, state.docSummary, setSettings],
   );
 
+  /* The ScenarioPicker's "Start simulation" now starts a real run (server
+     graph — classify-then-fill, target grounding) instead of the old
+     client-side pipeline.runSim call, same as the chat's sendIntent path.
+     Result application (setSim + toPrep) happens in the run?.result effect
+     below, shared with the chat flow — this handler only kicks the run off. */
   const handleScenario = useCallback(
-    async (scenario: { avatarId: string; sceneId: string; voiceId: string }) => {
-      chooseScenario(scenario);
+    (objective: string, role: RoleId) => {
+      setSettings({ ...state.settings, role });
       setBusy(true);
-      /* Luna visibly "writes" the call while the LLM works. */
-      session.setThinking(true);
-      try {
-        const result = await pipeline.runSim(
-          state.summary,
-          state.answers,
-          state.docSummary,
-          state.reference,
-          state.settings,
-        );
-        setSim(result.script, result.glossary);
-        /* The practice avatar is NOT launched here anymore — the prep screen
-           shows Luna first and launches the role pack at its ready-click. */
-        toPrep();
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to generate simulation");
-      } finally {
-        session.setThinking(false);
-        setBusy(false);
-      }
+      buildRunContext()
+        .then((context) => sendIntent(objective, context))
+        .catch(() => {
+          setBusy(false);
+          setError("Could not start the call — please try again.");
+        });
     },
-    [
-      chooseScenario,
-      setBusy,
-      setSim,
-      toPrep,
-      state.summary,
-      state.answers,
-      state.docSummary,
-      state.reference,
-      state.settings,
-      session,
-      setError,
-    ],
+    [setSettings, state.settings, setBusy, buildRunContext, sendIntent, setError],
   );
 
   /* Phase 5c — restore a saved call: fetch it, populate the store, relaunch the
@@ -355,6 +335,7 @@ export function SetupScreen() {
     }
     chooseScenario(selection);
     setSim(result.script, result.glossary, result.target ?? null);
+    setBusy(false);
     toPrep();
   }, [
     run,
@@ -362,9 +343,23 @@ export function SetupScreen() {
     state.settings.role,
     chooseScenario,
     setSim,
+    setBusy,
     setError,
     toPrep,
   ]);
+
+  /* A run that dead-ends without a result (e.g. the confirmTarget gate fails
+     outright) must not leave the ScenarioPicker's "Start simulation" button
+     stuck disabled forever. Only unsticks on a truly dead run — no gate, no
+     result, and nothing left queued/running — NOT on "any job failed",
+     since a soft dep (e.g. geolocate, extractTargetRules) failing is normal
+     and planScenario still finishes the run from there. */
+  useEffect(() => {
+    if (!run || run.result || run.gate) return;
+    if (run.jobs.length === 0) return;
+    const stillWorking = run.jobs.some((j) => j.status === "queued" || j.status === "running");
+    if (!stillWorking) setBusy(false);
+  }, [run, setBusy]);
 
   /* Invite state — a clean hero (QA round): a short explainer + one prominent
      CTA. Get started opens the centered main UI and plays the corner door
@@ -407,9 +402,15 @@ export function SetupScreen() {
         style={{ paddingTop: PANEL_TOP }}
       >
       <div
-        ref={(el) => {
-          setAvatarAnchor(el);
-        }}
+        // A STABLE ref identity (the module-level setAvatarAnchor itself, not
+        // a fresh inline arrow function) — an inline `(el) => setAvatarAnchor(el)`
+        // gets a new function identity every render, so React detaches
+        // (null) and reattaches on EVERY commit; each attach calls emit(),
+        // which can trigger a subscriber's setState and another render,
+        // occasionally compounding into "Maximum update depth exceeded"
+        // during a long-running screen (found while testing Sprint 6's
+        // ScenarioPicker against a real multi-step run).
+        ref={setAvatarAnchor}
         className="w-full max-w-[80%] overflow-y-auto rounded-2xl border bg-card/90 p-5 shadow-xl backdrop-blur-md sm:p-6 max-h-[calc(100svh-16rem)]"
       >
         {/* Header row keeps right of Luna's footprint while the card top is
@@ -467,11 +468,9 @@ export function SetupScreen() {
           )}
           {state.setupStep === "scenario" && (
             <ScenarioPicker
-              onChoose={handleScenario}
+              onStart={handleScenario}
               busy={state.busy}
               avatars={catalog.avatars}
-              scenes={catalog.scenes}
-              voices={catalog.voices}
               isLoading={catalog.isLoading}
               error={catalog.error}
               settings={state.settings}
