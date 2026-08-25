@@ -55,6 +55,7 @@ function setup() {
   const extractTargetRules = controllableStep();
   const planScenario = controllableStep();
   const cheatSheet = controllableStep();
+  const classifyScenario = controllableStep();
 
   const jobRunner = createJobRunner({
     steps: {
@@ -65,6 +66,7 @@ function setup() {
       extractTargetRules: { run: extractTargetRules.run, lane: "llm" },
       planScenario: { run: planScenario.run, lane: "llm" },
       cheatSheet: { run: cheatSheet.run, lane: "llm" },
+      classifyScenario: { run: classifyScenario.run, lane: "llm" },
     },
   });
 
@@ -82,6 +84,7 @@ function setup() {
     extractTargetRules,
     planScenario,
     cheatSheet,
+    classifyScenario,
     snapshots,
   };
 }
@@ -94,6 +97,15 @@ const CANDIDATES = [
 async function driveToGate(env: ReturnType<typeof setup>, runKey = "s1") {
   env.runEngine.startRun(runKey, "book an appointment at Mejiro Dental Clinic");
   env.identifyTarget.resolve({ name: "Mejiro Dental Clinic", city: "Toshima", query: "目白 歯科" });
+  await tick();
+  await tick();
+  // classifyScenario shares the "llm" lane (concurrency 1, same as
+  // production — there's only one real model to call) with identifyTarget,
+  // so its job doesn't start running until identifyTarget's clears; resolve
+  // it here, not before. A neutral, non-fast-path classification —
+  // planScenario's soft dep just needs SOME terminal status; the fast-path
+  // behavior itself is covered by server/plan-scenario.test.ts.
+  env.classifyScenario.resolve({ leafId: null });
   await tick();
   await tick();
   env.geolocate.resolve({ locality: "Toshima", queryHint: "Mejiro Dental Clinic Toshima" });
@@ -111,7 +123,12 @@ describe("GRAPH shape", () => {
     expect(GRAPH.extractTargetRules.deps).toEqual(["confirmTarget"]);
     expect(GRAPH.extractTargetRules.speculative).toBe(true);
     expect(GRAPH.research.deps).toEqual(["identifyTarget", "geolocate?"]);
-    expect(GRAPH.planScenario.deps).toEqual(["confirmTarget", "extractTargetRules?", "parseDocument?"]);
+    expect(GRAPH.planScenario.deps).toEqual([
+      "confirmTarget",
+      "extractTargetRules?",
+      "parseDocument?",
+      "classifyScenario?",
+    ]);
   });
 
   it("declares parseDocument as a dep-free node gated on a seeded doc", () => {
@@ -358,6 +375,12 @@ describe("planScenario (Phase 7 plan §7b.5 migration step 4)", () => {
     env.identifyTarget.resolve({ name: "Mejiro Dental Clinic", city: "Toshima", query: "目白 歯科" });
     await tick();
     await tick();
+    // classifyScenario shares the "llm" lane with identifyTarget — see
+    // driveToGate's comment on why this resolves after identifyTarget, not
+    // alongside it.
+    env.classifyScenario.resolve({ leafId: null });
+    await tick();
+    await tick();
     env.geolocate.resolve({ locality: "Toshima", queryHint: "Mejiro Dental Clinic Toshima" });
     await tick();
     await tick();
@@ -397,6 +420,12 @@ describe("parseDocument (Phase 7 plan §7b.5 migration step 5)", () => {
     });
 
     env.identifyTarget.resolve({ name: "Mejiro Dental Clinic", city: "Toshima", query: "目白 歯科" });
+    await tick();
+    await tick();
+    // classifyScenario is also queued behind identifyTarget on the same llm
+    // lane, ahead of parseDocument — it has to clear first before
+    // parseDocument's job actually starts running.
+    env.classifyScenario.resolve({ leafId: null });
     await tick();
     await tick();
 
@@ -440,6 +469,11 @@ describe("parseDocument (Phase 7 plan §7b.5 migration step 5)", () => {
     env.identifyTarget.resolve({ name: "Mejiro Dental Clinic", city: "Toshima", query: "目白 歯科" });
     await tick();
     await tick();
+    // classifyScenario is queued behind identifyTarget, ahead of
+    // parseDocument, on the same llm lane — must clear first.
+    env.classifyScenario.resolve({ leafId: null });
+    await tick();
+    await tick();
     env.parseDocument.resolve(PARSED_SUMMARY);
     await tick();
     await tick();
@@ -469,6 +503,11 @@ describe("parseDocument (Phase 7 plan §7b.5 migration step 5)", () => {
       docSummary: SEED_SUMMARY,
     });
     env.identifyTarget.resolve({ name: "Mejiro Dental Clinic", city: "Toshima", query: "目白 歯科" });
+    await tick();
+    await tick();
+    // classifyScenario is queued behind identifyTarget, ahead of
+    // parseDocument, on the same llm lane — must clear first.
+    env.classifyScenario.resolve({ leafId: null });
     await tick();
     await tick();
     env.parseDocument.reject(new Error("Upload not found or expired — please try again."));

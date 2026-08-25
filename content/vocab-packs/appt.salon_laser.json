@@ -1,0 +1,16 @@
+{
+  "_comment": "Sprint 1 (Switchboard Plan) — prebuilt vocab pack for the appt.salon_laser leaf. Authored directly, matches src/shared/contract.ts's VocabPack/GlossaryEntry shape.",
+  "leafId": "appt.salon_laser",
+  "entries": [
+    { "id": "v1", "kanji": "予約", "furigana": "よやく", "en": "appointment / booking" },
+    { "id": "v2", "kanji": "施術", "furigana": "せじゅつ", "en": "treatment / procedure" },
+    { "id": "v3", "kanji": "カウンセリング", "furigana": "かうんせりんぐ", "en": "consultation", "note": "many clinics require a first free counseling session before treatment starts." },
+    { "id": "v4", "kanji": "部位", "furigana": "ぶい", "en": "treatment area (of the body)" },
+    { "id": "v5", "kanji": "料金プラン", "furigana": "りょうきんプラン", "en": "pricing plan" },
+    { "id": "v6", "kanji": "肌質", "furigana": "はだしつ", "en": "skin type" },
+    { "id": "v7", "kanji": "日焼け", "furigana": "ひやけ", "en": "sunburn / tan", "note": "often asked about — recent sun exposure can rule out a session." },
+    { "id": "v8", "kanji": "効果", "furigana": "こうか", "en": "effect / result" },
+    { "id": "v9", "kanji": "回数券", "furigana": "かいすうけん", "en": "multi-session ticket" },
+    { "id": "v10", "kanji": "施術時間", "furigana": "せじゅつじかん", "en": "treatment duration" }
+  ]
+}

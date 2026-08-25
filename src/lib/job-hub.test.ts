@@ -106,6 +106,14 @@ function fakeSteps() {
           return { script: { scenarioTitle: "Fake scenario", turns: [] }, glossary: [] };
         },
       },
+      // Sprint 1 (Switchboard Plan) — a soft dep of planScenario; must
+      // resolve to SOME terminal status or planScenario never starts. A
+      // neutral "no match" here since these tests exercise hub wiring, not
+      // the classify-then-fill fast path (see server/plan-scenario.test.ts).
+      classifyScenario: {
+        lane: "llm",
+        run: async () => ({ leafId: null }),
+      },
     },
   };
 }

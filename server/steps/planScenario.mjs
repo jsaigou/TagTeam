@@ -23,6 +23,14 @@ import {
   buildSimulationContext,
 } from "../prompts/bureaucrat.mjs";
 import { isSimulationRaw, reconcileSimulation } from "../glossary.mjs";
+import { assembleScript, hasAssemblyContent } from "../scenario-assembly.mjs";
+
+// Sprint 1 (Switchboard Plan) — "classify, then fill": below this confidence,
+// a classifyScenario match isn't trusted enough to skip generation. A
+// mis-fire here doesn't just waste the fast path, it hands the learner a
+// script about the WRONG errand — the threshold exists to make that rare,
+// not to save one LLM call.
+const ASSEMBLY_CONFIDENCE_THRESHOLD = 0.6;
 
 /** Render the confirmed `TargetProfile` as the same kind of free-text digest
  *  `buildSimulationContext`'s "【検索した参考情報】" section expects. Exported
@@ -48,8 +56,28 @@ function parseJsonContent(content) {
   return JSON.parse(text);
 }
 
-/** @param {{ docSummary?: object, answers?: Array, settings?: object, preset?: string, target?: object, goal?: string }} input */
-export async function run({ docSummary, answers, settings, preset, target, goal }, { signal, report }) {
+/** @param {{ docSummary?: object, answers?: Array, settings?: object, preset?: string, target?: object, goal?: string, leafId?: string | null, confidence?: number }} input */
+export async function run(
+  { docSummary, answers, settings, preset, target, goal, leafId, confidence },
+  { signal, report },
+) {
+  // Sprint 1's fast path: a confident classification into a leaf with real
+  // prebuilt content skips generation entirely — the script comes from
+  // native-authored module/vocab-pack lines plus the confirmed target's real
+  // facts (name, posted rules), not an LLM writing from a blank page. Any
+  // leaf without content, or a classification too unsure to trust, falls
+  // through to the unchanged full-generation path below — that's what keeps
+  // "handle anything thrown at it" true regardless of taxonomy coverage.
+  if (
+    leafId &&
+    target?.name &&
+    hasAssemblyContent(leafId) &&
+    (confidence == null || confidence >= ASSEMBLY_CONFIDENCE_THRESHOLD)
+  ) {
+    report({ detail: "Using a prebuilt script for this kind of call…", progress: 0.9 });
+    return assembleScript(leafId, { target, preset });
+  }
+
   // Document-less runs are first-class now (URL-only or spoken objectives):
   // synthesize the context block the sim prompt expects from what we DO know.
   if (!docSummary) {

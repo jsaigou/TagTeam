@@ -1,0 +1,16 @@
+{
+  "_comment": "Sprint 1 (Switchboard Plan) — prebuilt vocab pack for the appt.doctor_dentist leaf. Authored directly, matches src/shared/contract.ts's VocabPack/GlossaryEntry shape.",
+  "leafId": "appt.doctor_dentist",
+  "entries": [
+    { "id": "v1", "kanji": "予約", "furigana": "よやく", "en": "appointment / reservation" },
+    { "id": "v2", "kanji": "診察", "furigana": "しんさつ", "en": "medical examination", "note": "the doctor/dentist actually seeing you, as opposed to just booking the visit." },
+    { "id": "v3", "kanji": "初診", "furigana": "しょしん", "en": "first visit", "note": "clinics often ask if it's your 初診 or a 再診 (follow-up)." },
+    { "id": "v4", "kanji": "保険証", "furigana": "ほけんしょう", "en": "health insurance card", "note": "almost always requested for a first visit." },
+    { "id": "v5", "kanji": "症状", "furigana": "しょうじょう", "en": "symptoms" },
+    { "id": "v6", "kanji": "空き", "furigana": "あき", "en": "availability / open slot" },
+    { "id": "v7", "kanji": "キャンセル", "furigana": "きゃんせる", "en": "cancellation" },
+    { "id": "v8", "kanji": "診療時間", "furigana": "しんりょうじかん", "en": "clinic hours" },
+    { "id": "v9", "kanji": "休診日", "furigana": "きゅうしんび", "en": "day the clinic is closed", "note": "the word that matters most if you're told a day won't work." },
+    { "id": "v10", "kanji": "担当医", "furigana": "たんとうい", "en": "the doctor assigned to you" }
+  ]
+}

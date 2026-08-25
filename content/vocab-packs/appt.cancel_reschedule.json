@@ -1,0 +1,16 @@
+{
+  "_comment": "Sprint 1 (Switchboard Plan) — prebuilt vocab pack for the appt.cancel_reschedule leaf (generic, applies across departments beyond appt — see the plan's MOD 6 note). Authored directly, matches src/shared/contract.ts's VocabPack/GlossaryEntry shape.",
+  "leafId": "appt.cancel_reschedule",
+  "entries": [
+    { "id": "v1", "kanji": "変更", "furigana": "へんこう", "en": "change" },
+    { "id": "v2", "kanji": "キャンセル", "furigana": "きゃんせる", "en": "cancellation" },
+    { "id": "v3", "kanji": "振替", "furigana": "ふりかえ", "en": "reschedule / transfer to another date" },
+    { "id": "v4", "kanji": "予約番号", "furigana": "よやくばんごう", "en": "reservation number", "note": "have this ready if you were given one when you booked." },
+    { "id": "v5", "kanji": "空き状況", "furigana": "あきじょうきょう", "en": "availability status" },
+    { "id": "v6", "kanji": "手数料", "furigana": "てすうりょう", "en": "handling fee" },
+    { "id": "v7", "kanji": "当日キャンセル", "furigana": "とうじつきゃんせる", "en": "same-day cancellation", "note": "often carries a fee — worth listening for." },
+    { "id": "v8", "kanji": "別日", "furigana": "べつび", "en": "a different day" },
+    { "id": "v9", "kanji": "確認", "furigana": "かくにん", "en": "confirmation" },
+    { "id": "v10", "kanji": "都合", "furigana": "つごう", "en": "convenience / circumstances", "note": "used in 都合が悪くなりまして (\"something came up\"), a natural way to explain why you're cancelling." }
+  ]
+}

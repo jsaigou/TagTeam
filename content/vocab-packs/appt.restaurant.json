@@ -1,0 +1,16 @@
+{
+  "_comment": "Sprint 1 (Switchboard Plan) — prebuilt vocab pack for the appt.restaurant leaf. Authored directly, matches src/shared/contract.ts's VocabPack/GlossaryEntry shape.",
+  "leafId": "appt.restaurant",
+  "entries": [
+    { "id": "v1", "kanji": "予約", "furigana": "よやく", "en": "reservation" },
+    { "id": "v2", "kanji": "席", "furigana": "せき", "en": "seat / table" },
+    { "id": "v3", "kanji": "人数", "furigana": "にんずう", "en": "number of people", "note": "you'll almost always be asked this first." },
+    { "id": "v4", "kanji": "個室", "furigana": "こしつ", "en": "private room" },
+    { "id": "v5", "kanji": "禁煙・喫煙", "furigana": "きんえん・きつえん", "en": "non-smoking / smoking" },
+    { "id": "v6", "kanji": "コース料理", "furigana": "こーすりょうり", "en": "set course meal" },
+    { "id": "v7", "kanji": "アレルギー", "furigana": "あれるぎー", "en": "allergy", "note": "worth mentioning proactively if you have one." },
+    { "id": "v8", "kanji": "キャンセル料", "furigana": "きゃんせるりょう", "en": "cancellation fee" },
+    { "id": "v9", "kanji": "満席", "furigana": "まんせき", "en": "fully booked" },
+    { "id": "v10", "kanji": "営業時間", "furigana": "えいぎょうじかん", "en": "business hours" }
+  ]
+}

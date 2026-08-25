@@ -82,6 +82,16 @@ export const GRAPH = {
     // ("目白台デンタルクリニックの予約変更"), which is what the UI shows.
     refineGoal: (result) => result?.objective ?? null,
   },
+  // Sprint 1 (Switchboard Plan) — runs off the raw goal, in parallel with
+  // identifyTarget/research, so its result is ready by the time planScenario
+  // needs it. A soft dep on planScenario (below): a slow/failed
+  // classification must not block script generation forever — it just falls
+  // back to full generation, same as an unclassifiable objective always has.
+  classifyScenario: {
+    deps: [],
+    step: "classifyScenario",
+    input: (ctx) => ({ goal: ctx.goal }),
+  },
   parseDocument: {
     // Runs alongside identifyTarget from the moment a run starts — but only
     // when startRun seeded a `doc` (uploadId(s) into the ephemeral upload
@@ -164,7 +174,7 @@ export const GRAPH = {
     // address and no cited rules. Soft dep on parseDocument: it may never
     // run at all (a text-only objective skips it) or fail, and either way
     // the script falls back to the client-seeded docSummary.
-    deps: ["confirmTarget", "extractTargetRules?", "parseDocument?"],
+    deps: ["confirmTarget", "extractTargetRules?", "parseDocument?", "classifyScenario?"],
     step: "planScenario",
     input: (ctx) => ({
       docSummary: ctx.parseDocument ?? ctx.docSummary,
@@ -175,6 +185,12 @@ export const GRAPH = {
       // errand inferred from the page — script from THAT, not the raw link.
       goal: ctx.identifyTarget?.objective || ctx.goal,
       target: ctx.extractTargetRules ?? (ctx.confirmTarget && { ...ctx.confirmTarget, rules: [] }),
+      // Sprint 1's fast path — see planScenario.mjs's ASSEMBLY_CONFIDENCE_THRESHOLD.
+      // Soft dep above means this may be absent (still running/failed/skipped)
+      // when planScenario starts; undefined leafId just falls through to
+      // full generation, same as always.
+      leafId: ctx.classifyScenario?.leafId ?? null,
+      confidence: ctx.classifyScenario?.confidence,
     }),
     // The graph's deliverable: once this node completes, its result (plus the
     // confirmed target it was built from) rides every RunSnapshot as
@@ -426,7 +442,18 @@ export function createRunEngine({ jobRunner, graph = GRAPH } = {}) {
     // A superseded stale job's late snapshot must not resurrect a node that
     // has already moved on to a fresh job (or been overwritten by resolveGate).
     if (!node || node.job?.id !== jobSnap.id) return;
-    node.status = jobSnap.status;
+    // "done" is deliberately NOT applied here. jobs.mjs's execute() calls
+    // notify(job) (which reaches this listener synchronously) BEFORE
+    // job._resolve(result) — so a "done" snapshot can arrive here a full
+    // microtask before attachNode's `.then()` sets run.ctx[nodeId]. If a
+    // DIFFERENT node's `.then()`-triggered tryAdvance() interleaves in that
+    // gap, it would see this node as "done" with its ctx entry still unset
+    // — e.g. confirmTarget reading an undefined ctx.research and opening
+    // with zero candidates. attachNode's `.then()` is the only place
+    // allowed to set "done", atomically together with ctx — same discipline
+    // the "don't tryAdvance on done here" comment below already establishes
+    // for this exact reason, now applied to the status write too.
+    if (jobSnap.status !== "done") node.status = jobSnap.status;
     node.label = jobSnap.label;
     node.detail = jobSnap.detail;
     node.progress = jobSnap.progress;

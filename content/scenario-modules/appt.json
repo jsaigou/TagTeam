@@ -1,0 +1,90 @@
+{
+  "_comment": "Sprint 1 (Switchboard Plan) — cross-cutting module lines (MOD 1-6, plan §02) for the Appointments & Reservations department (private clinic/restaurant/salon reception, NOT city hall — deliberately different register from src/shared/coaching.json's bureaucrat personas). {facilityName} is substituted at assembly time (server/scenario-assembly.mjs) with the confirmed target's name, when known. Authored directly (not LLM-generated) per house convention for this project's Japanese content.",
+  "department": "appt",
+  "modules": {
+    "mod1_greeting": {
+      "formal": {
+        "jp": "お電話ありがとうございます。{facilityName}でございます。本日はどのようなご用件でございましょうか。",
+        "en": "Thank you for calling. This is {facilityName}. How may I help you today?"
+      },
+      "standard": {
+        "jp": "お電話ありがとうございます。{facilityName}です。本日はどういったご用件でしょうか。",
+        "en": "Thank you for calling. This is {facilityName}. What can I help you with today?"
+      },
+      "friendly": {
+        "jp": "お電話ありがとうございます！{facilityName}です。今日はどんなご用件でしょうか？",
+        "en": "Thanks for calling! This is {facilityName}. What can I do for you today?"
+      }
+    },
+    "mod2_identity": {
+      "formal": {
+        "jp": "恐れ入りますが、お客様のお名前をお伺いしてもよろしいでしょうか。",
+        "en": "I'm sorry to trouble you, but may I ask for your name?"
+      },
+      "standard": {
+        "jp": "お名前を伺ってもよろしいですか。",
+        "en": "May I have your name, please?"
+      },
+      "friendly": {
+        "jp": "お名前を伺ってもいいですか？",
+        "en": "Can I get your name?"
+      }
+    },
+    "mod3_hold": {
+      "formal": {
+        "jp": "恐れ入りますが、少々お待ちいただけますでしょうか。",
+        "en": "I'm sorry, could I ask you to wait just a moment?"
+      },
+      "standard": {
+        "jp": "少々お待ちください。",
+        "en": "One moment, please."
+      },
+      "friendly": {
+        "jp": "少々お待ちくださいね。",
+        "en": "Just a sec, okay?"
+      }
+    },
+    "mod4_scheduling": {
+      "formal": {
+        "jp": "ご希望のお日にちとお時間がございましたら、お伺いできますでしょうか。",
+        "en": "Could you tell me your preferred date and time?"
+      },
+      "standard": {
+        "jp": "ご希望の日にちとお時間はありますか。",
+        "en": "Do you have a preferred date and time?"
+      },
+      "friendly": {
+        "jp": "ご希望の日にちやお時間があれば教えてくださいね。",
+        "en": "Let me know if you have a date and time in mind!"
+      }
+    },
+    "mod5_closing": {
+      "formal": {
+        "jp": "かしこまりました。当日はお気をつけてお越しくださいませ。お電話ありがとうございました。失礼いたします。",
+        "en": "Understood. Please take care on your way here. Thank you for calling. Goodbye."
+      },
+      "standard": {
+        "jp": "承知しました。当日お待ちしております。お電話ありがとうございました。失礼します。",
+        "en": "Understood. We'll be expecting you. Thank you for calling. Goodbye."
+      },
+      "friendly": {
+        "jp": "わかりました！お待ちしていますね。お電話ありがとうございました！",
+        "en": "Got it! We'll be looking forward to seeing you. Thanks for calling!"
+      }
+    },
+    "mod6_cancel_reschedule": {
+      "formal": {
+        "jp": "ご予約の変更でございますね。かしこまりました。恐れ入りますが、現在ご予約いただいているお日にちとお時間をお伺いできますでしょうか。",
+        "en": "You'd like to change your reservation — understood. I'm sorry to trouble you, but could I ask for your current reservation date and time?"
+      },
+      "standard": {
+        "jp": "ご予約の変更ですね。承知しました。今のご予約の日にちとお時間を教えていただけますか。",
+        "en": "You'd like to change your reservation — got it. Could you tell me your current reservation date and time?"
+      },
+      "friendly": {
+        "jp": "予約の変更ですね、わかりました！今の予約の日にちとお時間を教えてもらえますか？",
+        "en": "Changing your reservation, got it! Can you tell me your current date and time?"
+      }
+    }
+  }
+}
