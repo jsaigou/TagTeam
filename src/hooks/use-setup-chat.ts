@@ -45,20 +45,33 @@ export type UseSetupChatOptions = {
 /** Luna's persona for the setup-screen mic chat. Short, warm, actionable.
  *  Task-first, NOT document-first: the user may have a letter, a URL, an
  *  address or just a photo of a sign. When they state their task she says she
- *  will search for it and asks for anything that could refine that search. */
+ *  will search for it and asks for anything that could refine that search —
+ *  EXCEPT a pasted link, which IS the source: she reads it, she doesn't
+ *  search around it. */
 const LUNA_GUIDE_SYSTEM: string = [
   "You are Luna, a friendly English-speaking guide inside the TagTeam app, which helps",
   "non-native residents prepare for Japanese bureaucracy phone calls. You appear during",
   "app setup, on the main screen.",
   "The user's task can be anything — a paper letter, a webpage URL, a street address, or a photo of a sign.",
   "Never assume they have a document, and never ask them to upload one.",
-  "When the user tells you their task, briefly acknowledge it and say you will try searching for it now,",
-  "then invite them to share any extra information — like a letter, webpage, address, or sign — that could help refine the search.",
+  "If the user shares a webpage URL, that page is the authoritative source: briefly say you will",
+  "read that site now (e.g. \"Let me read the site.\") and do NOT say you will search for it and do",
+  "NOT ask for more information — the link already answers that.",
+  "Otherwise, when the user tells you their task, briefly acknowledge it and say you will try searching",
+  "for it now, then invite them to share any extra information — like a letter, address, or sign —",
+  "that could help refine the search.",
   "Keep replies to 1-3 short, plain, warm, actionable sentences. No lists unless asked.",
   "Refer to the current setup step if relevant.",
   "Never invent specific office hours or rules — real facts come from searching, not guessing.",
   "Gently steer off-topic questions back to the task.",
 ].join(" ");
+
+/** A message that is ONLY one or more links — same shape as intent.mjs's
+ *  fast path. Bare URLs skip Luna's LLM guide turn entirely: the server's
+ *  deterministic pipeline reads the page (readUrl + auto-confirm) and the
+ *  scripted dialogue below answers instantly, instead of her generic
+ *  "searching…" reply racing it 20-35s later. */
+const BARE_URL_RE = /^https?:\/\/\S+$/i;
 
 /* Classification queues behind Luna's guide-chat reply on the serialized
    homelab model (two back-to-back completions, measured ~20-35s), and when
@@ -259,8 +272,13 @@ export function useSetupChat(options: UseSetupChatOptions) {
         .then((context) => sendIntent(text, context))
         .catch(() => sendIntent(text));
       /* Client side: Luna's guide chat still answers questions and chatter —
-         the hub only acts on the intents it owns (objective/confirm/reject). */
-      guideChat.sendText(text);
+         the hub only acts on the intents it owns (objective/confirm/reject).
+         A bare URL is the exception: the deterministic URL pipeline handles
+         it server-side and speaks for itself below — her LLM turn would only
+         add a wrong "I'll search… share more info" line half a minute later. */
+      if (!BARE_URL_RE.test(text.trim())) {
+        guideChat.sendText(text);
+      }
     },
     [appendChat, buildRunContext, sendIntent, guideChat, armClassifyWatchdog],
   );
@@ -320,7 +338,9 @@ export function useSetupChat(options: UseSetupChatOptions) {
             }
             break;
           case "provide_url":
-            handleSpeakGuide({ en: "Thank you, let me research that now." });
+            /* The pasted page IS the source (readUrl scrapes it and the gate
+               auto-confirms) — say so, don't promise a search. */
+            handleSpeakGuide({ en: "Let me read the site." });
             break;
           default:
             break;
