@@ -1,0 +1,16 @@
+{
+  "_comment": "Sprint 2 (Switchboard Plan) — prebuilt vocab pack for medical.symptom_sti. Phrasing kept clinical and matter-of-fact throughout, not euphemistic or awkward — this call carries real anxiety for whoever is rehearsing it. Authored directly, matches src/shared/contract.ts's VocabPack/GlossaryEntry shape.",
+  "leafId": "medical.symptom_sti",
+  "entries": [
+    { "id": "v1", "kanji": "性感染症", "furigana": "せいかんせんしょう", "en": "sexually transmitted infection (STI)", "note": "the clinical term — clear and neutral, not slang." },
+    { "id": "v2", "kanji": "検査", "furigana": "けんさ", "en": "test / screening" },
+    { "id": "v3", "kanji": "匿名", "furigana": "とくめい", "en": "anonymous", "note": "some clinics and public health centers offer anonymous testing — worth asking about directly." },
+    { "id": "v4", "kanji": "無料", "furigana": "むりょう", "en": "free of charge" },
+    { "id": "v5", "kanji": "結果", "furigana": "けっか", "en": "result" },
+    { "id": "v6", "kanji": "潜伏期間", "furigana": "せんぷくきかん", "en": "incubation period" },
+    { "id": "v7", "kanji": "パートナー", "furigana": "ぱーとなー", "en": "partner" },
+    { "id": "v8", "kanji": "プライバシー", "furigana": "ぷらいばしー", "en": "privacy", "note": "reasonable to ask how privacy is handled before giving details." },
+    { "id": "v9", "kanji": "泌尿器科", "furigana": "ひにょうきか", "en": "urology (department)" },
+    { "id": "v10", "kanji": "婦人科", "furigana": "ふじんか", "en": "gynecology (department)" }
+  ]
+}

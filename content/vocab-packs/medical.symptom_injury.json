@@ -1,0 +1,16 @@
+{
+  "_comment": "Sprint 2 (Switchboard Plan) — prebuilt vocab pack for medical.symptom_injury (soreness, broken bone, cut needing stitches). Authored directly, matches src/shared/contract.ts's VocabPack/GlossaryEntry shape.",
+  "leafId": "medical.symptom_injury",
+  "entries": [
+    { "id": "v1", "kanji": "痛み", "furigana": "いたみ", "en": "pain / soreness" },
+    { "id": "v2", "kanji": "骨折", "furigana": "こっせつ", "en": "broken bone / fracture" },
+    { "id": "v3", "kanji": "切り傷", "furigana": "きりきず", "en": "cut" },
+    { "id": "v4", "kanji": "縫合", "furigana": "ほうごう", "en": "stitches", "note": "the word for the procedure itself, if the cut needs closing." },
+    { "id": "v5", "kanji": "腫れ", "furigana": "はれ", "en": "swelling" },
+    { "id": "v6", "kanji": "出血", "furigana": "しゅっけつ", "en": "bleeding" },
+    { "id": "v7", "kanji": "整形外科", "furigana": "せいけいげか", "en": "orthopedics (department)" },
+    { "id": "v8", "kanji": "救急", "furigana": "きゅうきゅう", "en": "emergency", "note": "if bleeding won't stop or a bone is visibly deformed, this is a 119 call, not a scheduled visit." },
+    { "id": "v9", "kanji": "レントゲン", "furigana": "れんとげん", "en": "X-ray" },
+    { "id": "v10", "kanji": "動かせる", "furigana": "うごかせる", "en": "able to move (it)", "note": "you'll likely be asked whether you can move the injured area at all." }
+  ]
+}

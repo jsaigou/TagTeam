@@ -1,0 +1,16 @@
+{
+  "_comment": "Sprint 2 (Switchboard Plan) — prebuilt vocab pack for medical.symptom_skin_concern (skin infection, worrying mole / cancer concern). Kept calm and clinical, not alarmist — this call carries real anxiety for whoever is rehearsing it. Authored directly, matches src/shared/contract.ts's VocabPack/GlossaryEntry shape.",
+  "leafId": "medical.symptom_skin_concern",
+  "entries": [
+    { "id": "v1", "kanji": "皮膚科", "furigana": "ひふか", "en": "dermatology (department)" },
+    { "id": "v2", "kanji": "ほくろ", "furigana": "ほくろ", "en": "mole" },
+    { "id": "v3", "kanji": "形が変わった", "furigana": "かたちがかわった", "en": "changed shape", "note": "a natural, calm way to describe why a mole is concerning, without needing the word for cancer at all." },
+    { "id": "v4", "kanji": "皮膚感染症", "furigana": "ひふかんせんしょう", "en": "skin infection" },
+    { "id": "v5", "kanji": "炎症", "furigana": "えんしょう", "en": "inflammation" },
+    { "id": "v6", "kanji": "生検", "furigana": "せいけん", "en": "biopsy", "note": "a clinic may suggest this to check a mole properly — good to recognize, not something to fear hearing." },
+    { "id": "v7", "kanji": "経過観察", "furigana": "けいかかんさつ", "en": "watchful waiting / monitoring", "note": "a common, reassuring outcome — being asked to just keep an eye on it." },
+    { "id": "v8", "kanji": "早めに", "furigana": "はやめに", "en": "sooner rather than later", "note": "useful for asking whether you should be seen quickly." },
+    { "id": "v9", "kanji": "写真", "furigana": "しゃしん", "en": "photo", "note": "some clinics ask you to describe or even send a photo ahead of the visit." },
+    { "id": "v10", "kanji": "紹介状", "furigana": "しょうかいじょう", "en": "referral letter", "note": "may be needed if you're sent on to a specialist." }
+  ]
+}

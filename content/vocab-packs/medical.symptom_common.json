@@ -1,0 +1,16 @@
+{
+  "_comment": "Sprint 2 (Switchboard Plan) — prebuilt vocab pack for medical.symptom_common (sore throat, fever, rash/itchiness, dizziness). Authored directly, matches src/shared/contract.ts's VocabPack/GlossaryEntry shape.",
+  "leafId": "medical.symptom_common",
+  "entries": [
+    { "id": "v1", "kanji": "喉の痛み", "furigana": "のどのいたみ", "en": "sore throat" },
+    { "id": "v2", "kanji": "熱", "furigana": "ねつ", "en": "fever" },
+    { "id": "v3", "kanji": "発疹", "furigana": "はっしん", "en": "rash" },
+    { "id": "v4", "kanji": "かゆみ", "furigana": "かゆみ", "en": "itchiness" },
+    { "id": "v5", "kanji": "めまい", "furigana": "めまい", "en": "dizziness" },
+    { "id": "v6", "kanji": "咳", "furigana": "せき", "en": "cough" },
+    { "id": "v7", "kanji": "体調不良", "furigana": "たいちょうふりょう", "en": "feeling unwell", "note": "a natural, general way to open the call before describing specifics." },
+    { "id": "v8", "kanji": "いつから", "furigana": "いつから", "en": "since when", "note": "almost always the first question you'll be asked." },
+    { "id": "v9", "kanji": "市販薬", "furigana": "しはんやく", "en": "over-the-counter medicine", "note": "you may be asked if you've already taken anything." },
+    { "id": "v10", "kanji": "内科", "furigana": "ないか", "en": "internal medicine (department)" }
+  ]
+}

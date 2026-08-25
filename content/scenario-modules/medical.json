@@ -1,0 +1,76 @@
+{
+  "_comment": "Sprint 2 (Switchboard Plan) — module lines (MOD 1-5; MOD 6 doesn't apply here) for the Medical & Health department (private clinic reception fielding a symptom call, NOT a booking call — greeting asks what's wrong, not what they want). Authored directly per house convention for this project's Japanese content.",
+  "department": "medical",
+  "modules": {
+    "mod1_greeting": {
+      "formal": {
+        "jp": "お電話ありがとうございます。{facilityName}でございます。本日はどうなさいましたでしょうか。",
+        "en": "Thank you for calling. This is {facilityName}. What seems to be the trouble today?"
+      },
+      "standard": {
+        "jp": "お電話ありがとうございます。{facilityName}です。本日はどうされましたか。",
+        "en": "Thank you for calling. This is {facilityName}. What's going on today?"
+      },
+      "friendly": {
+        "jp": "お電話ありがとうございます！{facilityName}です。今日はどうされましたか？",
+        "en": "Thanks for calling! This is {facilityName}. What's up today?"
+      }
+    },
+    "mod2_identity": {
+      "formal": {
+        "jp": "恐れ入りますが、お客様のお名前をお伺いしてもよろしいでしょうか。",
+        "en": "I'm sorry to trouble you, but may I ask for your name?"
+      },
+      "standard": {
+        "jp": "お名前を伺ってもよろしいですか。",
+        "en": "May I have your name, please?"
+      },
+      "friendly": {
+        "jp": "お名前を伺ってもいいですか？",
+        "en": "Can I get your name?"
+      }
+    },
+    "mod3_hold": {
+      "formal": {
+        "jp": "恐れ入りますが、少々お待ちいただけますでしょうか。",
+        "en": "I'm sorry, could I ask you to wait just a moment?"
+      },
+      "standard": {
+        "jp": "少々お待ちください。",
+        "en": "One moment, please."
+      },
+      "friendly": {
+        "jp": "少々お待ちくださいね。",
+        "en": "Just a sec, okay?"
+      }
+    },
+    "mod4_scheduling": {
+      "formal": {
+        "jp": "それでは、ご来院いただけるお日にちとお時間はございますでしょうか。",
+        "en": "Could you tell me a date and time you're able to come in?"
+      },
+      "standard": {
+        "jp": "来院できる日にちと時間はありますか。",
+        "en": "Do you have a date and time you can come in?"
+      },
+      "friendly": {
+        "jp": "来られる日にちと時間、教えてくださいね。",
+        "en": "Let me know a day and time you can come in!"
+      }
+    },
+    "mod5_closing": {
+      "formal": {
+        "jp": "かしこまりました。お大事になさってください。お電話ありがとうございました。失礼いたします。",
+        "en": "Understood. Please take care of yourself. Thank you for calling. Goodbye."
+      },
+      "standard": {
+        "jp": "承知しました。お大事にしてください。お電話ありがとうございました。失礼します。",
+        "en": "Understood. Take care. Thank you for calling. Goodbye."
+      },
+      "friendly": {
+        "jp": "わかりました！お大事に。お電話ありがとうございました！",
+        "en": "Got it! Take care. Thanks for calling!"
+      }
+    }
+  }
+}

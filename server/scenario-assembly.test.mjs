@@ -27,16 +27,27 @@ describe("hasAssemblyContent", () => {
     }
   });
 
-  it("is false for a leaf outside the Sprint 1 pilot — planScenario must fall back to the LLM", () => {
-    expect(hasAssemblyContent("medical.symptom_common")).toBe(false);
+  it("is true for medical leaves added in Sprint 2", () => {
+    for (const leafId of [
+      "medical.symptom_common",
+      "medical.symptom_sti",
+      "medical.symptom_injury",
+      "medical.symptom_skin_concern",
+    ]) {
+      expect(hasAssemblyContent(leafId)).toBe(true);
+    }
+  });
+
+  it("is false for a leaf outside the pilot departments — planScenario must fall back to the LLM", () => {
     expect(hasAssemblyContent("banking.lost_card")).toBe(false);
+    expect(hasAssemblyContent("housing.rent")).toBe(false);
     expect(hasAssemblyContent("not.a.real.leaf")).toBe(false);
   });
 });
 
 describe("assembleScript", () => {
   it("throws for a leaf with no content — callers must check hasAssemblyContent first", () => {
-    expect(() => assembleScript("medical.symptom_common", { target: TARGET })).toThrow();
+    expect(() => assembleScript("banking.lost_card", { target: TARGET })).toThrow();
   });
 
   it("produces a schema-valid, alternating script opening and closing on the bureaucrat", () => {
@@ -100,3 +111,37 @@ describe("assembleScript", () => {
     expect(bogus.script.turns[0].jp).toBe(standard.script.turns[0].jp);
   });
 });
+
+describe("assembleScript — Sprint 2 (medical symptom triage)", () => {
+  it("asks what's wrong, not what they want — greeting differs from the appt department", () => {
+    const { script } = assembleScript("medical.symptom_common", { target: TARGET });
+    expect(script.turns[0].jp).toContain("どうされました");
+  });
+
+  it("carries a leaf-appropriate, calm opening line for every symptom leaf, including the sensitive ones", () => {
+    for (const leafId of [
+      "medical.symptom_common",
+      "medical.symptom_sti",
+      "medical.symptom_injury",
+      "medical.symptom_skin_concern",
+    ]) {
+      const { script, glossary } = assembleScript(leafId, { target: TARGET });
+      expect(script.turns.length).toBeGreaterThanOrEqual(6);
+      expect(script.turns.length).toBeLessThanOrEqual(10);
+      expect(script.turns[1].speaker).toBe("user");
+      expect(script.turns[1].jp.length).toBeGreaterThan(0);
+      expect(glossary.length).toBe(10);
+    }
+  });
+
+  it("still surfaces a posted hours rule on the scheduling turn", () => {
+    const target = {
+      ...TARGET,
+      rules: [{ id: "r1", kind: "hours", rule: "土曜日は休診となっております", source: "https://a.example" }],
+    };
+    const { script } = assembleScript("medical.symptom_injury", { target });
+    const schedulingTurn = script.turns.find((t) => t.jp.includes("来院"));
+    expect(schedulingTurn?.jp).toContain("土曜日は休診となっております");
+  });
+});
+
