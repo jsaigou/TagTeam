@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Sparkles } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { AudioLines, FileText, Mic, Sparkles, PhoneCall } from "lucide-react";
 import type { DocInput, GroundingAnswer, RoleId, TargetProfile } from "@/shared/contract";
 import { useAppStore, type SetupStep } from "@/state/app-store";
 import { useAvatar, GREETING_WAVE_MOTION } from "@/state/avatar-context";
@@ -23,6 +23,7 @@ import { SearchPapersOverlay } from "./SearchPapersOverlay";
 import { PerxonaBadge } from "@/components/brand/PerxonaBadge";
 import { Button } from "@/components/ui/button";
 import { unlockSfx } from "@/lib/sfx";
+import { cn } from "@/lib/utils";
 
 const STEPS: { key: SetupStep; label: string }[] = [
   { key: "doc", label: "Document" },
@@ -363,29 +364,55 @@ export function SetupScreen() {
 
   /* Invite state — a clean hero (QA round): a short explainer + one prominent
      CTA. Get started opens the centered main UI and plays the corner door
-     intro over it; the hero itself never coexists with the intro. */
+     intro over it; the hero itself never coexists with the intro. Luna's
+     avatar stays out of this screen entirely (see AvatarStage's isInvite
+     check) so the door-open reveal is still a surprise — the preview card
+     below is deliberately abstract, not a peek at her. */
   if (!setupOpen) {
     return (
-      <div className="flex min-h-svh flex-col items-center justify-center px-4 pb-16">
-        <div className="flex w-full max-w-xl flex-col items-center gap-5 text-center">
-          <h1 className="text-3xl font-bold tracking-tight text-primary sm:text-4xl">
-            Practice your Japanese office calls
-          </h1>
-          <p className="max-w-md text-base leading-relaxed text-muted-foreground">
-            TagTeam rehearses phone calls with Japanese offices before you make
-            them. Just tell Luna what you need — a letter, a link, or your own
-            words — and she researches the office, sets up the call, and an AI
-            avatar plays the staff member so you can practice.
-          </p>
-          <Button
-            size="lg"
-            onClick={handleGetStarted}
-            className="mt-2 gap-2 rounded-full px-10 py-7 text-lg shadow-xl"
-          >
-            <Sparkles className="size-5" />
-            Get started
-          </Button>
-          <PerxonaBadge />
+      <div className="relative flex min-h-svh flex-col items-center justify-center overflow-hidden px-4 pb-20 sm:pb-24">
+        <HeroBackdrop />
+        <div className="flex w-full max-w-6xl flex-col items-center gap-14 xl:flex-row xl:items-center xl:justify-between xl:gap-20">
+          <div className="flex w-full max-w-xl flex-col items-center gap-5 text-center xl:items-start xl:text-left">
+            <h1 className="text-3xl font-bold tracking-tight text-primary sm:text-4xl lg:text-5xl xl:text-6xl">
+              Practice your Japanese office calls
+            </h1>
+            <p className="max-w-md text-base leading-relaxed text-muted-foreground lg:max-w-lg lg:text-lg">
+              TagTeam rehearses phone calls with Japanese offices before you make
+              them. Just tell Luna what you need — a letter, a link, or your own
+              words — and she researches the office, sets up the call, and an AI
+              avatar plays the staff member so you can practice.
+            </p>
+            <Button
+              size="lg"
+              onClick={handleGetStarted}
+              className="mt-2 gap-2 rounded-full px-10 py-7 text-lg shadow-xl"
+            >
+              <Sparkles className="size-5" />
+              Get started
+            </Button>
+            <PerxonaBadge />
+
+            <ol className="mt-4 grid w-full max-w-md grid-cols-1 gap-5 border-t border-border/60 pt-8 text-left sm:grid-cols-3 sm:gap-4 xl:max-w-none">
+              <HeroStep
+                icon={<FileText className="size-4" />}
+                title="Tell Luna"
+                body="A letter, a link, or just your own words."
+              />
+              <HeroStep
+                icon={<PhoneCall className="size-4" />}
+                title="She sets it up"
+                body="Luna researches the office and preps the call."
+              />
+              <HeroStep
+                icon={<Mic className="size-4" />}
+                title="You practice"
+                body="An AI avatar plays the staff member on the line."
+              />
+            </ol>
+          </div>
+
+          <CallPreviewCard className="hidden w-full max-w-sm shrink-0 xl:block" />
         </div>
       </div>
     );
@@ -498,5 +525,79 @@ export function SetupScreen() {
         <DoorsIntro onFinish={handleIntroFinish} onReveal={handleIntroReveal} />
       )}
     </>
+  );
+}
+
+/** One "how it works" entry on the invite hero. */
+function HeroStep({
+  icon,
+  title,
+  body,
+}: {
+  icon: ReactNode;
+  title: string;
+  body: string;
+}) {
+  return (
+    <li className="flex items-start gap-3 sm:flex-col sm:items-start sm:gap-2">
+      <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-accent/20 text-primary">
+        {icon}
+      </span>
+      <div>
+        <p className="text-sm font-semibold text-foreground">{title}</p>
+        <p className="text-sm text-muted-foreground">{body}</p>
+      </div>
+    </li>
+  );
+}
+
+/** Large, low-opacity leaf motif behind the invite hero — fills the flat
+    background on wide screens without competing with the door reveal
+    (which anchors on the setup card, mounted only after Get started). */
+function HeroBackdrop() {
+  return (
+    <svg
+      aria-hidden
+      viewBox="0 0 200 200"
+      className="pointer-events-none absolute -top-24 -right-40 hidden h-[520px] w-[520px] text-accent opacity-[0.08] lg:block xl:-top-32 xl:-right-32 xl:h-[640px] xl:w-[640px]"
+    >
+      <path
+        fill="currentColor"
+        d="M100 10c49.7 0 90 40.3 90 90s-40.3 90-90 90S10 149.7 10 100 50.3 10 100 10Zm0 20c-20 25-30 47-30 70 0 27.6 22.4 50 50 50s50-22.4 50-50c0-23-10-45-30-70-13 12-20 24-20 38 0 8-4 12-10 12s-10-4-10-12c0-14-7-26-20-38Z"
+      />
+    </svg>
+  );
+}
+
+/** Abstract, non-spoiler preview of a call in progress — deliberately no
+    avatar art, since Luna's reveal is reserved for the door-open intro. */
+function CallPreviewCard({ className }: { className?: string }) {
+  return (
+    <div className={cn(className)}>
+      <div className="rounded-2xl border border-border/70 bg-card p-6 shadow-xl">
+        <div className="flex items-center gap-3">
+          <span className="flex size-10 items-center justify-center rounded-full bg-primary/10 text-primary">
+            <PhoneCall className="size-5" />
+          </span>
+          <div>
+            <p className="text-sm font-semibold text-foreground">Kōsei Trading Co.</p>
+            <p className="text-xs text-muted-foreground">Booking a delivery slot</p>
+          </div>
+          <span className="ml-auto flex items-center gap-1.5 text-xs font-medium text-accent">
+            <span className="size-1.5 animate-pulse rounded-full bg-accent" />
+            Live
+          </span>
+        </div>
+
+        <div className="mt-5 flex items-center justify-center gap-1 rounded-xl bg-muted/60 py-6 text-accent">
+          <AudioLines className="size-8 opacity-80" />
+        </div>
+
+        <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
+          Practice the whole call — greeting, the ask, the awkward part — before
+          you dial the real one.
+        </p>
+      </div>
+    </div>
   );
 }
