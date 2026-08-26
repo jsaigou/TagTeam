@@ -21,6 +21,7 @@ import { DoorsIntro } from "./DoorsIntro";
 import { LunaChatPanel } from "./LunaChatPanel";
 import { SearchPapersOverlay } from "./SearchPapersOverlay";
 import { PerxonaBadge } from "@/components/brand/PerxonaBadge";
+import { LeafBackdrop } from "@/components/brand/LeafBackdrop";
 import { Button } from "@/components/ui/button";
 import { unlockSfx } from "@/lib/sfx";
 import { cn } from "@/lib/utils";
@@ -371,7 +372,7 @@ export function SetupScreen() {
   if (!setupOpen) {
     return (
       <div className="relative flex min-h-svh flex-col items-center justify-center overflow-hidden px-4 pb-20 sm:pb-24">
-        <HeroBackdrop />
+        <LeafBackdrop />
         <div className="flex w-full max-w-6xl flex-col items-center gap-14 xl:flex-row xl:items-center xl:justify-between xl:gap-20">
           <div className="flex w-full max-w-xl flex-col items-center gap-5 text-center xl:items-start xl:text-left">
             <h1 className="text-3xl font-bold tracking-tight text-primary sm:text-4xl lg:text-5xl xl:text-6xl">
@@ -548,24 +549,6 @@ function HeroStep({
         <p className="text-sm text-muted-foreground">{body}</p>
       </div>
     </li>
-  );
-}
-
-/** Large, low-opacity leaf motif behind the invite hero — fills the flat
-    background on wide screens without competing with the door reveal
-    (which anchors on the setup card, mounted only after Get started). */
-function HeroBackdrop() {
-  return (
-    <svg
-      aria-hidden
-      viewBox="0 0 200 200"
-      className="pointer-events-none absolute -top-24 -right-40 hidden h-[520px] w-[520px] text-accent opacity-[0.08] lg:block xl:-top-32 xl:-right-32 xl:h-[640px] xl:w-[640px]"
-    >
-      <path
-        fill="currentColor"
-        d="M100 10c49.7 0 90 40.3 90 90s-40.3 90-90 90S10 149.7 10 100 50.3 10 100 10Zm0 20c-20 25-30 47-30 70 0 27.6 22.4 50 50 50s50-22.4 50-50c0-23-10-45-30-70-13 12-20 24-20 38 0 8-4 12-10 12s-10-4-10-12c0-14-7-26-20-38Z"
-      />
-    </svg>
   );
 }
 

@@ -1,4 +1,4 @@
-import { Loader2 } from "lucide-react";
+import { Leaf, Loader2 } from "lucide-react";
 import { AppStoreProvider, useAppStore } from "@/state/app-store";
 import { SessionProvider } from "@/state/session-context";
 import { AvatarProvider } from "@/state/avatar-context";
@@ -44,7 +44,8 @@ function AppContent() {
               </div>
             </div>
           ) : (
-            <div className="flex min-h-svh items-center justify-center text-muted-foreground">
+            <div className="flex min-h-svh items-center justify-center gap-2 text-muted-foreground">
+              <Loader2 className="size-4 animate-spin" />
               Preparing cheat sheet…
             </div>
           ))}
@@ -64,8 +65,9 @@ function App() {
      after login (it needs a minted connect token, which requires auth). */
   if (isPending) {
     return (
-      <div className="flex min-h-svh items-center justify-center text-muted-foreground">
-        <Loader2 className="size-6 animate-spin" />
+      <div className="flex min-h-svh flex-col items-center justify-center gap-3 text-muted-foreground">
+        <Leaf className="size-6 text-primary" />
+        <Loader2 className="size-5 animate-spin" />
       </div>
     );
   }
