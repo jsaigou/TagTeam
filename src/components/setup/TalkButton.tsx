@@ -46,7 +46,7 @@ export function TalkButton({
         !supported
           ? "Microphone unavailable"
           : listening
-            ? "Listening — tap to stop"
+            ? "Listening. Tap to stop"
             : "Tap, then just speak"
       }
       style={glow}

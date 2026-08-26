@@ -118,7 +118,7 @@ function fakeSteps() {
   };
 }
 
-async function startHub(rows: object[] = []) {
+async function startHub(rows: object[] = [], { practiceMode = "specific" as const } = {}) {
   const db = makeDb();
   for (const row of rows) {
     await db.insert(schema.appSession).values(row as never).run();
@@ -126,9 +126,15 @@ async function startHub(rows: object[] = []) {
   const { steps, planScenarioInputs } = fakeSteps();
   const jobRunner = createJobRunner({ steps });
   const runEngine = createRunEngine({ jobRunner });
-  const classifyIntent = vi.fn(async (text: string, opts: { gateOpen?: boolean }) => {
+  const classifyIntent = vi.fn(async (text: string, opts: { gateOpen?: boolean; practiceModePending?: boolean }) => {
     if (opts.gateOpen && /^yes/i.test(text)) return { intent: "confirm" };
     if (opts.gateOpen && /^no/i.test(text)) return { intent: "reject" };
+    // Sprint 2 — two-step flow: state_objective stashes context, then
+    // practice_choice starts the run. Default to "specific" so most tests
+    // exercise the normal gate flow; override via `startHub({ practiceMode })`.
+    if (opts.practiceModePending) {
+      return { intent: "practice_choice", practiceMode };
+    }
     return { intent: "state_objective", objective: text };
   });
 
@@ -189,7 +195,11 @@ describe("hub + run engine", () => {
     await stage.opened;
     await waitFor(stage, (m) => m?.type === "joined");
 
+    // Sprint 2 — two-step flow: state_objective stashes context, then
+    // practice_choice starts the run.
     stage.ws.send(JSON.stringify({ type: "intent", text: "book an appointment at Mejiro Dental Clinic" }));
+    await waitFor(stage, (m) => m?.type === "classified");
+    stage.ws.send(JSON.stringify({ type: "intent", text: "generic" }));
 
     const run = await waitFor(stage, (m) => m?.type === "run" && Boolean((m.run as { gate?: unknown })?.gate));
     const gate = (run.run as { gate: { candidates: Array<{ id: string }> }; runId: string }).gate;
@@ -203,6 +213,8 @@ describe("hub + run engine", () => {
     await stage.opened;
     await waitFor(stage, (m) => m?.type === "joined");
     stage.ws.send(JSON.stringify({ type: "intent", text: "book an appointment at Mejiro Dental Clinic" }));
+    await waitFor(stage, (m) => m?.type === "classified");
+    stage.ws.send(JSON.stringify({ type: "intent", text: "generic" }));
     await waitFor(stage, (m) => m?.type === "run" && Boolean((m.run as { gate?: unknown })?.gate));
 
     const phone = connect(url, joinPhone);
@@ -224,6 +236,8 @@ describe("hub + run engine", () => {
     await waitFor(phone, (m) => m?.type === "joined");
 
     stage.ws.send(JSON.stringify({ type: "intent", text: "book an appointment at Mejiro Dental Clinic" }));
+    await waitFor(stage, (m) => m?.type === "classified");
+    stage.ws.send(JSON.stringify({ type: "intent", text: "generic" }));
     const opened = await waitFor(stage, (m) => m?.type === "run" && Boolean((m.run as { gate?: unknown })?.gate));
     const { runId, gate } = opened.run as { runId: string; gate: { guessId: string } };
 
@@ -246,6 +260,8 @@ describe("hub + run engine", () => {
     await waitFor(stage, (m) => m?.type === "joined");
 
     stage.ws.send(JSON.stringify({ type: "intent", text: "book an appointment at Mejiro Dental Clinic" }));
+    await waitFor(stage, (m) => m?.type === "classified");
+    stage.ws.send(JSON.stringify({ type: "intent", text: "generic" }));
     await waitFor(stage, (m) => m?.type === "run" && Boolean((m.run as { gate?: unknown })?.gate));
 
     const beforeYes = stage.received.length;
@@ -254,7 +270,7 @@ describe("hub + run engine", () => {
       after: beforeYes,
     });
 
-    expect(classifyIntent).toHaveBeenCalledWith("yes that's right", { gateOpen: true });
+    expect(classifyIntent).toHaveBeenCalledWith("yes that's right", { gateOpen: true, practiceModePending: false });
   });
 
   it("`cancelRun` stops a run in progress", async () => {
@@ -264,6 +280,8 @@ describe("hub + run engine", () => {
     await waitFor(stage, (m) => m?.type === "joined");
 
     stage.ws.send(JSON.stringify({ type: "intent", text: "book an appointment at Mejiro Dental Clinic" }));
+    await waitFor(stage, (m) => m?.type === "classified");
+    stage.ws.send(JSON.stringify({ type: "intent", text: "generic" }));
     const opened = await waitFor(stage, (m) => m?.type === "run" && Boolean((m.run as { gate?: unknown })?.gate));
     const { runId } = opened.run as { runId: string };
 
@@ -290,6 +308,8 @@ describe("hub + run engine", () => {
         },
       }),
     );
+    await waitFor(stage, (m) => m?.type === "classified");
+    stage.ws.send(JSON.stringify({ type: "intent", text: "generic" }));
 
     // The seeded doc enabled the parseDocument node alongside identifyTarget.
     const run = await waitFor(stage, (m) => m?.type === "run" && Boolean((m.run as { gate?: unknown })?.gate));

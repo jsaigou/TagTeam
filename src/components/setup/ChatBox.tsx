@@ -25,7 +25,7 @@ export function ChatBox({ messages }: { messages: ChatEntry[] }) {
   if (messages.length === 0) {
     return (
       <div className="flex max-h-56 min-h-24 items-center justify-center rounded-xl border border-dashed bg-muted/30 px-4 py-6 text-center text-xs text-muted-foreground">
-        Ask Luna anything about your task — she replies here and out loud.
+        Ask Luna anything about your task. She replies here and out loud.
       </div>
     );
   }

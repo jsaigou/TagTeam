@@ -101,7 +101,7 @@ export function CallScreen() {
   const handleStart = useCallback(async () => {
     if (!script) return;
     if (!avatar.ready) {
-      setError("Presenter is still loading — please wait a moment and try again.");
+      setError("Presenter is still loading. Please wait a moment and try again.");
       return;
     }
     try {
@@ -125,7 +125,7 @@ export function CallScreen() {
         target: state.target,
         settings: state.settings,
       }).catch(() => {
-        setConversationError("Live conversation is offline — the script will guide the call.");
+        setConversationError("Live conversation is offline. The script will guide the call.");
       });
     }
     /* Persist the scenario (Phase 5c) so the user can restore this call later. */
@@ -341,7 +341,7 @@ export function CallScreen() {
       } catch {
         /* keep current avatar if the swap fails */
       }
-      speakGuide({ en: "Nice work! Here's your cheat sheet for the real call — keep it handy." });
+      speakGuide({ en: "Nice work! Here's your cheat sheet for the real call. Keep it handy." });
     })();
   }, [
     script,
@@ -404,12 +404,12 @@ export function CallScreen() {
                   {mic.vad.state === "listening" ? (
                     <p className="flex items-center gap-2 text-sm text-foreground">
                       <span className="size-2 animate-pulse rounded-full bg-emerald-500" />
-                      Listening — speak whenever you're ready.
+                      Listening. Speak whenever you're ready.
                     </p>
                   ) : mic.vad.state === "speaking" ? (
                     <p className="flex items-center gap-2 text-sm text-foreground">
                       <span className="size-2 animate-pulse rounded-full bg-destructive" />
-                      I can hear you — go ahead.
+                      I can hear you. Go ahead.
                     </p>
                   ) : (
                     <p className="flex items-center gap-2 text-sm text-foreground">
@@ -419,7 +419,7 @@ export function CallScreen() {
                   )}
                   <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
                     <AudioLines className="size-3.5" />
-                    Voice-activated — no button needed.
+                    Voice-activated. No button needed.
                   </p>
                   {conversationError && (
                     <p className="text-xs text-destructive">{conversationError}</p>
@@ -441,8 +441,8 @@ export function CallScreen() {
                   <p className="flex items-center gap-2 text-sm text-foreground">
                     <span className="size-2 animate-pulse rounded-full bg-destructive" />
                     {mic.micLatched
-                      ? "Recording hands-free — click the mic or press Space to send."
-                      : "Keep holding to speak — release when done."}
+                      ? "Recording hands-free. Click the mic or press Space to send."
+                      : "Keep holding to speak. Release when done."}
                   </p>
                 </>
               ) : (

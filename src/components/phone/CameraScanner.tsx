@@ -104,7 +104,7 @@ export function CameraScanner({ onDetected, onCancel }: CameraScannerProps) {
       } catch (err) {
         const name = err instanceof DOMException ? err.name : "";
         if (name === "NotAllowedError") {
-          setError("Camera permission was denied — allow camera access and try again.");
+          setError("Camera permission was denied. Allow camera access and try again.");
         } else if (name === "NotFoundError") {
           setError("No camera found on this device.");
         } else if (name === "NotReadableError") {

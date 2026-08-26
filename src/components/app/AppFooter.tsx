@@ -61,7 +61,7 @@ export function AppFooter() {
                 <p>
                   TagTeam is a <strong>practice tool</strong>: it rehearses simulated Japanese
                   phone calls and summarizes information you provide or confirm. It is not an
-                  official source — office hours, required documents, and procedures can change,
+                  official source. Office hours, required documents, and procedures can change,
                   so always verify details with the agency's official channels before your real
                   call.
                 </p>

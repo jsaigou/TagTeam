@@ -57,9 +57,9 @@ const LUNA_GUIDE_SYSTEM: string = [
   "If the user shares a webpage URL, that page is the authoritative source: briefly say you will",
   "read that site now (e.g. \"Let me read the site.\") and do NOT say you will search for it and do",
   "NOT ask for more information — the link already answers that.",
-  "Otherwise, when the user tells you their task, briefly acknowledge it and say you will try searching",
-  "for it now, then invite them to share any extra information — like a letter, address, or sign —",
-  "that could help refine the search.",
+  "Otherwise, when the user tells you their task, briefly acknowledge it. The app will then ask",
+  "whether they want to research specific details or jump into generic practice — you don't need",
+  "to ask this yourself, just acknowledge the task.",
   "Keep replies to 1-3 short, plain, warm, actionable sentences. No lists unless asked.",
   "Refer to the current setup step if relevant.",
   "Never invent specific office hours or rules — real facts come from searching, not guessing.",
@@ -309,14 +309,30 @@ export function useSetupChat(options: UseSetupChatOptions) {
             const name = result.targetName?.trim();
             if (name) {
               setCandidate(name);
-              /* Search the ENTITY, never the raw utterance — the whole
-                 sentence buries the place name and floods results with
-                 generic guides. The run's research step does its own
-                 geo-scoped query server-side. */
-              startChatSearch(name);
-              handleSpeakGuide({ en: `Ok, I'm searching for “${name}”. Is that correct?` });
+              // Sprint 2 — don't start the search yet. Luna asks
+              // "generic or specific?" and the run starts once the
+              // user picks. The entity name is stashed for later.
             } else {
               setCandidate(null);
+            }
+            // Sprint 2 — ask the practice-mode question regardless of
+            // whether we have a target name.
+            handleSpeakGuide({
+              en: name
+                ? `Ok, I can look up “${name}” for specific details, or we can do a generic practice. Which do you prefer?`
+                : "I can research specific details for this, or we can do a generic practice. Which do you prefer?",
+            });
+            break;
+          }
+          case "practice_choice": {
+            // Sprint 2 — the run has started on the server. Clear the
+            // candidate (the run's own confirmTarget gate handles site
+            // selection if research was not skipped).
+            setCandidate(null);
+            if (result.practiceMode === "generic") {
+              handleSpeakGuide({ en: "Ok, let's jump straight into practice." });
+            } else {
+              handleSpeakGuide({ en: "Ok, let me search for the details." });
             }
             break;
           }
@@ -325,7 +341,7 @@ export function useSetupChat(options: UseSetupChatOptions) {
               setCandidate(null);
               handleSpeakGuide({ en: "Ok, let me search." });
             } else if (run?.gate) {
-              handleSpeakGuide({ en: "Great — let me put your practice call together." });
+              handleSpeakGuide({ en: "Great, let me put your practice call together." });
             }
             break;
           case "reject":
@@ -333,7 +349,7 @@ export function useSetupChat(options: UseSetupChatOptions) {
               if (runId) cancelRun(runId);
               setCandidate(null);
               handleSpeakGuide({
-                en: "No problem — can you repeat the name of the place? If you have a letter or screenshot you can also add it.",
+                en: "No problem. Can you repeat the name of the place? If you have a letter or screenshot you can also add it.",
               });
             }
             break;
@@ -346,7 +362,7 @@ export function useSetupChat(options: UseSetupChatOptions) {
             break;
         }
       }),
-    [onClassified, handleSpeakGuide, cancelRun, run?.gate, startChatSearch],
+    [onClassified, handleSpeakGuide, cancelRun, run?.gate],
   );
 
   /* Site selection (Workflow 1's final step): when the confirmTarget gate
@@ -361,7 +377,7 @@ export function useSetupChat(options: UseSetupChatOptions) {
     if (askedGateRef.current === key) return;
     askedGateRef.current = key;
     handleSpeakGuide({
-      en: `I found “${gateGuess.name}” — is that the right place? Pick it below, or just say yes.`,
+      en: `I found “${gateGuess.name}”. Is that the right place? Pick it below, or just say yes.`,
     });
     // Primitive-only deps + the once-per-key ref guard; the snapshot
     // re-broadcasts on every job change and must not re-trigger her.

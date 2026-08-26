@@ -383,11 +383,11 @@ export function PhoneApp() {
                       ? "I can hear you…"
                       : vad.state === "loading"
                         ? "Starting microphone…"
-                        : "Listening — speak anytime"}
+                        : "Listening. Speak anytime"}
                   </p>
                   <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
                     <AudioLines className="size-3.5" />
-                    Voice-activated — no button needed.
+                    Voice-activated. No button needed.
                   </p>
                 </div>
               </>
@@ -471,7 +471,7 @@ export function PhoneApp() {
           </div>
 
           <p className="text-center text-[11px] text-muted-foreground">
-            Speak into the call with the hold button — the desktop plays the office's reply.
+            Speak into the call with the hold button. The desktop plays the office's reply.
           </p>
         </>
       )}

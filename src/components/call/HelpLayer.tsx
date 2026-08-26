@@ -45,7 +45,7 @@ export function HelpLayer({
           <div className="w-full max-w-md rounded-xl border border-destructive/40 bg-card p-6 shadow-lg">
             <div className="flex items-center gap-2 text-destructive">
               <PauseCircle className="size-5" />
-              <h3 className="text-base font-semibold">Call held — explanation</h3>
+              <h3 className="text-base font-semibold">Call held: explanation</h3>
             </div>
             <p className="mt-2 text-sm leading-relaxed">{holdHelp.explanationEn}</p>
             <div className="mt-4 flex justify-end">

@@ -23,6 +23,11 @@ export const DOC_SUMMARY_SCHEMA = {
       type: "string",
       description: "この文書が何のためのものか、英語で一文",
     },
+    englishSummary: {
+      type: "string",
+      description:
+        "A clear, plain-English summary of what this document is, who it is from, and what the recipient should do. 2-4 sentences written for someone who cannot read Japanese. Include any deadlines, amounts, or action items visible in the document.",
+    },
     keyFields: {
       type: "array",
       items: { type: "string" },
@@ -46,7 +51,7 @@ export const DOC_SUMMARY_SCHEMA = {
       },
     },
   },
-  required: ["documentType", "issuingAgency", "purpose", "keyFields", "questions"],
+  required: ["documentType", "issuingAgency", "purpose", "englishSummary", "keyFields", "questions"],
 };
 
 export const DOC_PARSE_SCHEMA_TEXT = JSON.stringify(DOC_SUMMARY_SCHEMA, null, 2);
@@ -57,6 +62,7 @@ export const DOC_PARSE_SYSTEM_PROMPT = `あなたは日本の行政文書に詳�
 - documentType: 文書の種類（日本語で、例「国民健康保険 医療費のお知らせ」）
 - issuingAgency: 発行元・担当部署（日本語で、例「川崎市 健康保険課」）
 - purpose: この文書が何のためのものか、英語で一文
+- englishSummary: 英語で書かれた明確な要約（2〜4文）。この文書が何者で、誰から届いたもので、受取人が何をするべきかを説明してください。締切額、金額、必要な行動が文書に含まれている場合はそれも含めてください。日本語を読めない人向けに書いてください。
 - keyFields: 文書に記載されている重要項目（日本語のまま、3〜6個）
 - questions: 利用者がこの文書について役所に電話するとき、担当者に伝えるべき「電話の目的」を確定するための英語の質問を1〜2件。可能なら選択肢（options）を付けてください。
 

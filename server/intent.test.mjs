@@ -25,6 +25,15 @@ describe("isIntentResult", () => {
     expect(isIntentResult({ intent: "state_objective", targetName: 42 })).toBe(false);
     expect(isIntentResult({ intent: "nope" })).toBe(false);
   });
+
+  it("accepts a practice_choice with practiceMode", () => {
+    expect(
+      isIntentResult({
+        intent: "practice_choice",
+        practiceMode: "generic",
+      }),
+    ).toBe(true);
+  });
 });
 
 describe("classifyIntent", () => {
@@ -73,6 +82,21 @@ describe("classifyIntent", () => {
     const no = await classifyIntent("nope", { gateOpen: true, llmChat: spy });
     expect(yes.intent).toBe("confirm");
     expect(no.intent).toBe("reject");
+    expect(calls).toBe(0);
+  });
+
+  it("fast-paths generic/specific when practice-mode question is pending", async () => {
+    let calls = 0;
+    const spy = async () => {
+      calls += 1;
+      return { choices: [{ message: { content: "{}" } }] };
+    };
+    const generic = await classifyIntent("generic", { practiceModePending: true, llmChat: spy });
+    const specific = await classifyIntent("use my details", { practiceModePending: true, llmChat: spy });
+    expect(generic.intent).toBe("practice_choice");
+    expect(generic.practiceMode).toBe("generic");
+    expect(specific.intent).toBe("practice_choice");
+    expect(specific.practiceMode).toBe("specific");
     expect(calls).toBe(0);
   });
 });

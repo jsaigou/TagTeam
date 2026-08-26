@@ -138,6 +138,9 @@ export function buildSimulationContext(docSummary, answers, reference) {
     `目的: ${docSummary.purpose}`,
     `重要項目: ${docSummary.keyFields.join("、")}`,
     "",
+    "【English summary for the caller】",
+    docSummary.englishSummary || "",
+    "",
     "【電話の目的（利用者の回答）】",
     ...answers.map((a) => `- ${a.questionId}: ${a.answer}`),
   ];

@@ -124,7 +124,7 @@ describe("GRAPH shape", () => {
     expect(GRAPH.extractTargetRules.speculative).toBe(true);
     expect(GRAPH.research.deps).toEqual(["identifyTarget", "geolocate?"]);
     expect(GRAPH.planScenario.deps).toEqual([
-      "confirmTarget",
+      "confirmTarget?",
       "extractTargetRules?",
       "parseDocument?",
       "classifyScenario?",

@@ -198,7 +198,7 @@ export function PrepScreen() {
                 className="gap-2 rounded-full px-8 shadow-lg"
               >
                 <Check className="size-5" />
-                {handoff.busy ? "Warming up the practice avatar…" : "I'm ready — start the call"}
+                {handoff.busy ? "Warming up the practice avatar\u2026" : "I'm ready. Start the call"}
               </Button>
             </>
           )}

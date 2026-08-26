@@ -102,7 +102,7 @@ export function ReferenceSearch({ agency, purpose }: ReferenceSearchProps) {
         Research the office
       </p>
       <p className="text-xs text-muted-foreground">
-        Search for reference info about the office or agency you'll call — the simulation will be
+        Search for reference info about the office or agency you'll call. The simulation will be
         grounded in what we find.
       </p>
       <div className="flex gap-2">
@@ -160,7 +160,7 @@ export function ReferenceSearch({ agency, purpose }: ReferenceSearchProps) {
         <div className="rounded-md bg-muted/50 p-2.5">
           <p className="mb-1 flex items-center gap-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
             <CheckCircle2 className="size-3 text-accent" />
-            Reference found — will inform the simulation
+            Reference found. Will inform the simulation
           </p>
           <p className="line-clamp-4 text-xs text-muted-foreground">
             {`${hits.length} result${hits.length === 1 ? "" : "s"} found`}

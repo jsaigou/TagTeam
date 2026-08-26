@@ -59,8 +59,8 @@ export function LoginScreen() {
             Sound confident before you dial.
           </h1>
           <p className="text-base leading-relaxed text-muted-foreground">
-            Practice real Japanese phone calls with a live avatar coach — the
-            greeting, the ask, the awkward part — before the real one.
+            Practice real Japanese phone calls with a live avatar coach. The
+            greeting, the ask, the awkward part, before the real one.
           </p>
         </div>
 

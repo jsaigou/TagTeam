@@ -40,7 +40,12 @@ function GateCard({ run }: { run: RunSnapshot }) {
   if (!gate) return null;
   return (
     <div className="flex flex-col gap-2 rounded-lg border border-amber-500/40 bg-amber-500/5 p-3">
-      <p className="text-sm font-medium">Is this the right place?</p>
+      <div>
+        <p className="text-sm font-medium">Is this the right place?</p>
+        <p className="text-xs text-muted-foreground">
+          Looking for: {run.goal}
+        </p>
+      </div>
       <div className="flex flex-col gap-1.5">
         {gate.candidates.map((c) => (
           <button
@@ -77,7 +82,7 @@ function GateCard({ run }: { run: RunSnapshot }) {
         </Button>
       </div>
       <p className="text-[11px] text-muted-foreground">
-        Or just tell Luna — “yes” or “no” works too.
+        Or just tell Luna "yes" or "no."
       </p>
     </div>
   );
@@ -186,7 +191,7 @@ export function RunStatus() {
 
       {!run.gate && !run.result && failed && (
         <p className="text-xs text-muted-foreground">
-          Something didn't work — tell Luna what you need again and I'll retry.
+          Something didn't work. Tell Luna what you need again and I'll retry.
         </p>
       )}
     </div>

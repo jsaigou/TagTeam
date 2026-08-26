@@ -377,6 +377,10 @@ export type RunContext = {
   /** Client-side DocSummary (src/lib/doc-parser.ts) fallback for when
    *  parseDocument doesn't run or fails. Duck-typed server-side. */
   docSummary?: Record<string, unknown>;
+  /** When true, skip the research/gate/extractTargetRules sub-graph and go
+   *  straight to planScenario using identifyTarget's result. Luna asks
+   *  "generic or specific?" and the user picks generic. */
+  skipResearch?: boolean;
 };
 
 /** The run's deliverable once its deliver steps complete — planScenario's
@@ -412,13 +416,15 @@ export type RunSnapshot = {
  * avatar talks; neither chooses what runs.
  */
 export type ClassifiedIntent = {
-  intent: "state_objective" | "provide_url" | "confirm" | "reject" | "question" | "other";
+  intent: "state_objective" | "provide_url" | "confirm" | "reject" | "question" | "other" | "practice_choice";
   /** The extracted entity to search for (Workflow 1's search candidate). */
   targetName?: string;
   url?: string;
   city?: string;
   objective?: string;
   confidence?: number;
+  /** Sprint 2 — user's choice between generic practice and specific research. */
+  practiceMode?: "generic" | "specific";
 };
 
 /** Client → server WebSocket messages (mirrors docs/architecture.md §9). */

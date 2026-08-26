@@ -28,6 +28,8 @@ export const DOC_SUMMARY_FIXTURE: DocSummary = {
   issuingAgency: "川崎市 健康保険課",
   purpose:
     "Annual notice summarizing the medical expenses paid under National Health Insurance, used to claim a medical expense tax deduction.",
+  englishSummary:
+    "This is an annual medical expense notice from the Kawasaki City Health Insurance Division. It lists the medical costs paid under National Health Insurance for the past year. You can use this document to claim a medical expense tax deduction on your tax return. Check the total amounts and your co-payment figure, and keep this notice with your tax documents.",
   keyFields: ["医療費のお知らせ", "被保険者氏名", "被保険者番号", "医療費合計額", "自己負担額"],
   questions: DOC_QUESTIONS_FIXTURE,
 };

@@ -85,6 +85,7 @@ export async function run(
       documentType: "なし（書類なし・ウェブページ／口頭の用件）",
       issuingAgency: target?.name ?? "",
       purpose: goal || target?.name || "市区役所への電話",
+      englishSummary: goal || target?.name || "A phone call to a municipal office",
       keyFields: [],
     };
   }

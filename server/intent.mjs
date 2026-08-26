@@ -11,9 +11,13 @@
 const URL_RE = /^https?:\/\/\S+$/i;
 const YES_RE = /^(yes|yeah|yep|yup|correct|right|that('|’)?s (it|right|correct)|sounds (right|good))\b/i;
 const NO_RE = /^(no|nope|not (it|right|correct)|none of (these|those)|wrong)\b/i;
+// Sprint 2 — "generic or specific?" fast paths. These fire BEFORE the LLM
+// call when Luna has just asked the practice-mode question.
+const GENERIC_RE = /^(generic|just practice|skip|no (research|details)|either|doesn('|’)t matter|up to you)\b/i;
+const SPECIFIC_RE = /^(specific|yes|use (my|the) (details|info|document)|with (my|the) (details|info)|with (the )?research)\b/i;
 
-const INTENTS = new Set(["state_objective", "provide_url", "confirm", "reject", "question", "other"]);
-const STRING_FIELDS = ["targetName", "url", "city", "objective"];
+const INTENTS = new Set(["state_objective", "provide_url", "confirm", "reject", "question", "other", "practice_choice"]);
+const STRING_FIELDS = ["targetName", "url", "city", "objective", "practiceMode"];
 
 export function isIntentResult(value) {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
@@ -42,14 +46,25 @@ const SYSTEM = `ユーザーの発話の意図を分類してJSONオブジェク
  * @param {object} opts
  * @param {boolean} [opts.gateOpen] whether a confirmTarget gate is currently open —
  *   only then do bare "yes"/"no" fast-path to confirm/reject.
+ * @param {boolean} [opts.practiceModePending] whether Luna just asked
+ *   "generic or specific?" — fast-path the user's choice to practice_choice.
  * @param {(messages: object[], opts: object) => Promise<object>} opts.llmChat
  */
-export async function classifyIntent(text, { gateOpen = false, llmChat } = {}) {
+export async function classifyIntent(text, { gateOpen = false, practiceModePending = false, llmChat } = {}) {
   const trimmed = String(text ?? "").trim();
   if (!trimmed) return { intent: "other" };
   if (URL_RE.test(trimmed)) return { intent: "provide_url", url: trimmed };
   if (gateOpen && YES_RE.test(trimmed)) return { intent: "confirm" };
   if (gateOpen && NO_RE.test(trimmed)) return { intent: "reject" };
+  // Sprint 2 — "generic or specific?" fast paths: when Luna just asked the
+  // practice-mode question, the user's choice is classified deterministically
+  // without an LLM call.
+  if (practiceModePending && GENERIC_RE.test(trimmed)) {
+    return { intent: "practice_choice", practiceMode: "generic" };
+  }
+  if (practiceModePending && SPECIFIC_RE.test(trimmed)) {
+    return { intent: "practice_choice", practiceMode: "specific" };
+  }
 
   if (!llmChat) return { intent: "other" };
 

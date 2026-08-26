@@ -149,7 +149,7 @@ export function DocUpload({ onAnalyzed, busy }: DocUploadProps) {
         <ActionButton
           icon={<ImagePlus className="size-4" />}
           label="Upload photo"
-          hint="From your device — or drop images anywhere in this box"
+          hint="From your device, or drop images anywhere in this box"
           onClick={() => inputRef.current?.click()}
         />
         <ActionButton

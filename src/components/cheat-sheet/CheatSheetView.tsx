@@ -12,11 +12,11 @@ type CheatSheetViewProps = {
 
 function buildPlainText(sheet: CheatSheet): string {
   const lines = [
-    `TagTeam — ${sheet.goal}`,
+    `TagTeam: ${sheet.goal}`,
     "",
     "Key phrases",
     ...sheet.keyPhrases.map(
-      (p) => `${p.jp} (${p.furigana}) — ${p.en}  [when: ${p.when}]`,
+      (p) => `${p.jp} (${p.furigana}): ${p.en}  [when: ${p.when}]`,
     ),
     "",
     "Practice",

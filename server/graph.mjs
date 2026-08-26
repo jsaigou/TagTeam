@@ -141,6 +141,11 @@ export const GRAPH = {
   confirmTarget: {
     kind: "gate",
     deps: ["research"],
+    // Sprint 2 — "generic or specific?" flow: when the user opts for generic
+    // practice, skip the entire research/gate/extractTargetRules sub-graph.
+    // planScenario falls back to identifyTarget's result (name + city) as the
+    // target — no web confirmation needed.
+    enabled: (ctx) => !ctx.skipResearch,
     label: "Is this the right place?",
     candidates: (ctx) =>
       (ctx.research?.results ?? []).slice(0, 5).map((r) => ({
@@ -164,6 +169,9 @@ export const GRAPH = {
     deps: ["confirmTarget"],
     step: "extractTargetRules",
     speculative: true,
+    // Sprint 2 — skip when the user chose generic practice (confirmTarget
+    // is already skipped, but this makes the intent explicit).
+    enabled: (ctx) => !ctx.skipResearch,
     input: (ctx) => ({ candidate: ctx.confirmTarget }),
   },
   planScenario: {
@@ -174,7 +182,9 @@ export const GRAPH = {
     // address and no cited rules. Soft dep on parseDocument: it may never
     // run at all (a text-only objective skips it) or fail, and either way
     // the script falls back to the client-seeded docSummary.
-    deps: ["confirmTarget", "extractTargetRules?", "parseDocument?", "classifyScenario?"],
+    // Sprint 2 — confirmTarget is soft: when skipped (generic practice),
+    // identifyTarget's result provides the target name/city.
+    deps: ["confirmTarget?", "extractTargetRules?", "parseDocument?", "classifyScenario?"],
     step: "planScenario",
     input: (ctx) => ({
       docSummary: ctx.parseDocument ?? ctx.docSummary,
@@ -184,7 +194,16 @@ export const GRAPH = {
       // A URL-only run's goal was refined by identifyTarget into the actual
       // errand inferred from the page — script from THAT, not the raw link.
       goal: ctx.identifyTarget?.objective || ctx.goal,
-      target: ctx.extractTargetRules ?? (ctx.confirmTarget && { ...ctx.confirmTarget, rules: [] }),
+      // Sprint 2 — when confirmTarget was skipped (generic practice), fall
+      // back to identifyTarget's result as the target. The script generator
+      // gets the office name/city without web-confirmed rules.
+      target:
+        ctx.extractTargetRules ??
+        (ctx.confirmTarget
+          ? { ...ctx.confirmTarget, rules: [] }
+          : ctx.identifyTarget
+            ? { name: ctx.identifyTarget.name, city: ctx.identifyTarget.city, rules: [] }
+            : null),
       // Sprint 1's fast path — see planScenario.mjs's ASSEMBLY_CONFIDENCE_THRESHOLD.
       // Soft dep above means this may be absent (still running/failed/skipped)
       // when planScenario starts; undefined leafId just falls through to
@@ -201,7 +220,12 @@ export const GRAPH = {
       step: "planScenario",
       ...(ctx.planScenario ?? {}),
       target:
-        ctx.extractTargetRules ?? (ctx.confirmTarget ? { ...ctx.confirmTarget, rules: [] } : null),
+        ctx.extractTargetRules ??
+        (ctx.confirmTarget
+          ? { ...ctx.confirmTarget, rules: [] }
+          : ctx.identifyTarget
+            ? { name: ctx.identifyTarget.name, city: ctx.identifyTarget.city, rules: [] }
+            : null),
     }),
   },
   cheatSheet: {
@@ -220,7 +244,13 @@ export const GRAPH = {
       script: ctx.planScenario?.script,
       glossary: ctx.planScenario?.glossary,
       answers: ctx.answers,
-      target: ctx.extractTargetRules ?? (ctx.confirmTarget && { ...ctx.confirmTarget, rules: [] }),
+      target:
+        ctx.extractTargetRules ??
+        (ctx.confirmTarget
+          ? { ...ctx.confirmTarget, rules: [] }
+          : ctx.identifyTarget
+            ? { name: ctx.identifyTarget.name, city: ctx.identifyTarget.city, rules: [] }
+            : null),
     }),
     // Merged into RunSnapshot.result alongside planScenario's delivery (see
     // attachNode) so one snapshot carries script+glossary+target AND sheet.

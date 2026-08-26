@@ -12,6 +12,7 @@ import { getScenario } from "@/lib/scenario-api";
 import { pipeline } from "@/state/pipeline";
 import { useFillers } from "@/hooks/use-fillers";
 import { DocUpload } from "./DocUpload";
+import { DocSummaryCard } from "./DocSummaryCard";
 import { Grounding } from "./Grounding";
 import { ScenarioPicker } from "./ScenarioPicker";
 import { ReferenceSearch } from "./ReferenceSearch";
@@ -34,13 +35,13 @@ const STEPS: { key: SetupStep; label: string }[] = [
 
 const GUIDES: Record<SetupStep, { en: string }> = {
   doc: {
-    en: "Great! Show me the letter you need help with — or just describe the issue in your own words.",
+    en: "Great! Show me the letter you need help with, or just describe the issue in your own words.",
   },
   grounding: {
     en: "Got it! A couple of quick questions and I'll know exactly what you need to say.",
   },
   scenario: {
-    en: "Almost there! Pick the office setting for your call — I'll play the staff member for you.",
+    en: "Almost there! Pick the office setting for your call. I'll play the staff member for you.",
   },
 };
 
@@ -258,7 +259,7 @@ export function SetupScreen() {
         .then((context) => sendIntent(objective, context))
         .catch(() => {
           setBusy(false);
-          setError("Could not start the call — please try again.");
+          setError("Could not start the call. Please try again.");
         });
     },
     [setSettings, state.settings, setBusy, buildRunContext, sendIntent, setError],
@@ -380,8 +381,8 @@ export function SetupScreen() {
             </h1>
             <p className="max-w-md text-base leading-relaxed text-muted-foreground lg:max-w-lg lg:text-lg">
               TagTeam rehearses phone calls with Japanese offices before you make
-              them. Just tell Luna what you need — a letter, a link, or your own
-              words — and she researches the office, sets up the call, and an AI
+              them. Just tell Luna what you need. A letter, a link, or your own
+              words, and she researches the office, sets up the call, and an AI
               avatar plays the staff member so you can practice.
             </p>
             <Button
@@ -450,7 +451,7 @@ export function SetupScreen() {
           <div className="flex flex-col gap-1.5">
             <h2 className="text-xl font-semibold text-primary">Getting ready for your call</h2>
             <p className="text-sm text-muted-foreground">
-              Tell Luna what you need — she'll research it and set up your
+              Tell Luna what you need. She'll research it and set up your
               practice call. A letter, a link, or just your own words all work.
             </p>
           </div>
@@ -477,6 +478,12 @@ export function SetupScreen() {
         </div>
 
         <div className="mt-5">
+          {state.docSummary && state.setupStep !== "doc" && (
+            <div className="mb-4">
+              <DocSummaryCard summary={state.docSummary} />
+            </div>
+          )}
+
           {state.setupStep === "doc" && (
             <DocUpload onAnalyzed={analyzeDoc} busy={analyzing} />
           )}
@@ -577,7 +584,7 @@ function CallPreviewCard({ className }: { className?: string }) {
         </div>
 
         <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
-          Practice the whole call — greeting, the ask, the awkward part — before
+          Practice the whole call: greeting, the ask, the awkward part, before
           you dial the real one.
         </p>
       </div>

@@ -166,6 +166,13 @@ export function attachHub(
    * Not a graph gate — research keeps running while we ask, which is the point.
    */
   const pendingCandidates = new Map();
+  /**
+   * Sprint 2 — "generic or specific?" flow: when the user states an objective,
+   * the run does NOT start immediately. The context (doc/answers/settings) is
+   * stashed here, Luna asks the practice-mode question, and the run starts
+   * once the user picks generic or specific.
+   */
+  const pendingPracticeChoice = new Map();
   /** sessionId -> pending room-teardown timer (grace period for reconnects). */
   const roomCleanupTimers = new Map();
 
@@ -383,9 +390,12 @@ export function attachHub(
     // A pending search-candidate confirm counts as "gate open" so bare
     // yes/no fast-paths to confirm/reject (server/intent.mjs).
     const gateOpen = Boolean(current?.gate) || Boolean(pending);
+    // Sprint 2 — when Luna just asked "generic or specific?", the user's
+    // choice fast-paths to practice_choice without an LLM call.
+    const practiceModePending = pendingPracticeChoice.has(sessionId);
     let result;
     try {
-      result = await classifyIntent(text, { gateOpen });
+      result = await classifyIntent(text, { gateOpen, practiceModePending });
     } catch (err) {
       console.error("[hub] intent classification failed:", err?.message ?? err);
       return;
@@ -395,17 +405,32 @@ export function attachHub(
     const classified = (extra = {}) => broadcast(sessionId, { type: "classified", result, ...extra });
     switch (result.intent) {
       case "state_objective": {
+        // Sprint 2 — don't start the run yet. Stash the context and let Luna
+        // ask "generic or specific?" first. The run starts on practice_choice.
         const extra =
           context && typeof context === "object" && !Array.isArray(context) ? context : undefined;
-        // Spec-parallel dispatch: the background run starts NOW; Luna asks
-        // about the candidate while Gemma already searches. A new objective
-        // supersedes any pending candidate (startRun cancels the old run).
-        const snap = runEngine.startRun(sessionId, result.objective || text, extra);
-        if (result.targetName) {
-          pendingCandidates.set(sessionId, { name: result.targetName, runId: snap.runId });
-          classified({ runId: snap.runId });
+        pendingPracticeChoice.set(sessionId, {
+          objective: result.objective || text,
+          context: extra,
+          targetName: result.targetName,
+        });
+        classified();
+        break;
+      }
+      case "practice_choice": {
+        const pendingChoice = pendingPracticeChoice.get(sessionId);
+        pendingPracticeChoice.delete(sessionId);
+        if (pendingChoice) {
+          const extra = pendingChoice.context ?? {};
+          if (result.practiceMode === "generic") extra.skipResearch = true;
+          const snap = runEngine.startRun(sessionId, pendingChoice.objective, extra);
+          if (pendingChoice.targetName) {
+            pendingCandidates.set(sessionId, { name: pendingChoice.targetName, runId: snap.runId });
+            classified({ runId: snap.runId });
+          } else {
+            classified({ runId: snap.runId });
+          }
         } else {
-          pendingCandidates.delete(sessionId);
           classified();
         }
         break;

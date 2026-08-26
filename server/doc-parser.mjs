@@ -28,8 +28,9 @@ export const isDocSummary = (value) =>
       documentType: isNonEmptyString,
       issuingAgency: isNonEmptyString,
       purpose: isNonEmptyString,
+      englishSummary: isNonEmptyString,
       keyFields: isStringArray,
       questions: isGroundingQuestionArray,
     },
-    ["documentType", "issuingAgency", "purpose", "keyFields", "questions"],
+    ["documentType", "issuingAgency", "purpose", "englishSummary", "keyFields", "questions"],
   );

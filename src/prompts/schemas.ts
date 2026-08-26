@@ -32,6 +32,11 @@ export const DOC_SUMMARY_SCHEMA: JsonSchema = {
       type: "string",
       description: "この文書が何のためのものか、英語で一文",
     },
+    englishSummary: {
+      type: "string",
+      description:
+        "A clear, plain-English summary of what this document is, who it is from, and what the recipient should do. 2-4 sentences written for someone who cannot read Japanese. Include any deadlines, amounts, or action items visible in the document.",
+    },
     keyFields: {
       type: "array",
       items: { type: "string" },
@@ -55,7 +60,7 @@ export const DOC_SUMMARY_SCHEMA: JsonSchema = {
       },
     },
   },
-  required: ["documentType", "issuingAgency", "purpose", "keyFields", "questions"],
+  required: ["documentType", "issuingAgency", "purpose", "englishSummary", "keyFields", "questions"],
 };
 
 /** Simulated phone call script + glossary, produced in a single JSON object. */

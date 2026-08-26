@@ -139,7 +139,7 @@ export function ScanSheet({ open, onOpenChange, onAdd }: ScanSheetProps) {
               )}
               {!captured.detected && (
                 <span className="absolute left-2 top-2 inline-flex items-center rounded-full bg-card/90 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-                  No edges found — full photo
+                  No edges found. Full photo
                 </span>
               )}
             </div>

@@ -29,7 +29,7 @@ export function SearchStatusLine({ search }: { search: ChatSearch }) {
       </span>
       {search.hits > 0 && (
         <span className="text-accent">
-          — {search.hits} result{search.hits === 1 ? "" : "s"} found
+          , {search.hits} result{search.hits === 1 ? "" : "s"} found
           {search.pagesRead > 0 ? `, ${search.pagesRead} page${search.pagesRead === 1 ? "" : "s"} read` : ""}
         </span>
       )}

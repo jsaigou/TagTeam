@@ -21,6 +21,7 @@ export type DocSummary = {
   documentType: string;
   issuingAgency: string;
   purpose: string;
+  englishSummary: string;
   keyFields: string[];
   questions: GroundingQuestion[];
 };
@@ -37,10 +38,11 @@ export const isDocSummary = (value: unknown): value is DocSummary =>
       documentType: isNonEmptyString,
       issuingAgency: isNonEmptyString,
       purpose: isNonEmptyString,
+      englishSummary: isNonEmptyString,
       keyFields: isStringArray,
       questions: isGroundingQuestionArray,
     },
-    ["documentType", "issuingAgency", "purpose", "keyFields", "questions"],
+    ["documentType", "issuingAgency", "purpose", "englishSummary", "keyFields", "questions"],
   );
 
 /**

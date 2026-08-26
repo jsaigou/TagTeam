@@ -137,7 +137,7 @@ function HelpDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: b
             </span>
             <span>
               <strong>Connect your phone (optional).</strong> Tap the phone icon up top and scan
-              the QR — use your phone as a camera, mic and remote control.
+              the QR. Use your phone as a camera, mic and remote control.
             </span>
           </li>
         </ol>
@@ -204,7 +204,7 @@ function SettingsDialog({
             <TalkModeSelector />
             <p className="text-xs text-muted-foreground">
               Hold a button while you speak, or let the mic detect your voice automatically
-              (Silero VAD runs in your browser — nothing is recorded until you speak).
+              (Silero VAD runs in your browser. Nothing is recorded until you speak).
             </p>
           </div>
           <div className="flex flex-col gap-2">
