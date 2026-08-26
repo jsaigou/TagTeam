@@ -384,6 +384,30 @@ export function useSetupChat(options: UseSetupChatOptions) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [run?.runId, gate?.nodeId, gateGuess?.name, gateGuess?.id, handleSpeakGuide]);
 
+  /* Sprint 3 — research progress in the chat panel: when the research job's
+     detail changes, Luna speaks the update so the user sees progress without
+     leaving the chat. Spoken once per unique detail to avoid repeats. */
+  const lastResearchDetailRef = useRef<string | null>(null);
+  const lastResearchRunIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!run) return;
+    // Reset on new run so progress from a previous run doesn't carry over.
+    if (lastResearchRunIdRef.current !== run.runId) {
+      lastResearchRunIdRef.current = run.runId;
+      lastResearchDetailRef.current = null;
+    }
+    const researchJob = run.jobs.find(
+      (j) => j.step === "research" && (j.status === "running" || j.status === "queued"),
+    );
+    if (!researchJob?.detail) return;
+    if (lastResearchDetailRef.current === researchJob.detail) return;
+    lastResearchDetailRef.current = researchJob.detail;
+    handleSpeakGuide({ en: researchJob.detail });
+    // Primitive-only deps + the once-per-detail ref guard; the snapshot
+    // re-broadcasts on every job change and must not re-trigger her.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [run?.runId, run?.jobs]);
+
   /** Candidate yes/no chips reuse the intent pipeline — bare "yes"/"no" is
    *  fast-pathed server-side because a candidate is pending there too. */
   const answerCandidate = useCallback(

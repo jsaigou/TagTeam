@@ -175,10 +175,18 @@ export async function run({ q, urls, prescraped, name, alias }, ctx = {}) {
     results.push({ title, url: page.url, snippet, via: "user-url" });
   }
 
+  // Sprint 3 — richer progress: report after prescraped phase.
+  if (prescrapedPages.length > 0) {
+    report({ progress: 0.1, detail: `Using ${prescrapedPages.length} previously fetched page(s)` });
+  }
+
   // Direct scrapes next — they ARE what the user pointed at.
-  for (const url of toFetch) {
+  for (const [i, url] of toFetch.entries()) {
     try {
-      report({ detail: url });
+      report({
+        progress: 0.15 + (i / Math.max(toFetch.length, 1)) * 0.25,
+        detail: `Reading linked page ${i + 1} of ${toFetch.length}…`,
+      });
       const { markdown } = await scrapePage({ url }, { signal, report });
       const { title, snippet } = describeMarkdown(markdown);
       results.push({ title, url, snippet, via: "user-url" });
@@ -189,7 +197,7 @@ export async function run({ q, urls, prescraped, name, alias }, ctx = {}) {
 
   if (config.search.searxngUrl && searchQuery(q).length >= 2) {
     try {
-      report({ detail: searchQuery(q) });
+      report({ progress: 0.45, detail: `Searching the web for "${searchQuery(q)}"…` });
       const searchUrl = new URL(`${config.search.searxngUrl}/search`);
       searchUrl.searchParams.set("q", searchQuery(q));
       searchUrl.searchParams.set("format", "json");
@@ -210,6 +218,7 @@ export async function run({ q, urls, prescraped, name, alias }, ctx = {}) {
         .filter((r) => r && r.url)
         .slice(0, 10)
         .map((r) => ({ title: r.title ?? "", url: r.url, snippet: r.content ?? "", via: "search" }));
+      report({ progress: 0.7, detail: `Found ${hits.length} web results, ranking…` });
       // Direct scrapes stay on top regardless — they ARE what the user
       // pointed at; only search hits compete among themselves.
       const ranked = rankResults(hits, name, alias).slice(0, 6);
@@ -218,6 +227,8 @@ export async function run({ q, urls, prescraped, name, alias }, ctx = {}) {
       lastError = err;
     }
   }
+
+  report({ progress: 1, detail: `${results.length} candidate(s) found` });
 
   if (results.length === 0) {
     throw (
@@ -236,6 +247,7 @@ export async function run({ q, urls, prescraped, name, alias }, ctx = {}) {
 export const step = {
   lane: "net",
   attemptMs: 60_000,
+  maxAttempts: 2,
   label: (input) => `Searching the web for "${input?.q ?? ""}"…`,
   run,
 };
