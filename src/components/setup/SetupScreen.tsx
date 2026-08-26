@@ -440,87 +440,103 @@ export function SetupScreen() {
         // during a long-running screen (found while testing Sprint 6's
         // ScenarioPicker against a real multi-step run).
         ref={setAvatarAnchor}
-        className="w-full max-w-[80%] overflow-y-auto rounded-2xl border bg-card/90 p-5 shadow-xl backdrop-blur-md sm:p-6 max-h-[calc(100svh-16rem)]"
+        className="w-full max-w-[80%] overflow-y-auto rounded-2xl border bg-card/90 p-5 shadow-xl backdrop-blur-md sm:p-6 max-h-[calc(100svh-16rem)] md:flex md:gap-6"
       >
-        {/* Header row keeps right of Luna's footprint while the card top is
-            still under her window. */}
-        <div
-          className="flex flex-col gap-1.5"
-          style={{ paddingRight: PANEL_HEADER_CLEAR }}
-        >
-          <div className="flex flex-col gap-1.5">
-            <h2 className="text-xl font-semibold text-primary">Getting ready for your call</h2>
-            <p className="text-sm text-muted-foreground">
-              Tell Luna what you need. She'll research it and set up your
-              practice call. A letter, a link, or just your own words all work.
-            </p>
+        {/* Left column — chat + step content. On mobile this is the full card;
+            on desktop it takes most of the width. */}
+        <div className="flex min-w-0 flex-1 flex-col">
+          {/* Header row keeps right of Luna's footprint while the card top is
+              still under her window. */}
+          <div
+            className="flex flex-col gap-1.5"
+            style={{ paddingRight: PANEL_HEADER_CLEAR }}
+          >
+            <div className="flex flex-col gap-1.5">
+              <h2 className="text-xl font-semibold text-primary">Getting ready for your call</h2>
+              <p className="text-sm text-muted-foreground">
+                Tell Luna what you need. She'll research it and set up your
+                practice call. A letter, a link, or just your own words all work.
+              </p>
+            </div>
+            {guideChat.error && (
+              <p className="text-xs text-destructive">{guideChat.error}</p>
+            )}
           </div>
-          {guideChat.error && (
-            <p className="text-xs text-destructive">{guideChat.error}</p>
+
+          <LunaChatPanel
+            messages={chat}
+            state={guideChat.state}
+            supported={guideChat.supported}
+            search={chatSearch}
+            candidate={candidate}
+            onStart={() => guideChat.startVoice()}
+            onStop={() => guideChat.stopVoice()}
+            onSend={sendChat}
+            onCandidateAnswer={answerCandidate}
+            onAttach={handleAttachFile}
+          />
+
+          <div className="mt-5">
+            {state.docSummary && state.setupStep !== "doc" && (
+              <div className="mb-4 md:hidden">
+                <DocSummaryCard summary={state.docSummary} />
+              </div>
+            )}
+
+            {state.setupStep === "doc" && (
+              <DocUpload onAnalyzed={analyzeDoc} busy={analyzing} />
+            )}
+            {state.setupStep === "grounding" && (
+              <div className="flex flex-col gap-4">
+                <ReferenceSearch
+                  agency={state.docSummary?.issuingAgency}
+                  purpose={state.docSummary?.purpose}
+                />
+                <Grounding
+                  questions={state.questions}
+                  summary={state.summary}
+                  onComplete={handleAnswers}
+                  busy={state.busy}
+                />
+              </div>
+            )}
+            {state.setupStep === "scenario" && (
+              <ScenarioPicker
+                onStart={handleScenario}
+                busy={state.busy}
+                avatars={catalog.avatars}
+                isLoading={catalog.isLoading}
+                error={catalog.error}
+                settings={state.settings}
+                onSettingsChange={setSettings}
+              />
+            )}
+
+            {state.error && (
+              <p className="mt-4 rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
+                {state.error}
+              </p>
+            )}
+          </div>
+
+          <PastCalls onRestore={(id) => void handleRestore(id)} busy={state.busy} />
+        </div>
+
+        {/* Right column — run status feed + doc summary + past calls.
+            Hidden on mobile (single-column); visible on md+ as a sidebar. */}
+        <div className="hidden w-72 shrink-0 flex-col gap-4 md:flex">
+          <div>
+            <RunStatus />
+          </div>
+          {state.docSummary && state.setupStep !== "doc" && (
+            <DocSummaryCard summary={state.docSummary} />
           )}
         </div>
 
-        <LunaChatPanel
-          messages={chat}
-          state={guideChat.state}
-          supported={guideChat.supported}
-          search={chatSearch}
-          candidate={candidate}
-          onStart={() => guideChat.startVoice()}
-          onStop={() => guideChat.stopVoice()}
-          onSend={sendChat}
-          onCandidateAnswer={answerCandidate}
-          onAttach={handleAttachFile}
-        />
-
-        <div className="mt-3">
+        {/* Mobile-only run status (below chat, above step content). */}
+        <div className="mt-3 md:hidden">
           <RunStatus />
         </div>
-
-        <div className="mt-5">
-          {state.docSummary && state.setupStep !== "doc" && (
-            <div className="mb-4">
-              <DocSummaryCard summary={state.docSummary} />
-            </div>
-          )}
-
-          {state.setupStep === "doc" && (
-            <DocUpload onAnalyzed={analyzeDoc} busy={analyzing} />
-          )}
-          {state.setupStep === "grounding" && (
-            <div className="flex flex-col gap-4">
-              <ReferenceSearch
-                agency={state.docSummary?.issuingAgency}
-                purpose={state.docSummary?.purpose}
-              />
-              <Grounding
-                questions={state.questions}
-                summary={state.summary}
-                onComplete={handleAnswers}
-                busy={state.busy}
-              />
-            </div>
-          )}
-          {state.setupStep === "scenario" && (
-            <ScenarioPicker
-              onStart={handleScenario}
-              busy={state.busy}
-              avatars={catalog.avatars}
-              isLoading={catalog.isLoading}
-              error={catalog.error}
-              settings={state.settings}
-              onSettingsChange={setSettings}
-            />
-          )}
-
-          {state.error && (
-            <p className="mt-4 rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
-              {state.error}
-            </p>
-          )}
-        </div>
-
-        <PastCalls onRestore={(id) => void handleRestore(id)} busy={state.busy} />
       </div>
       </div>
 
